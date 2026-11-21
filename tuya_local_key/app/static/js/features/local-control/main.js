@@ -170,6 +170,31 @@ function markReadOk(cards) {
   renderStats();
 }
 
+// Cold starts on Android can reach Tuya before the LAN session is ready.
+// Retry STATUS READS only (never ON/OFF writes), and keep every device isolated.
+async function readLiveStatusWithRetry(deviceId, isCurrent) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (!isCurrent()) return null;
+    try {
+      const data = await api(`/api/local/status?id=${encodeURIComponent(deviceId)}`, { timeout: 12000 });
+      if (data.status === "ok" && Array.isArray(data.values) && data.values.length > 0) {
+        return data;
+      }
+      const failure = new Error(data.error || data.status || "No live device values");
+      failure.code = String(data.error || data.status || "no_values");
+      throw failure;
+    } catch (error) {
+      lastError = error;
+      const transient = /busy|timeout|no.values|empty|unreach|connect|network|fetch|initializ|not.ready|timed.out|refused|econn/i
+        .test(String(error.code || "") + " " + String(error.message || ""));
+      if (!transient || attempt === 2 || !isCurrent()) break;
+      await new Promise(resolve => setTimeout(resolve, 1100 * (attempt + 1)));
+    }
+  }
+  throw lastError || new Error("No verified live status");
+}
+
 async function refresh(deviceId, card, silent = false) {
   if (!card || state.inFlight.has(deviceId) || commandsInFlight.has(String(deviceId))) return;
   const cardsForDevice = () => [...document.querySelectorAll(".tile")]
@@ -188,7 +213,8 @@ async function refresh(deviceId, card, silent = false) {
   }
   for (const item of cardsForDevice()) item.classList.add("refreshing");
   try {
-    const data = await api(`/api/local/status?id=${encodeURIComponent(deviceId)}`);
+    const data = await readLiveStatusWithRetry(deviceId, isCurrent);
+    if (!data) return;
     if (!isCurrent()) return;
     if (data.status !== "ok") {
       markReadFailed(cardsForDevice(), data.error || data.status || "no_values");
@@ -878,8 +904,8 @@ function renderDetailSheet() {
   card.classList.add("detail-card");
   card.querySelector("[data-open-details]")?.remove();
   card.dataset.keepOpen = "1";
-  const more = card.querySelector("details.more");
-  if (more) more.open = true;
+  // Advanced/raw Tuya DPs stay collapsed until deliberately opened.
+  // The everyday sheet should show understandable controls first.
   body.replaceChildren(card);
   const title = $("deviceSheetTitle");
   const subtitle = $("deviceSheetSubtitle");
