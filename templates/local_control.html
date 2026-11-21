@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="static/css/haier.css">
 <link rel="stylesheet" href="static/css/pilot-compact.css">
 <link rel="stylesheet" href="static/css/pilot-v07.css">
+<link rel="stylesheet" href="static/css/pilot-v08.css">
 </head>
 <body>
 
@@ -67,6 +68,7 @@
       <button type="button" class="pilot-setting-tile" data-open-drawer="network"><b>⌁ Network &amp; Scan</b><small>LAN reconnect, IP checks and diagnostics</small></button>
       <button type="button" class="pilot-setting-tile" data-open-drawer="appearance"><b>◐ Appearance</b><small>Dark/Light theme and colour palette</small></button>
       <button type="button" class="pilot-setting-tile" data-open-drawer="add"><b>＋ Manage devices</b><small>Add devices, room names and local connection</small></button>
+      <button type="button" class="pilot-setting-tile" data-jump-view="scenes"><b>✧ Scenes &amp; schedules</b><small>Group actions, scenes and optional server timers</small></button>
     </div>
     <div class="panel">
       <p class="note">LAN keys stay encrypted in the device cache. This page never sends them back to the browser. Live status here means a device answered on your local network — a saved IP alone is never shown as online.</p>
@@ -78,16 +80,29 @@
     <div class="pilot-eyebrow">HAIER · DIRECT LOCAL NETWORK</div>
     <div class="pilot-headline"><div><h1>Climate Control</h1><p>No Home Assistant required for the direct LAN link</p></div><span class="pilot-local-pill">● OFFLINE READY*</span></div>
     <div class="haier-intro"><div><h2>My Haier ACs</h2><p>Private Wi-Fi · Manual and Auto</p></div><span class="haier-tag">LIVE DATA ONLY</span></div>
+    <div class="pilot-ac-picker" role="group" aria-label="Choose AC to control">
+      <button type="button" data-haier-choose="pro" aria-pressed="true">19HFAB T3 Pro</button>
+      <button type="button" data-haier-choose="ff" aria-pressed="false">FF Haier 19HFAB T3</button>
+    </div>
     <div class="haier-grid" data-haier-cards></div>
     <div class="panel"><p class="note">*Local LAN key aur Wi-Fi zaroori hain. Internet nahi. Home Assistant integration ko same waqt poll na karne dein. Unknown models ki writes blocked hain; winter heat abhi disabled hai. Android par background Auto-Pilot phone/OS restrictions ki wajah se 24/7 guaranteed nahi.</p></div>
-    <div class="pilot-scene-section">
-{% if ready %}
-    <div class="section-head"><h2>Scenes</h2><p>Group actions and optional server schedules</p></div>
-    <div id="sceneList"></div>
-    <div class="section-head"><h2>Scene editor</h2><p>Only real DPs from saved devices</p></div>
-    <div class="panel" id="sceneEditor"></div>
-{% endif %}
+  </section>
+  <section class="view-panel pilot-scenes-view" data-view-panel="scenes" hidden>
+    <div class="pilot-scenes-nav">
+      <button type="button" class="pilot-back-link" data-jump-view="settings">← Settings</button>
+      <span class="pilot-local-pill">LOCAL SCENES</span>
     </div>
+    <div class="pilot-headline"><div><div class="pilot-eyebrow">SMART PILOT · ACTIONS</div><h1>Scenes &amp; Schedules</h1><p>Manage grouped actions separately from your AC controls</p></div></div>
+    {% if ready %}
+    <div class="section-head"><h2>Saved scenes</h2><p>Run or manage scenes</p></div>
+    <div id="sceneList"></div>
+    <details class="pilot-scene-editor-disclosure">
+      <summary class="pilot-scenes-summary"><span>Scene editor</span><small>Expand to create or edit a scene</small></summary>
+      <div class="panel" id="sceneEditor"></div>
+    </details>
+    {% else %}
+    <div class="panel"><p class="note">Add a Tuya device first to create scenes.</p></div>
+    {% endif %}
   </section>
 </main>
 
@@ -99,13 +114,24 @@
   </div>
   <div class="drawer-body">
 
-    <section class="group" id="addGroup">
+    <div class="pilot-settings-menu" role="group" aria-label="Advanced settings categories">
+      <button type="button" data-setting-select="add" aria-pressed="false">+ Add</button>
+      <button type="button" data-setting-select="rooms" aria-pressed="false">Rooms</button>
+      <button type="button" data-setting-select="network" aria-pressed="true">Network</button>
+      <button type="button" data-setting-select="ips" aria-pressed="false">Device IPs</button>
+      <button type="button" data-setting-select="appearance" aria-pressed="false">Theme</button>
+      <button type="button" data-setting-select="behaviour" aria-pressed="false">Refresh</button>
+      <button type="button" data-setting-select="remote" aria-pressed="false">Remote</button>
+      <button type="button" data-setting-select="setup" aria-pressed="false">Setup</button>
+    </div>
+
+    <section class="group" id="addGroup" data-setting-section="add" hidden>
       <h3>Device add karein</h3>
       <div class="note" style="margin-bottom:10px">Local key aur IP se device directly LAN par chalega. Cloud request nahi hoga.</div>
       <form id="addForm">
         <div class="field"><label for="devName">Device name</label><input id="devName" required placeholder="e.g. Living Room Plug" maxlength="60"></div>
         <div class="field"><label for="devId">Device ID</label><input id="devId" required placeholder="Tuya device id" maxlength="64"></div>
-        <div class="field"><label for="devKey">Local key (16–32 characters)</label><input id="devKey" required placeholder="0123456789abcdef" maxlength="32"></div>
+        <div class="field"><label for="devKey">Local key (16–32 characters)</label><input id="devKey" type="password" autocomplete="new-password" required placeholder="0123456789abcdef" maxlength="32"></div>
         <div class="field-row">
           <div class="field"><label for="devIp">IP address</label><input id="devIp" required placeholder="192.168.1.50"></div>
           <div class="field"><label for="devVersion">Version</label><select id="devVersion"><option>3.5</option><option>3.4</option><option>3.3</option><option>3.2</option><option>3.1</option></select></div>
@@ -115,14 +141,14 @@
       </form>
     </section>
 
-    <section class="group">
+    <section class="group" data-setting-section="rooms" hidden>
       <h3>Homes &amp; rooms</h3>
       <p class="note" style="margin-bottom:10px">Names are saved locally only. They never become device credentials.</p>
       <div id="organizeList"></div>
       <button type="button" class="btn" id="saveOrganize" style="width:100%;margin-top:8px">Save home &amp; room names</button>
     </section>
 
-    <section class="group">
+    <section class="group" data-setting-section="network">
       <h3>Network &amp; scan</h3>
       <p class="network-line" id="networkLine">Detected network: {{ subnet_hint or 'searching…' }}</p>
       <button type="button" class="btn" id="scanBtn" style="width:100%">Auto scan network</button>
@@ -136,13 +162,13 @@
       </details>
     </section>
 
-    <section class="group">
+    <section class="group" data-setting-section="ips" hidden>
       <h3>Device IPs</h3>
       <p class="note" style="margin-bottom:10px">Har device ke <b>Edit</b> se name, IP, protocol version aur (zarurat ho to) local key badal sakte hain. Saved key screen par kabhi nahi dikhti.</p>
       <div id="ipList"><p class="note">Koi device nahi mila.</p></div>
     </section>
 
-    <section class="group">
+    <section class="group" data-setting-section="appearance" hidden>
       <h3>Appearance</h3>
       <div class="switch-line"><span>Theme</span>
         <div class="theme-switch" role="group" aria-label="Theme">
@@ -160,7 +186,7 @@
       </div>
     </section>
 
-    <section class="group">
+    <section class="group" data-setting-section="behaviour" hidden>
       <h3>Behaviour</h3>
       <div class="switch-line"><span>Auto refresh (silent)</span><label class="switch"><input type="checkbox" id="autoRefresh" checked><span class="track"><span class="thumb"></span></span></label></div>
       <button type="button" class="btn" id="refreshAll" style="width:100%">Refresh all now</button>
@@ -169,7 +195,7 @@
       </p>
     </section>
 
-    <section class="group">
+    <section class="group" data-setting-section="remote" hidden>
       <h3>Remote access</h3>
       {% if home_assistant %}
       <p class="note">Remote access ka best tareeka: Home Assistant me <b>Tailscale add-on</b> (ya WireGuard) chalayein aur is add-on ko <b>ingress</b> se kholein. HA auth + Tailscale dono milkar secure remote access dete hain — app ko directly internet par kholne ki zarurat nahi.</p>
@@ -181,7 +207,7 @@
       {% endif %}
     </section>
 
-    <section class="group">
+    <section class="group" data-setting-section="setup" hidden>
       <h3>Setup (alag screen)</h3>
       <p class="note" style="margin-bottom:10px">QR login, Smart Life device list aur advanced scan ab yahan alag hain. Roz ke liye yahi Devices screen khulti hai.</p>
       <a class="btn" href="./" style="width:100%;display:block;text-align:center">Setup / Smart Life login →</a>

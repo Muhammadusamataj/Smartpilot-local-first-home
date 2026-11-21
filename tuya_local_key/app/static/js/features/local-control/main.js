@@ -544,18 +544,18 @@ function applyFilter() {
 
 function setView(view) {
   // Backwards-compatible routes: older Home cards and deep links still work.
-  view = ({ac:'autopilot', scenes:'autopilot', advanced:'settings'})[view] || view;
+  view = ({ac:'autopilot', advanced:'settings'})[view] || view;
   if (isHomeEditing() && view !== 'home') setHomeEditing(false);
   state.view = view;
   for (const button of document.querySelectorAll("[data-view]")) {
-    const active = button.dataset.view === view;
+    const active = button.dataset.view === view || (view === "scenes" && button.dataset.view === "settings");
     button.classList.toggle("active", active);
     button.setAttribute("aria-selected", active ? "true" : "false");
   }
   for (const section of document.querySelectorAll("[data-view-panel]")) {
     section.hidden = section.dataset.viewPanel !== view;
   }
-  if (view === "autopilot" && !state.editorMounted && $("sceneEditor")) {
+  if (view === "scenes" && !state.editorMounted && $("sceneEditor")) {
     mountSceneEditor($("sceneEditor"), {
       devices: state.devices,
       editingId: "",
@@ -832,6 +832,20 @@ async function startScan(targets) {
   }
 }
 
+
+function selectSettingSection(section = "network") {
+  const allowed = new Set(["add", "rooms", "network", "ips", "appearance", "behaviour", "remote", "setup"]);
+  const chosen = allowed.has(section) ? section : "network";
+  for (const panel of document.querySelectorAll("#drawer [data-setting-section]")) {
+    panel.hidden = panel.dataset.settingSection !== chosen;
+  }
+  for (const button of document.querySelectorAll("#drawer [data-setting-select]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.settingSelect === chosen));
+  }
+  const body = document.querySelector("#drawer .drawer-body");
+  if (body) body.scrollTop = 0;
+}
+
 function openDrawer(focus) {
   const drawer = $("drawer");
   const scrim = $("scrim");
@@ -840,6 +854,7 @@ function openDrawer(focus) {
   drawer.classList.add("open");
   scrim?.classList.add("open");
   drawer.setAttribute("aria-hidden", "false");
+  selectSettingSection(focus);
   if (focus === "add") setTimeout(() => $("devName")?.focus(), 220);
   if (focus === "network") setTimeout(() => $("scanTargets")?.focus(), 220);
   if (focus === "appearance") setTimeout(() => document.querySelector("[data-theme-option]")?.focus(), 220);
@@ -941,6 +956,9 @@ function initEvents() {
   });
   for (const button of document.querySelectorAll("[data-open-drawer]")) {
     button.addEventListener("click", () => openDrawer(button.dataset.openDrawer));
+  }
+  for (const button of document.querySelectorAll("#drawer [data-setting-select]")) {
+    button.addEventListener("click", () => selectSettingSection(button.dataset.settingSelect));
   }
   for (const button of document.querySelectorAll("[data-view]")) {
     button.addEventListener("click", () => setView(button.dataset.view));
