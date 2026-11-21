@@ -122,3 +122,160 @@
   #deviceSheet .drawer-body .tile-foot {margin-top:12px!important}
   .pilot-settings-grid .pilot-setting-tile {border-radius:14px!important}
 }
+
+
+/* v0.8.1: inline verified power controls and unclipped AC footers.
+   Controls reuse the existing guarded JS; this file changes visuals only. */
+.pilot-home-device-card {
+  min-width:0;display:flex;flex-direction:column;gap:6px;
+  padding:10px;border-radius:16px;
+  background:linear-gradient(150deg,#1a304a,#14253b);
+  border:1px solid rgba(164,206,239,.12);
+  box-shadow:0 5px 22px rgba(2,9,24,.19)
+}
+.pilot-home-device-card .pilot-device-mini {
+  border:0!important;background:transparent!important;box-shadow:none!important;
+  padding:2px!important;min-height:0!important;flex:1
+}
+.pilot-home-device-card .pilot-device-mini::after {display:none!important}
+.pilot-home-device-card .pilot-device-mini strong {white-space:normal;overflow-wrap:anywhere}
+.pilot-home-inline-power,.pilot-inline-power {min-width:0}
+.pilot-home-inline-power {
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding-top:6px;border-top:1px solid var(--border)
+}
+.pilot-inline-state {
+  display:block;font-size:10px;font-weight:750;letter-spacing:.15px;
+  line-height:1.35;color:var(--muted);overflow-wrap:anywhere
+}
+.pilot-home-inline-power.is-ready .pilot-inline-state,
+.pilot-inline-power.is-ready .pilot-inline-state {color:var(--fg)}
+.pilot-home-inline-power .switch-control,.pilot-inline-power .switch-control {
+  display:flex;align-items:center;gap:7px;
+  padding:0!important;background:transparent!important;border:0!important;
+  box-shadow:none!important;border-radius:0!important
+}
+.pilot-home-inline-power .switch-control::after,
+.tile[data-critical="true"] .pilot-inline-power .switch-control::after {display:none!important}
+.pilot-home-inline-power .pilot-command-note,.pilot-inline-power .pilot-command-note {
+  max-width:95px;font-size:9px;line-height:1.25;white-space:normal
+}
+.pilot-home-inline-power .pilot-switch-button,.pilot-inline-power .pilot-switch-button {
+  flex:0 0 auto;min-width:58px;min-height:34px
+}
+.pilot-home-inline-power .pilot-switch-button:disabled,
+.pilot-inline-power .pilot-switch-button:disabled {opacity:.4}
+:root[data-theme="light"] .pilot-home-device-card {
+  background:linear-gradient(145deg,#fff,#f4f9ff);
+  border-color:rgba(38,71,112,.12);box-shadow:0 5px 18px rgba(40,81,120,.07)
+}
+/* Desktop Devices cards already expose their full verified control panel. */
+@media(min-width:721px) {
+  #devices .pilot-inline-power {display:none}
+  .pilot-home-device-card .pilot-command-note {max-width:none}
+}
+@media(max-width:720px) {
+  /* All five Tuya devices become compact, one-line action cards. */
+  .pilot-home .pilot-device-summary-grid {grid-template-columns:1fr!important;gap:9px!important}
+  .pilot-home .pilot-home-tile {min-width:0;min-height:0;height:auto}
+  .pilot-home .pilot-home-device-card {
+    display:grid;grid-template-columns:minmax(0,1fr) 112px;
+    align-items:center;gap:9px;min-height:94px;
+    padding:10px 11px;border-radius:17px
+  }
+  .pilot-home .pilot-home-device-card .pilot-device-mini {
+    min-height:65px!important;height:auto!important;
+    display:flex;flex-direction:column;justify-content:center;
+    gap:4px!important;padding:0!important;min-width:0
+  }
+  .pilot-home .pilot-home-device-card .pilot-device-mini .pilot-device-mini-head {gap:5px}
+  .pilot-home .pilot-home-device-card .pilot-device-mini strong {
+    font-size:13px!important;line-height:1.32!important;white-space:normal!important
+  }
+  .pilot-home .pilot-home-device-card .pilot-device-mini small {font-size:10px!important}
+  .pilot-home .pilot-home-inline-power {
+    display:flex;flex-direction:column;justify-content:center;align-items:flex-end;
+    gap:4px;padding:0;border:0;min-width:0
+  }
+  .pilot-home .pilot-home-inline-power .switch-control {
+    display:flex;flex-direction:column;align-items:flex-end;gap:3px
+  }
+  .pilot-home .pilot-home-inline-power .pilot-command-note {
+    max-width:112px;text-align:right
+  }
+
+  /* Devices tab: title/status on left; actual ON/OFF at the right. */
+  #devices.grid {grid-template-columns:1fr!important;gap:9px!important}
+  #devices .tile {
+    display:grid!important;grid-template-columns:minmax(0,1fr) 116px!important;
+    grid-template-rows:auto!important;column-gap:10px!important;
+    align-items:center!important;min-height:99px!important;padding:11px 13px!important
+  }
+  #devices .tile-head {
+    min-width:0;grid-column:1;grid-row:1;align-content:center;gap:5px 8px!important
+  }
+  #devices .tile-title {flex:1 1 calc(100% - 44px)!important}
+  #devices .tile-title h2 {font-size:13px!important;line-height:1.35!important}
+  #devices .tile .fav {order:3;margin:0!important;line-height:1!important}
+  #devices .tile .status {order:4;max-width:calc(100% - 32px)}
+  #devices .tile .compact-open {display:none!important}
+  #devices .pilot-inline-power {
+    grid-column:2;grid-row:1;display:flex;flex-direction:column;
+    align-items:flex-end;justify-content:center;gap:4px;min-width:0
+  }
+  #devices .pilot-inline-power .switch-control {
+    flex-direction:column;align-items:flex-end;gap:3px
+  }
+  #devices .pilot-inline-power .pilot-command-note {
+    text-align:right;max-width:116px
+  }
+  #devices .tile .tile-body,#devices .tile .status-note,#devices .tile .tile-foot {
+    display:none!important
+  }
+
+  /* Home: Manual / live-watts belongs INSIDE each AC summary, never on its edge. */
+  .pilot-home .pilot-home-tile > .pilot-ac-mini {
+    box-sizing:border-box!important;height:auto!important;min-height:166px!important;
+    padding:12px!important;display:flex!important;flex-direction:column!important;
+    gap:7px!important;overflow:visible!important
+  }
+  .pilot-home .pilot-home-tile .pilot-ac-mini-temps {
+    min-height:36px;flex-wrap:wrap;gap:4px;align-items:center
+  }
+  .pilot-home .pilot-home-tile .pilot-ac-mini-bottom {
+    box-sizing:border-box;width:100%;min-width:0;min-height:31px;
+    display:flex;flex:0 0 auto;align-items:center;justify-content:space-between;
+    gap:6px;margin-top:auto!important;padding:8px 0 0!important;
+    white-space:normal!important;overflow:visible!important;
+    font-size:10px!important;line-height:1.4!important;overflow-wrap:anywhere
+  }
+  .pilot-home .pilot-home-tile .pilot-ac-mini-bottom span {
+    flex:0 0 auto;align-self:center;font-size:15px!important
+  }
+
+  /* Auto-Pilot: mode, temperature controls and status footer never clip. */
+  [data-view-panel="autopilot"] .haier-card {
+    height:auto!important;min-height:0!important;
+    padding:16px 15px 19px!important;overflow:hidden
+  }
+  [data-view-panel="autopilot"] .haier-mid {
+    min-width:0;margin:16px 0!important;gap:12px;flex-wrap:wrap
+  }
+  [data-view-panel="autopilot"] .haier-top-control {
+    min-width:0;flex-wrap:wrap;gap:10px
+  }
+  [data-view-panel="autopilot"] .haier-footer {
+    display:grid!important;grid-template-columns:minmax(0,1fr) auto;
+    align-items:center!important;gap:10px!important;
+    margin-top:13px;padding:12px 0 3px!important;
+    font-size:11px!important;line-height:1.45!important;
+    white-space:normal!important;overflow:visible!important
+  }
+  [data-view-panel="autopilot"] .haier-footer > span {
+    min-width:0;white-space:normal!important;overflow:visible!important;
+    overflow-wrap:anywhere
+  }
+  [data-view-panel="autopilot"] .haier-refresh {
+    min-height:42px;padding:7px 10px!important;white-space:nowrap
+  }
+}

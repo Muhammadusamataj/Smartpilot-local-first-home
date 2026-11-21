@@ -3,7 +3,7 @@
 
 import { api, debounce, esc, LimitedConcurrency, toast } from "./api.js";
 import { capabilities, deviceIcon } from "./model.js";
-import { commandsInFlight, renderPoints, updatePoints } from "./controls.js";
+import { commandsInFlight, renderPoints, renderSwitch, updatePoints } from "./controls.js";
 import { homeTile, sortHomeItems, showOnHome, isHomeEditing, setHomeEditing, homeAction, moveHomeTile } from "./home-layout.js";
 import {
   deleteScene, loadScenes, mountSceneEditor, renderSceneList, runScene, saveScene,
@@ -93,6 +93,56 @@ function isCriticalDevice(device) {
   return /breaker|motor|bore|geyser|water tank|pump|water heater|mains/.test(context);
 }
 
+
+// Visible switches are never inferred from a saved IP or numeric power meter.
+// A recent successful LAN read must contain the live Boolean power DP.
+function verifiedPowerPoint(device) {
+  const id = String(device.id);
+  const values = state.latest.get(id) || state.latest.get(device.id);
+  const checkedAt = state.latestReadAt.get(id) || state.latestReadAt.get(device.id) || 0;
+  if (device.verified !== true || !Array.isArray(values) || !values.length ||
+      Date.now() - checkedAt > 60000) return null;
+  const cap = capabilities(device, values);
+  const control = cap.controls.find(item => item.label === "Power" &&
+    item.kind === "switch" && item.type === "bool");
+  if (!control) return null;
+  const raw = values.find(item => String(item.dp) === control.dp);
+  const point = cap.all.find(item => String(item.dp) === control.dp);
+  // Tuya sometimes transports a declared Boolean as 0/1.
+  if (!raw || !point || !(typeof raw.value === "boolean" ||
+      raw.value === 0 || raw.value === 1)) return null;
+  return { point, value: raw.value };
+}
+
+function renderQuickPower(card, device, refreshCard = card) {
+  const host = card.querySelector("[data-quick-power]");
+  if (!host) return;
+  const live = verifiedPowerPoint(device);
+  const stateLabel = document.createElement("span");
+  stateLabel.className = "pilot-inline-state";
+  stateLabel.textContent = live ? (live.value === true || live.value === 1 ? "ON" : "OFF")
+    : device.verified === true ? "No verified power switch" : "Checking status";
+  host.replaceChildren(stateLabel);
+  host.classList.toggle("is-ready", !!live);
+
+  if (live) {
+    // Reuse the established command/confirmation handler. Critical devices
+    // still require two deliberate taps, confirmed write and fresh readback.
+    host.appendChild(renderSwitch(device.id, live.point, live.value,
+      refreshCard, refresh, "Main power"));
+  } else {
+    const disabled = document.createElement("button");
+    disabled.type = "button";
+    disabled.className = "switch pilot-switch-button";
+    disabled.setAttribute("role", "switch");
+    disabled.setAttribute("aria-label", "Power status not verified");
+    disabled.setAttribute("aria-checked", "mixed");
+    disabled.disabled = true;
+    disabled.innerHTML = '<span class="track" aria-hidden="true"><span class="thumb"></span></span>';
+    host.appendChild(disabled);
+  }
+}
+
 function matches(device) {
   const filters = state.filters;
   if (filters.favoritesOnly && !state.prefs.favorites.some(id => sameId(id, device.id))) return false;
@@ -131,7 +181,10 @@ function markReadFailed(cards, message) {
     }
   }
   const device = state.devices.find(item => sameId(item.id, cards[0]?.dataset.id));
-  if (device) device.verified = false;
+  if (device) {
+    device.verified = false;
+    for (const card of cards) renderQuickPower(card, device, card);
+  }
   renderStats();
   renderHomeQuickDevices(state.devices);
   for (const card of cards) state.retries.set(card.dataset.id, Date.now() + 60000);
@@ -231,6 +284,11 @@ async function refresh(deviceId, card, silent = false) {
     state.latest.set(deviceId, data.values || []);
     state.latestReadAt.set(deviceId, Date.now());
     renderReadings();
+    const liveDevice = state.devices.find(item => sameId(item.id, deviceId));
+    if (liveDevice) {
+      for (const item of cardsForDevice()) renderQuickPower(item, liveDevice, item);
+    }
+    renderHomeQuickDevices(state.devices);
     if (silent) {
       const updated = cardsForDevice().map(item => updatePoints(item, data.values || [])).some(Boolean);
       if (updated) return;
@@ -281,6 +339,7 @@ function renderDevice(device) {
       '<button class="compact-open" data-open-details title="Open device details" aria-label="Open device details for ' + esc(device.name) + '">›</button></div>' +
     (verified ? "" : '<p class="note status-note">' +
       esc(device.issue_message || (lanKnown ? "Address saved — waiting for a live reply." : "No IP saved yet.")) + '</p>') +
+    '<div class="pilot-inline-power" data-quick-power></div>' +
     '<div class="tile-body"><p class="note">Reading live values…</p></div>' +
     '<div class="tile-foot"><span class="ip">' + (lanKnown ? esc(device.ip) : "no ip") + '</span>' +
       (verified ? "" : '<button class="link-btn" data-fix>Fix connection</button>') +
@@ -326,6 +385,7 @@ function renderDevice(device) {
     const body = card.querySelector(".tile-body");
     if (body) body.innerHTML = '<p class="note">Reading live state before enabling controls…</p>';
   }
+  renderQuickPower(card, device, card);
   return card;
 }
 
@@ -363,16 +423,25 @@ function renderHomeQuickDevices(devices) {
   for (const device of ordered) {
     const verified = device.verified === true;
     const id = String(device.id);
-    const markup = `<button type="button" class="pilot-device-mini${verified ? ' is-verified' : ''}"
-      data-device-id="${esc(id)}" data-search="${esc(deviceSearchText(device))}"
-      aria-label="Open ${esc(device.name)} details">
-      <span class="pilot-device-mini-head"><span class="pilot-mini-icon" aria-hidden="true">${deviceIcon(device).svg}</span>
-      <span class="pilot-mini-signal ${verified?'online':''}">${verified?'ONLINE':esc(statusLabel(device))}</span></span>
-      <strong>${esc(device.name)}</strong><small>${esc(roomName(device))}</small>
-    </button>`;
+    // The navigation button and inline power button are siblings:
+    // never nest an interactive toggle inside another button.
+    const markup = `<div class="pilot-home-device-card">
+      <button type="button" class="pilot-device-mini${verified ? ' is-verified' : ''}"
+        data-device-id="${esc(id)}" data-search="${esc(deviceSearchText(device))}"
+        aria-label="Open ${esc(device.name)} details">
+        <span class="pilot-device-mini-head"><span class="pilot-mini-icon" aria-hidden="true">${deviceIcon(device).svg}</span>
+        <span class="pilot-mini-signal ${verified?'online':''}">${verified?'ONLINE':esc(statusLabel(device))}</span></span>
+        <strong>${esc(device.name)}</strong><small>${esc(roomName(device))}</small>
+      </button>
+      <div class="pilot-home-inline-power" data-quick-power></div>
+    </div>`;
     const wrapper = document.createElement('div');
     wrapper.innerHTML = homeTile('tuya', id, markup);
-    fragment.append(wrapper.firstElementChild);
+    const tile = wrapper.firstElementChild;
+    tile.dataset.critical = isCriticalDevice(device) ? "true" : "false";
+    tile.dataset.id = id;
+    renderQuickPower(tile, device, tile);
+    fragment.append(tile);
   }
   host.append(fragment);
 }
