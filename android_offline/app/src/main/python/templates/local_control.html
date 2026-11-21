@@ -68,6 +68,7 @@
       <button type="button" class="pilot-setting-tile" data-open-drawer="network"><b>⌁ Network &amp; Scan</b><small>LAN reconnect, IP checks and diagnostics</small></button>
       <button type="button" class="pilot-setting-tile" data-open-drawer="appearance"><b>◐ Appearance</b><small>Dark/Light theme and colour palette</small></button>
       <button type="button" class="pilot-setting-tile" data-open-drawer="add"><b>＋ Manage devices</b><small>Add devices, room names and local connection</small></button>
+      <button type="button" class="pilot-setting-tile" data-jump-view="scenes"><b>✧ Scenes &amp; schedules</b><small>Group actions, scenes and optional server timers</small></button>
     </div>
     <div class="panel">
       <p class="note">LAN keys stay encrypted in the device cache. This page never sends them back to the browser. Live status here means a device answered on your local network — a saved IP alone is never shown as online.</p>
@@ -85,14 +86,23 @@
     </div>
     <div class="haier-grid" data-haier-cards></div>
     <div class="panel"><p class="note">*Local LAN key aur Wi-Fi zaroori hain. Internet nahi. Home Assistant integration ko same waqt poll na karne dein. Unknown models ki writes blocked hain; winter heat abhi disabled hai. Android par background Auto-Pilot phone/OS restrictions ki wajah se 24/7 guaranteed nahi.</p></div>
-    <details class="pilot-scene-section pilot-scene-disclosure"><summary class="pilot-scenes-summary"><span>Scenes &amp; schedules</span><small>Tap to manage group actions and timers</small></summary>
-{% if ready %}
-    <div class="section-head"><h2>Scenes</h2><p>Group actions and optional server schedules</p></div>
+  </section>
+  <section class="view-panel pilot-scenes-view" data-view-panel="scenes" hidden>
+    <div class="pilot-scenes-nav">
+      <button type="button" class="pilot-back-link" data-jump-view="settings">← Settings</button>
+      <span class="pilot-local-pill">LOCAL SCENES</span>
+    </div>
+    <div class="pilot-headline"><div><div class="pilot-eyebrow">SMART PILOT · ACTIONS</div><h1>Scenes &amp; Schedules</h1><p>Manage grouped actions separately from your AC controls</p></div></div>
+    {% if ready %}
+    <div class="section-head"><h2>Saved scenes</h2><p>Run or manage scenes</p></div>
     <div id="sceneList"></div>
-    <div class="section-head"><h2>Scene editor</h2><p>Only real DPs from saved devices</p></div>
-    <div class="panel" id="sceneEditor"></div>
-{% endif %}
+    <details class="pilot-scene-editor-disclosure">
+      <summary class="pilot-scenes-summary"><span>Scene editor</span><small>Expand to create or edit a scene</small></summary>
+      <div class="panel" id="sceneEditor"></div>
     </details>
+    {% else %}
+    <div class="panel"><p class="note">Add a Tuya device first to create scenes.</p></div>
+    {% endif %}
   </section>
 </main>
 

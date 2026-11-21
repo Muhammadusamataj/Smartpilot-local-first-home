@@ -18,3 +18,6 @@ Scope: frontend-only visual/layout improvements. Tuya and Haier transport, HTTP 
 6. Run Playwright `tests/test_ui.py`, Python backend tests, source sync check, and physical Vivo smoke test. CI may have unrelated pre-existing failures.
 
 This PR does not build or install an APK and does not fix backend latency or LAN discovery.
+
+## Scene separation (requested)
+The Scenes list/editor was removed entirely from Auto-Pilot. Settings has a "Scenes & schedules" shortcut to a dedicated Scenes screen (not a fifth bottom tab). That screen has a back-to-Settings button and a collapsed Scene editor, preserving existing IDs, scene APIs and event handlers without adding vertical scroll to Auto-Pilot.
