@@ -134,7 +134,9 @@ export function capabilities(device, values) {
     if (point) used.add(String(point.dp));
   };
 
-  // A numeric "power" DP is a meter reading, NOT a relay. Never create a\n  // switch unless the live DP is genuinely Boolean.\n  const power = findPoint(points, POWER_CODE, ["bool"]);
+  // A numeric "power" DP is a meter reading, NOT a relay.
+  // Only a genuinely Boolean live DP can create an ON/OFF control.
+  const power = findPoint(points, POWER_CODE, ["bool"]);
   if (power) remember(power, "Power", "switch");
 
   if (kind === "light") {
