@@ -568,3 +568,83 @@ def test_scheduler_thread_is_not_started_in_tests(local_app):
     assert local._scheduler_started is False
     assert not any(thread.name == "local-scenes-scheduler" and thread.is_alive()
                    for thread in threading.enumerate())
+
+
+def _auto_results():
+    return {"plug1": {"status": "unverified", "ip": "192.168.1.50",
+                      "version": "auto", "checked_at": time.time()}}
+
+
+def test_manual_add_accepts_auto_protocol(local_app):
+    app, local, devices_cache, lan_cache, profiles = local_app
+    _seed(local, devices_cache, lan_cache)
+
+    response = app.app.test_client().post("/api/local/device", json={
+        "name": "Plug", "id": "plug1", "local_key": "5vps+n4FwxR2?df;",
+        "ip": "192.168.1.50", "version": "auto", "dp": "1",
+    })
+
+    assert response.status_code == 200, response.get_json()
+    assert local._results()["plug1"]["version"] == "auto"
+    assert json.loads(Path(profiles).read_text(encoding="utf-8"))["plug1"]["version"] == "auto"
+
+
+def test_edit_accepts_auto_protocol(local_app):
+    app, local, devices_cache, lan_cache, _ = local_app
+    _seed(local, devices_cache, lan_cache)
+
+    response = app.app.test_client().put("/api/local/device", json={
+        "id": "plug1", "name": "Plug", "ip": "192.168.1.50", "version": "auto",
+    })
+
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()["version"] == "auto"
+    assert local._results()["plug1"]["version"] == "auto"
+
+
+def test_connection_allow_auto_exposes_probe_context_without_leaking_it(local_app):
+    _, local, devices_cache, lan_cache, _ = local_app
+    _seed(local, devices_cache, lan_cache, results=_auto_results())
+    devices, results = local._devices(), local._merged_results()
+
+    context = local.device_values.connection(devices, results, "plug1", allow_auto=True)
+
+    assert context["version"] == ""
+    assert context["ip"] == "192.168.1.50"
+    assert context["key"] == _device()["local_key"]  # private, never in an API reply
+    with pytest.raises(local.device_values.ReadUnavailable):
+        local.device_values.connection(devices, results, "plug1")
+
+
+def test_auto_protocol_is_detected_once_then_cached(local_app, monkeypatch):
+    _, local, devices_cache, lan_cache, profiles = local_app
+    _seed(local, devices_cache, lan_cache, results=_auto_results())
+    probed = []
+
+    def fake_probe(dev_id, ip, key, version, gateway=False):
+        probed.append(version)
+        return {"match": version == "3.3", "device22": False}
+
+    monkeypatch.setattr(local.lan_scan, "probe", fake_probe)
+
+    context = local._context("plug1")
+
+    assert probed == ["3.3"]
+    assert context["version"] == "3.3"
+    assert local._results()["plug1"]["version"] == "3.3"
+    assert json.loads(Path(profiles).read_text(encoding="utf-8"))["plug1"]["version"] == "3.3"
+    # A cached version means later reads never pay the probe cost again.
+    assert local._context("plug1")["version"] == "3.3"
+    assert probed == ["3.3"]
+
+
+def test_auto_protocol_with_no_answer_stays_unresolved(local_app, monkeypatch):
+    _, local, devices_cache, lan_cache, _ = local_app
+    _seed(local, devices_cache, lan_cache, results=_auto_results())
+    monkeypatch.setattr(local.lan_scan, "probe", lambda *a, **k: {"match": False})
+
+    with pytest.raises(local.device_values.ReadUnavailable) as error:
+        local._context("plug1")
+
+    assert str(error.value) == "missing_protocol"
+    assert local._results()["plug1"]["version"] == "auto"

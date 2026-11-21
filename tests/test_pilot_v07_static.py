@@ -25,6 +25,16 @@ def test_web_android_and_addon_are_source_synced():
         assert source == (ROOT / 'tuya_local_key/app' / path).read_bytes()
 
 
+def test_protocol_version_offers_auto_in_add_and_edit_forms():
+    """Users should not have to guess a Tuya protocol version by hand."""
+    html = (ROOT / 'templates/local_control.html').read_text(encoding='utf-8')
+    assert '<option value="auto" selected>Auto (detect)</option>' in html
+    source = (ROOT / 'static/js/features/local-control/main.js').read_text(encoding='utf-8')
+    assert '<option value="auto"' in source
+    assert 'Auto (detect)' in source
+    assert 'const currentVersion = String(device.version || "auto");' in source
+
+
 def test_bulk_status_refreshes_are_queued_not_dropped():
     """Mobile concurrency is 2; run() silently drops the rest, so bulk reads must queue."""
     source = (ROOT / 'static/js/features/local-control/main.js').read_text(encoding='utf-8')

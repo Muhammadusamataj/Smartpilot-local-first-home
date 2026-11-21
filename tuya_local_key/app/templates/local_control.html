@@ -109,7 +109,7 @@
         <div class="field"><label for="devKey">Local key (16–32 characters)</label><input id="devKey" required placeholder="0123456789abcdef" maxlength="32"></div>
         <div class="field-row">
           <div class="field"><label for="devIp">IP address</label><input id="devIp" required placeholder="192.168.1.50"></div>
-          <div class="field"><label for="devVersion">Version</label><select id="devVersion"><option>3.5</option><option>3.4</option><option>3.3</option><option>3.2</option><option>3.1</option></select></div>
+          <div class="field"><label for="devVersion">Version</label><select id="devVersion"><option value="auto" selected>Auto (detect)</option><option>3.5</option><option>3.4</option><option>3.3</option><option>3.2</option><option>3.1</option></select></div>
         </div>
         <div class="field"><label for="devDp">ON/OFF DP (usually 1)</label><input id="devDp" value="1" inputmode="numeric"></div>
         <button class="btn primary" type="submit" style="width:100%">Save device</button>
@@ -139,7 +139,7 @@
 
     <section class="group">
       <h3>Device IPs</h3>
-      <p class="note" style="margin-bottom:10px">Har device ke <b>Edit</b> se name, IP, protocol version aur (zarurat ho to) local key badal sakte hain. Saved key screen par kabhi nahi dikhti.</p>
+      <p class="note" style="margin-bottom:10px">Har device ke <b>Edit</b> se name, IP, protocol version aur (zarurat ho to) local key badal sakte hain. Version <b>Auto</b> rakhein to app pehli live read par khud version detect karke yaad kar leta hai. Saved key screen par kabhi nahi dikhti.</p>
       <div id="ipList"><p class="note">Koi device nahi mila.</p></div>
     </section>
 

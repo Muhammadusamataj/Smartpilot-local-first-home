@@ -13,8 +13,14 @@ class ReadUnavailable(ValueError):
     """A stable error code suitable for the UI, without device secrets."""
 
 
-def connection(devices, results, device_id):
-    """Resolve the device or its identified gateway. The returned key is private."""
+def connection(devices, results, device_id, allow_auto=False):
+    """Resolve the device or its identified gateway. The returned key is private.
+
+    With ``allow_auto=True`` a device set to the UI's "Auto" protocol returns a
+    context with an empty version instead of raising, so the caller can probe
+    the supported versions and cache the one that answers. Normal reads keep
+    rejecting an unresolvable version.
+    """
     by_id = {d.get("id"): d for d in devices}
     device = by_id.get(device_id)
     if not device:
@@ -47,7 +53,11 @@ def connection(devices, results, device_id):
     except lan_scan.TargetError:
         raise ReadUnavailable("missing_ip") from None
     if not tuya_versions.is_supported(version):
-        raise ReadUnavailable("missing_protocol")
+        configured = str(local.get("version") or "").strip()
+        if allow_auto and (tuya_versions.is_auto(configured) or not configured):
+            version = ""  # detection is delegated to the caller
+        else:
+            raise ReadUnavailable("missing_protocol")
     return {
         "device_id": device_id, "host_id": host["id"], "gateway_id": gateway_id,
         "ip": ip, "version": version, "key": key, "node_id": node_id,

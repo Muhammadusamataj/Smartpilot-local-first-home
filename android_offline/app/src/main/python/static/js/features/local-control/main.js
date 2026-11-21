@@ -708,9 +708,11 @@ function renderIpList(devices) {
     const editor = document.createElement("form");
     editor.className = "device-edit";
     editor.hidden = true;
-    const currentVersion = String(device.version || "3.4");
-    const versionOptions = ["3.5", "3.4", "3.3", "3.2", "3.1"]
-      .map(v => '<option' + (v === currentVersion ? " selected" : "") + '>' + v + '</option>').join("");
+    const currentVersion = String(device.version || "auto");
+    const autoSelected = currentVersion === "auto" ? " selected" : "";
+    const versionOptions = '<option value="auto"' + autoSelected + '>Auto (detect)</option>' +
+      ["3.5", "3.4", "3.3", "3.2", "3.1"]
+        .map(v => '<option' + (v === currentVersion ? " selected" : "") + '>' + v + '</option>').join("");
     const gatewayHint = device.sub || device.gateway
       ? "Gateway device: IP/version apply to its gateway."
       : "Leave the new key blank to keep the saved key.";

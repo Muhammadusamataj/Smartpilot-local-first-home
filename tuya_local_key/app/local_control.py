@@ -122,7 +122,7 @@ MAX_STRING_CHARS = 256
 # why it could not be resolved, without exposing keys or raw SDK errors.
 _ISSUE_MESSAGES = {
     "missing_ip": "IP abhi save nahi hua. Auto scan apne aap chal raha hai — thoda wait karein.",
-    "missing_protocol": "Protocol version nahi mila. Scan network dobara chalayein.",
+    "missing_protocol": "Protocol version detect nahi hua. Version ko Auto karein ya Scan network dobara chalayein.",
     "no_local_key": "Local key nahi mili. Main screen par dobara login karein.",
     "gateway_unavailable": "Is sub-device ka gateway cache me nahi. Refresh karein phir Scan network.",
     "missing_node_id": "Sub-device node ID nahi mila. Dobara login karein.",
@@ -484,10 +484,71 @@ def _public(device: dict, context: dict | None, issue: str = "", *,
     }
 
 
+def _auto_detect_version(devices: list[dict], results: dict, device_id: str):
+    """Probe every supported protocol for an "Auto" device.
+
+    Uses the same address/key resolution as a normal read but never mutates
+    state. Returns (version, device22) for the first protocol that answers, or
+    None when the device is unreachable / the local driver is unavailable.
+    """
+    try:
+        context = device_values.connection(devices, results, device_id, allow_auto=True)
+    except device_values.ReadUnavailable:
+        return None
+    if tuya_versions.is_supported(context["version"]):
+        return context["version"], bool(context["device22"])
+    for version in tuya_versions.AUTO_DETECT_VERSIONS:
+        try:
+            outcome = lan_scan.probe(context["host_id"], context["ip"], context["key"],
+                                     version, gateway=context["gateway"])
+        except lan_scan.ScannerUnavailable:
+            return None
+        if outcome.get("match"):
+            return version, bool(outcome.get("device22"))
+    return None
+
+
+def _store_detected_version(device_id: str, context: dict, version: str, device22: bool) -> None:
+    """Cache the detected protocol so later reads never have to probe again."""
+    now = time.time()
+    host_id = context["host_id"]
+    lan_body = _body(LAN_CACHE_FILE)
+    results = dict(lan_body.get("results") or {})
+    entry = dict(results.get(host_id) or {})
+    entry.update({
+        "status": lan_scan.OK, "ip": context["ip"], "version": version,
+        "device22": bool(device22), "checked_at": now,
+    })
+    results[host_id] = entry
+    lan_body["results"] = results
+    _write_cache(LAN_CACHE_FILE, lan_body)
+    with _profile_lock:
+        profiles = _profiles()
+        profile = dict(profiles.get(device_id) or {})
+        profile.update({
+            "ip": context["ip"], "version": version, "device22": bool(device22),
+            "checked_at": now, "last_ok": now, "last_failed": 0, "fail_count": 0,
+        })
+        profiles[device_id] = profile
+        _save_profiles(profiles)
+
+
 def _context(device_id: str):
     devices = _devices()
     if not _by_id(devices).get(device_id):
         raise device_values.ReadUnavailable("unknown_device")
+    results = _merged_results()
+    try:
+        return device_values.connection(devices, results, device_id)
+    except device_values.ReadUnavailable as error:
+        if str(error) != "missing_protocol":
+            raise
+    # "Auto" (or a legacy empty version): probe once, remember the answer.
+    detected = _auto_detect_version(devices, results, device_id)
+    if not detected:
+        raise device_values.ReadUnavailable("missing_protocol")
+    context = device_values.connection(devices, results, device_id, allow_auto=True)
+    _store_detected_version(device_id, context, detected[0], detected[1])
     return device_values.connection(devices, _merged_results(), device_id)
 
 
@@ -1499,7 +1560,7 @@ def local_add_device():
     device_id = str(data.get("id") or "").strip()
     key = str(data.get("local_key") or "").strip()
     ip = str(data.get("ip") or "").strip()
-    version = str(data.get("version") or "3.4").strip()
+    version = str(data.get("version") or tuya_versions.AUTO_VERSION).strip()
     dp = str(data.get("dp") or "1").strip()
 
     if not name or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", device_id):
@@ -1512,7 +1573,7 @@ def local_add_device():
         address = ipaddress.IPv4Address(ip)
     except ipaddress.AddressValueError:
         return jsonify({"error": "invalid_ip"}), 400
-    if not tuya_versions.is_supported(version):
+    if not (tuya_versions.is_supported(version) or tuya_versions.is_auto(version)):
         return jsonify({"error": "invalid_version"}), 400
     if not dp.isdigit() or not 1 <= int(dp) <= 255:
         return jsonify({"error": "invalid_dp"}), 400
@@ -1629,7 +1690,7 @@ def local_update_device():
         version = str(saved.get("version") or host.get("version") or "").strip()
         if not version and ip:
             version = "3.4"
-    if ip and not tuya_versions.is_supported(version):
+    if ip and version and not (tuya_versions.is_supported(version) or tuya_versions.is_auto(version)):
         return jsonify({"error": "invalid_version"}), 400
 
     device["name"] = name
