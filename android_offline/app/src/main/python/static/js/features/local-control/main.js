@@ -639,7 +639,7 @@ function applyFilter() {
 
 function setView(view) {
   // Backwards-compatible routes: older Home cards and deep links still work.
-  view = ({ac:'autopilot', scenes:'autopilot', advanced:'settings'})[view] || view;
+  view = ({ac:'autopilot', advanced:'settings'})[view] || view;
   if (isHomeEditing() && view !== 'home') setHomeEditing(false);
   state.view = view;
   for (const button of document.querySelectorAll("[data-view]")) {
@@ -650,7 +650,7 @@ function setView(view) {
   for (const section of document.querySelectorAll("[data-view-panel]")) {
     section.hidden = section.dataset.viewPanel !== view;
   }
-  if (view === "autopilot" && !state.editorMounted && $("sceneEditor")) {
+  if (view === "scenes" && !state.editorMounted && $("sceneEditor")) {
     mountSceneEditor($("sceneEditor"), {
       devices: state.devices,
       editingId: "",

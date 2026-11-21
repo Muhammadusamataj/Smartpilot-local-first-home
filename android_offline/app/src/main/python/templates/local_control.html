@@ -26,6 +26,7 @@
     <button type="button" role="tab" data-view="home" data-glyph="⌂" class="active" aria-selected="true">Home</button>
     <button type="button" role="tab" data-view="devices" data-glyph="▦" aria-selected="false">Devices</button>
     <button type="button" role="tab" data-view="autopilot" data-glyph="✧" aria-selected="false">Auto-Pilot</button>
+    <button type="button" role="tab" data-view="scenes" data-glyph="⚡" aria-selected="false">Scenes</button>
     <button type="button" role="tab" data-view="settings" data-glyph="⚙" aria-selected="false">Settings</button>
   </nav>
   <div class="search" {% if not ready %}hidden{% endif %}>
@@ -81,14 +82,21 @@
     <div class="haier-intro"><div><h2>My Haier ACs</h2><p>Private Wi-Fi · Manual and Auto</p></div><span class="haier-tag">LIVE DATA ONLY</span></div>
     <div class="haier-grid" data-haier-cards></div>
     <div class="panel"><p class="note">*Local LAN key aur Wi-Fi zaroori hain. Internet nahi. Home Assistant integration ko same waqt poll na karne dein. Unknown models ki writes blocked hain; winter heat abhi disabled hai. Android par background Auto-Pilot phone/OS restrictions ki wajah se 24/7 guaranteed nahi.</p></div>
-    <div class="pilot-scene-section">
+  </section>
+
+  <section class="view-panel pilot-scenes-view" data-view-panel="scenes" hidden>
+    <div class="pilot-scenes-nav">
+      <div><div class="pilot-eyebrow">SMART PILOT · ACTIONS</div><h1>Scenes &amp; Schedules</h1><p>Group actions and optional server timers</p></div>
+      <span class="pilot-local-pill">LOCAL SCENES</span>
+    </div>
 {% if ready %}
-    <div class="section-head"><h2>Scenes</h2><p>Group actions and optional server schedules</p></div>
+    <div class="section-head"><h2>Saved scenes</h2><p>Run or manage scenes</p></div>
     <div id="sceneList"></div>
     <div class="section-head"><h2>Scene editor</h2><p>Only real DPs from saved devices</p></div>
     <div class="panel" id="sceneEditor"></div>
+{% else %}
+    <div class="panel"><p class="note">Add a Tuya device first to create scenes.</p></div>
 {% endif %}
-    </div>
   </section>
 </main>
 

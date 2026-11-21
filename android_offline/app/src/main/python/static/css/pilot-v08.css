@@ -279,3 +279,41 @@
     min-height:42px;padding:7px 10px!important;white-space:nowrap
   }
 }
+
+
+/* v0.9 — no sideways scrolling anywhere, and the bottom tab bar stays put.
+   Loaded last so it wins over the older lumen/pilot-theme dock rules. */
+html, body { max-width:100%; overflow-x:hidden!important }
+main { max-width:100%; overflow-x:hidden }
+[data-view-panel] { min-width:0; max-width:100%; overflow-x:hidden }
+.pilot-headline, .haier-intro, .haier-top-control { flex-wrap:wrap!important; min-width:0 }
+.pilot-headline > div, .haier-intro > div { min-width:0 }
+.pilot-headline p { overflow-wrap:anywhere }
+.scene-editor-grid, .action-fields { grid-template-columns:minmax(0,1fr)!important }
+.scene-card { flex-wrap:wrap!important }
+.scene-body { flex:1 1 100%!important; min-width:0!important }
+.schedule-grid { max-width:100%; overflow-wrap:anywhere }
+
+@media(max-width:720px){
+  [data-view-panel="autopilot"] .pilot-headline .pilot-local-pill { display:none!important }
+  .haier-grid { grid-template-columns:minmax(0,1fr)!important }
+}
+
+/* Scenes now own a dedicated tab; Auto-Pilot stays climate-only. */
+.pilot-scenes-view { max-width:940px; margin:0 auto }
+.pilot-scenes-nav { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; margin:4px 0 14px; flex-wrap:wrap }
+.pilot-scenes-nav > div { min-width:0 }
+.pilot-scenes-nav h1 { font-size:clamp(24px,5vw,32px); letter-spacing:-1px; margin:3px 0 2px }
+.pilot-scenes-nav p { color:var(--muted); font-size:12px; margin:0; overflow-wrap:anywhere }
+.appbar { transform:none!important; filter:none!important; backdrop-filter:none!important; -webkit-backdrop-filter:none!important; contain:none!important; will-change:auto!important; perspective:none!important }
+@media(max-width:680px){
+  .appbar .view-tabs{
+    position:fixed!important; top:auto!important; left:0!important; right:0!important; bottom:0!important;
+    width:100%!important; max-width:100%!important; margin:0!important;
+    z-index:9999!important; border-radius:0!important; display:flex!important; flex-wrap:nowrap!important; order:initial!important;
+    background:#101e34!important; backdrop-filter:none!important; -webkit-backdrop-filter:none!important;
+    transform:none!important; filter:none!important; contain:none!important;
+    box-shadow:0 -12px 26px rgba(0,0,0,.27)!important;
+  }
+  main { padding-bottom:110px!important }
+}
