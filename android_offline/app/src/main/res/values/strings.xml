@@ -2,10 +2,10 @@
 <resources>
     <string name="app_name">Tuya Local Key (Offline 2)</string>
     <string name="starting">Starting local server…</string>
-    <string name="ready">Ready</string>
-    <string name="ready_direct">Ready · Direct</string>
+    <string name="ready">Server ready</string>
+    <string name="ready_direct">Server · Direct</string>
 
-    <string name="remote_settings">Remote access</string>
+    <string name="remote_settings">Remote</string>
     <string name="remote_close">Close</string>
     <string name="remote_access_toggle">Direct access over Tailscale</string>
     <string name="remote_user_hint">Username</string>
