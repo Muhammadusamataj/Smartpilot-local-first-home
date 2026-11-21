@@ -547,7 +547,7 @@ function renderAll({ poll = false } = {}) {
   }
   if (poll) {
     for (const card of pollableCards()) {
-      limiter.run(() => refresh(card.dataset.id, card));
+      limiter.queue(() => refresh(card.dataset.id, card));
     }
   }
 }
@@ -945,7 +945,7 @@ function schedulePoll() {
       for (const card of pollableCards()) {
         const next = Number(state.retries.get(card.dataset.id) || 0);
         if (Date.now() < next) continue;
-        limiter.run(() => refresh(card.dataset.id, card, true));
+        limiter.queue(() => refresh(card.dataset.id, card, true));
       }
     }
     schedulePoll();
@@ -1023,13 +1023,13 @@ function initEvents() {
     renderAll();
   });
   $("refreshAll")?.addEventListener("click", () => {
-    for (const card of pollableCards()) limiter.run(() => refresh(card.dataset.id, card));
+    for (const card of pollableCards()) limiter.queue(() => refresh(card.dataset.id, card));
   });
   $("saveOrganize")?.addEventListener("click", saveOrganize);
   $("autoRefresh")?.addEventListener("change", schedulePoll);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
-      for (const card of pollableCards().slice(0, 8)) limiter.run(() => refresh(card.dataset.id, card, true));
+      for (const card of pollableCards().slice(0, 8)) limiter.queue(() => refresh(card.dataset.id, card, true));
     }
     schedulePoll();
   });

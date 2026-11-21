@@ -25,6 +25,16 @@ def test_web_android_and_addon_are_source_synced():
         assert source == (ROOT / 'tuya_local_key/app' / path).read_bytes()
 
 
+def test_bulk_status_refreshes_are_queued_not_dropped():
+    """Mobile concurrency is 2; run() silently drops the rest, so bulk reads must queue."""
+    source = (ROOT / 'static/js/features/local-control/main.js').read_text(encoding='utf-8')
+    assert 'limiter.run(' not in source
+    assert source.count('limiter.queue(') == 4
+    api = (ROOT / 'static/js/features/local-control/api.js').read_text(encoding='utf-8')
+    assert 'queue(task)' in api and 'this.waiting.push(task)' in api
+    assert 'drain()' in api
+
+
 def test_haier_local_library_and_adapter_are_source_synced():
     files = (
         'haier_control.py', 'haier_hrdp_adapter.py',
