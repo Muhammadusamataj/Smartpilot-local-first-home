@@ -97,12 +97,16 @@ def configure(*, read_state=None, set_value=None, list_devices=None,
     EVENTS_FILE = Path(os.environ.get("LOCAL_EVENTS_FILE", str(base / "local-events.json")))
     USAGE_FILE = Path(os.environ.get("LOCAL_USAGE_FILE", str(base / "local-usage.json")))
     BACKUP_DIR = Path(os.environ.get("LOCAL_BACKUP_DIR", str(base / "backups")))
-    _callbacks.update({
+    # Only replace callbacks that were actually supplied. A restore reloads
+    # files via configure() with no arguments and must not clear live hooks.
+    for key, value in {
         "read_state": read_state, "set_value": set_value,
         "list_devices": list_devices, "read_scenes": read_scenes,
         "claim_scene": claim_scene, "execute_scene": execute_scene,
         "ac_status": ac_status,
-    })
+    }.items():
+        if value is not None:
+            _callbacks[key] = value
     global _events, _next_event_id, _rules, _rule_state, _usage
     _events = [item for item in _load_json(EVENTS_FILE, [])
                if isinstance(item, dict) and isinstance(item.get("id"), int)]
