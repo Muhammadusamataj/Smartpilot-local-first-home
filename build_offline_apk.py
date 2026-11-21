@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the fully offline Android APK (Python + Flask run on the device).
 
-    python build_offline_apk.py                # -> dist/TuyaLocalKey-Offline.apk
+    python build_offline_apk.py                # -> dist/SmartPilot-Local.apk
     python build_offline_apk.py --release      # release variant (secure signing config required)
     python build_offline_apk.py --install      # adb install -r after building
 
@@ -131,8 +131,10 @@ def main() -> None:
     if not src.exists():
         raise SystemExit(f"Build finished but {src} was not found.")
     DIST.mkdir(parents=True, exist_ok=True)
-    apk = DIST / "TuyaLocalKey-Offline.apk"
+    apk = DIST / "SmartPilot-Local.apk"
     shutil.copy2(src, apk)
+    # Keep the historical filename as an alias for existing update scripts/docs.
+    shutil.copy2(src, DIST / "TuyaLocalKey-Offline.apk")
 
     print(f"\nBuilt: {apk}")
     if args.install:

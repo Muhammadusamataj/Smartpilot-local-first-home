@@ -366,7 +366,7 @@ def _require_auth():
     )
     if not ok:
         return ("Authentication required.", 401,
-                {"WWW-Authenticate": 'Basic realm="Tuya Local Key"'})
+                {"WWW-Authenticate": 'Basic realm="Smart Pilot Local"'})
 
     # Basic Auth is attached automatically by browsers on cross-site requests.
     # Reject a foreign Origin on state-changing API calls (curl/mobile clients

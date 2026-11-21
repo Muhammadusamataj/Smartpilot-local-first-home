@@ -389,7 +389,7 @@ public class OfflineActivity extends Activity {
         }
         ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
         if (clipboard != null) {
-            clipboard.setPrimaryClip(ClipData.newPlainText("Tuya Local Key", details));
+            clipboard.setPrimaryClip(ClipData.newPlainText("Smart Pilot Local", details));
         }
         Toast.makeText(this, R.string.remote_copied, Toast.LENGTH_SHORT).show();
     }
@@ -398,7 +398,7 @@ public class OfflineActivity extends Activity {
     private void applyWebViewAuth(String user, String password) {
         WebViewDatabase.getInstance(getApplicationContext()).clearHttpAuthUsernamePassword();
         web.clearCache(true);
-        web.setHttpAuthUsernamePassword("127.0.0.1", "Tuya Local Key", user, password);
+        web.setHttpAuthUsernamePassword("127.0.0.1", "Smart Pilot Local", user, password);
     }
 
     private void updateRemoteUrl(String user, String password) {

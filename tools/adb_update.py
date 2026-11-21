@@ -40,7 +40,7 @@ BUILDERS = {
 }
 APKS = {
     "server": ROOT / "dist" / "TuyaLocalKey.apk",
-    "offline": ROOT / "dist" / "TuyaLocalKey-Offline.apk",
+    "offline": ROOT / "dist" / "SmartPilot-Local.apk",
 }
 
 

@@ -1735,7 +1735,7 @@ def test_brand_returns_from_excluded_without_restoring_devices(page, target, wid
 
 def test_brand_home_action_supports_keyboard_activation(page):
     open_panel(page, PLUG.name)
-    home = page.get_by_role("link", name="Tuya Local Key home")
+    home = page.get_by_role("link", name="Smart Pilot home")
     home.focus()
     home.press("Enter")
     expect(page.locator("#panel")).to_have_attribute("aria-hidden", "true")
