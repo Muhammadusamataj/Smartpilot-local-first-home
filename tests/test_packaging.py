@@ -31,6 +31,7 @@ def test_home_assistant_metadata_builds_from_source():
     assert config["environment"]["SESSION_FILE"] == "/data/session.json"
     assert config["environment"]["QR_SCHEME"] == "smartlife"
     assert config["environment"]["PORT"] == "8000"
+    assert config["environment"]["INGRESS_ONLY"] == "true"
     assert config["options"]["QR_SCHEME"] == "smartlife"
     assert config["options"]["DEVICE_CACHE"] == "on"
     assert config["options"]["CHECK_FOR_UPDATES"] is True

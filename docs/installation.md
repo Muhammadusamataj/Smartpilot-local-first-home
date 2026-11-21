@@ -58,10 +58,10 @@ Set up the local environment, then add the web dependencies:
 .venv/bin/python -m pip install -r requirements-web.txt
 ```
 
-Serve it with waitress, the same server the Docker image uses:
+Serve it with waitress, using the guarded entry point that checks authentication before opening the socket:
 
 ```bash
-.venv/bin/waitress-serve --listen=127.0.0.1:8000 app:app
+.venv/bin/waitress-serve --listen=127.0.0.1:8000 wsgi:app
 ```
 
-Then open `http://localhost:8000`. It shares the CLI's saved login in `~/.config/tuya-smartlife/session.json`. To reach it from other devices, listen on `0.0.0.0:8000` instead, and read the security note under [Configuration](configuration.md) first.
+Then open `http://localhost:8000`. It shares the CLI's saved login in `~/.config/tuya-smartlife/session.json`. To reach it from other devices, listen on `0.0.0.0:8000` and set both `AUTH_USERNAME` and `AUTH_PASSWORD` first (or use `ALLOW_NO_AUTH=1` to accept an unauthenticated LAN bind); see [Configuration](configuration.md). The startup check refuses the non-loopback bind when those credentials are missing.
