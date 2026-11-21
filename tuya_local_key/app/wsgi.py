@@ -1,16 +1,46 @@
-"""Production WSGI entry point with a fail-closed bind check.
+"""Production WSGI entry point with a fail-closed listener check.
 
-``waitress-serve --listen=0.0.0.0:${PORT:-8000} --threads=8 wsgi:app`` imports
-this module before opening the listening socket. If no authentication is
-configured and the bind is not loopback, the guard aborts startup instead of
-exposing device keys. Home Assistant's ingress-only mode is an explicit,
-documented exception; the Android localhost server calls the same guard from
-android_entry.py.
+When Waitress specifies --listen, validate EVERY address rather than trusting
+an unrelated HOST environment variable. A missing listener is conservatively
+treated as a non-loopback bind. Android's loopback service has its own guard.
 """
+
+import re
+import sys
 
 from app import app, check_no_auth_binding
 
-check_no_auth_binding()
 
-# Exposed for waitress-serve (wsgi:app) and generic WSGI servers.
+def _cli_option_values(argv, option):
+    """Read both --option=value and --option value, including repeated flags."""
+    found = []
+    for index, arg in enumerate(argv):
+        if arg.startswith(option + "="):
+            found.append(arg.split("=", 1)[1])
+        elif arg == option:
+            found.append(argv[index + 1] if index + 1 < len(argv) else "")
+    return found
+
+
+def _requested_bindings(argv):
+    listens = _cli_option_values(argv, "--listen")
+    if listens:
+        # Waitress supports multiple listen addresses in one argument.
+        # Any non-loopback address must be rejected without authentication.
+        values = [address for value in listens for address in re.split(r"[,\s]+", value.strip()) if address]
+        return values or ["0.0.0.0"]
+
+    hosts = _cli_option_values(argv, "--host")
+    if hosts:
+        return hosts
+
+    # No trustworthy CLI declaration: do not allow an ambient HOST or
+    # WAITRESS_HOST=127.0.0.1 to bypass a real wildcard/default listener.
+    return ["0.0.0.0"]
+
+
+for _binding in _requested_bindings(sys.argv[1:]):
+    check_no_auth_binding(_binding)
+
+# Exported for Waitress (wsgi:app) and WSGI servers.
 application = app

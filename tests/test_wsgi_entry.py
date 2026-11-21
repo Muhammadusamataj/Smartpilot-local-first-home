@@ -19,9 +19,10 @@ def test_wsgi_entry_checks_the_bind_before_publishing_the_app(monkeypatch):
     monkeypatch.setitem(sys.modules, "app", fake_app_module)
     monkeypatch.delitem(sys.modules, "wsgi", raising=False)
 
+    monkeypatch.setattr(sys, "argv", ["waitress-serve", "wsgi:app"])
     module = importlib.import_module("wsgi")
 
-    assert checked == [None]
+    assert checked == ["0.0.0.0"]
     assert module.app is flask_app
     assert module.application is flask_app
 
@@ -50,3 +51,45 @@ def test_docker_images_start_through_the_guarded_wsgi_entry():
     assert re.search(r"^COPY .*\bwsgi\.py\b", root_dockerfile, re.M)
     assert "app:app" not in root_dockerfile
     assert "app:app" not in addon_dockerfile
+
+
+@pytest.mark.parametrize(("argv", "addresses"), [
+    (["waitress-serve", "--listen=127.0.0.1:8000", "wsgi:app"], ["127.0.0.1:8000"]),
+    (["waitress-serve", "--listen", "[::1]:8000", "wsgi:app"], ["[::1]:8000"]),
+    (["waitress-serve", "--host=127.0.0.1", "wsgi:app"], ["127.0.0.1"]),
+    (["waitress-serve", "--listen=127.0.0.1:8000 0.0.0.0:8001", "wsgi:app"],
+     ["127.0.0.1:8000", "0.0.0.0:8001"]),
+])
+def test_wsgi_checks_actual_cli_listeners(monkeypatch, argv, addresses):
+    fake_app_module = types.ModuleType("app")
+    fake_app_module.app = object()
+    checked = []
+    fake_app_module.check_no_auth_binding = lambda host: checked.append(host)
+    monkeypatch.setitem(sys.modules, "app", fake_app_module)
+    monkeypatch.delitem(sys.modules, "wsgi", raising=False)
+    monkeypatch.setattr(sys, "argv", argv)
+
+    importlib.import_module("wsgi")
+
+    assert checked == addresses
+
+
+def test_wsgi_cli_binding_cannot_be_overridden_by_loopback_env(monkeypatch):
+    fake_app_module = types.ModuleType("app")
+    fake_app_module.app = object()
+
+    def guard(host):
+        if host != "127.0.0.1:8000":
+            raise RuntimeError("Refusing non-loopback listener")
+
+    fake_app_module.check_no_auth_binding = guard
+    monkeypatch.setitem(sys.modules, "app", fake_app_module)
+    monkeypatch.delitem(sys.modules, "wsgi", raising=False)
+    monkeypatch.setenv("HOST", "127.0.0.1")
+    monkeypatch.setenv("WAITRESS_HOST", "127.0.0.1")
+    monkeypatch.setattr(sys, "argv", [
+        "waitress-serve", "--listen=127.0.0.1:8000 0.0.0.0:8001", "wsgi:app",
+    ])
+
+    with pytest.raises(RuntimeError, match="non-loopback"):
+        importlib.import_module("wsgi")
