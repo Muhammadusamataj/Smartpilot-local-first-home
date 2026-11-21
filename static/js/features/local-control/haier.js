@@ -4,6 +4,17 @@ import { api, esc, toast } from "./api.js";
 import { homeTile, sortHomeItems, showOnHome } from "./home-layout.js";
 
 const slots = ["pro", "ff"];
+let activeSlot = "pro";
+function selectAC(slot) {
+  if (!slots.includes(slot)) return;
+  activeSlot = slot;
+  for (const mount of document.querySelectorAll("[data-haier-cards]")) {
+    mount.dataset.activeSlot = slot;
+  }
+  for (const button of document.querySelectorAll("[data-haier-choose]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.haierChoose === slot));
+  }
+}
 let data = [];
 let busy = new Set();
 const $ = id => document.getElementById(id);
@@ -89,6 +100,7 @@ function draw() {
   for (const mount of document.querySelectorAll('[data-haier-cards]')) {
     mount.innerHTML = data.length ? data.map(card).join('') : '<p class="note">Haier connection details load nahi ho sake.</p>';
   }
+  selectAC(activeSlot);
   const count = $('haierCount');
   if (count) count.textContent = data.filter(d=>d.verified).length + ' / 2 local';
 }
@@ -137,8 +149,14 @@ function setupCard(slot, root) {
 async function handler(event) {
   const button = event.target.closest('button');
   // A Home summary navigates to the *correct* AC, not the top of a long page.
+  const selectedSlot = button?.dataset?.haierChoose;
+  if (selectedSlot && slots.includes(selectedSlot)) {
+    selectAC(selectedSlot);
+    return;
+  }
   const focusedSlot = button?.dataset?.haierFocus;
   if (focusedSlot && slots.includes(focusedSlot)) {
+    selectAC(focusedSlot);
     requestAnimationFrame(() => {
       const target = document.querySelector(`[data-haier-cards] [data-haier-slot="${focusedSlot}"]`);
       target?.scrollIntoView({behavior:'smooth', block:'start'});
