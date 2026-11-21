@@ -1,0 +1,417 @@
+/* LUMEN-inspired presentation layer.
+   Adds the premium glass/ambient look without changing functional selectors,
+   API URLs, device state, or the existing base/theme tokens. */
+
+:root {
+  --lum-radius-md: 18px;
+  --lum-radius-lg: 26px;
+  --lum-glass: color-mix(in srgb, var(--card) 72%, transparent);
+  --lum-glass-strong: color-mix(in srgb, var(--card) 90%, transparent);
+  --lum-well: color-mix(in srgb, var(--bg) 78%, transparent);
+  --lum-line: color-mix(in srgb, var(--fg) 12%, transparent);
+  --lum-accent: var(--accent);
+  --lum-accent-2: #6366f1;
+  --lum-accent-3: #8b5cf6;
+  --lum-glow-a: color-mix(in srgb, var(--accent) 22%, transparent);
+  --lum-glow-b: rgba(139, 92, 246, .17);
+  --lum-glow-c: rgba(56, 189, 248, .13);
+  --lum-shadow: 0 18px 48px rgba(8, 14, 28, .16);
+  --lum-dock: color-mix(in srgb, var(--card) 78%, transparent);
+  --lum-ease: cubic-bezier(.2, .8, .2, 1);
+}
+
+/* Palettes only change atmosphere tokens. Light/Dark/System remains owned by
+   data-theme, so explicit appearance tests and user choice stay predictable. */
+:root[data-palette="frost"] {
+  --lum-accent: #3b83cb;
+  --lum-accent-2: #5aa9e6;
+  --lum-accent-3: #8eaef9;
+  --lum-glow-a: rgba(59, 131, 203, .20);
+  --lum-glow-b: rgba(142, 174, 249, .18);
+  --lum-glow-c: rgba(236, 248, 255, .20);
+  --lum-shadow: 0 18px 46px rgba(32, 69, 112, .17);
+}
+
+:root[data-palette="rose"] {
+  --lum-accent: #f472b6;
+  --lum-accent-2: #c084fc;
+  --lum-accent-3: #a78bfa;
+  --lum-glow-a: rgba(244, 114, 182, .18);
+  --lum-glow-b: rgba(167, 139, 250, .20);
+  --lum-glow-c: rgba(251, 113, 133, .10);
+  --lum-shadow: 0 18px 50px rgba(48, 12, 42, .24);
+}
+
+/* Background-image only: backgroundColor stays exactly the base theme value. */
+body {
+  background-image:
+    radial-gradient(ellipse 58% 72% at 82% 12%, var(--lum-glow-a), transparent 68%),
+    radial-gradient(ellipse 46% 58% at 4% 46%, var(--lum-glow-b), transparent 72%),
+    radial-gradient(ellipse 52% 46% at 62% 100%, var(--lum-glow-c), transparent 74%);
+  background-attachment: fixed;
+}
+
+/* Glass app bars and root header. */
+.appbar,
+body > header {
+  background-color: var(--lum-glass-strong);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  border-bottom: 1px solid var(--lum-line);
+  box-shadow: 0 8px 26px rgba(8, 14, 28, .06);
+}
+
+.view-tabs {
+  border: 1px solid var(--lum-line);
+  background-color: var(--lum-well);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent);
+}
+
+.view-tabs button.active {
+  box-shadow: 0 6px 18px rgba(8, 14, 28, .10), inset 0 1px 0 color-mix(in srgb, #fff 24%, transparent);
+}
+
+/* Shared surfaces: same IDs/classes, richer finish. */
+.panel,
+.group,
+.stat,
+.tile,
+.device-card,
+.scene-card,
+.action-builder,
+.schedule-fields,
+.settings-card {
+  background-color: var(--lum-glass);
+  border-color: var(--lum-line);
+  box-shadow: var(--lum-shadow);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+  backdrop-filter: blur(18px) saturate(145%);
+}
+
+.tile::before,
+.device-card::before {
+  background: linear-gradient(180deg, var(--lum-accent), var(--lum-accent-3));
+}
+
+/* Overview / hero. */
+.hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 156px;
+  padding: 20px 22px;
+  border: 1px solid var(--lum-line);
+  border-radius: var(--lum-radius-lg);
+  background:
+    linear-gradient(116deg,
+      color-mix(in srgb, var(--lum-accent) 26%, transparent),
+      color-mix(in srgb, var(--lum-accent-3) 18%, transparent) 58%,
+      color-mix(in srgb, var(--lum-accent-2) 22%, transparent));
+  box-shadow: var(--lum-shadow), inset 0 1px 0 color-mix(in srgb, #fff 30%, transparent);
+}
+
+.hero::before {
+  content: "";
+  position: absolute;
+  right: -40px;
+  bottom: -120px;
+  width: 260px;
+  height: 260px;
+  border: 1px solid color-mix(in srgb, #fff 26%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 34px color-mix(in srgb, #fff 5%, transparent),
+              0 0 0 72px color-mix(in srgb, #fff 4%, transparent);
+  transform: rotate(-24deg);
+  pointer-events: none;
+}
+
+.hero > * { position: relative; z-index: 1; }
+.hero h1 { letter-spacing: -1.1px; }
+.hero p { color: color-mix(in srgb, var(--fg) 76%, transparent); }
+
+.stat {
+  border-radius: var(--lum-radius-md);
+  padding: 10px 12px;
+}
+
+.stat b {
+  color: var(--lum-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scenes and live readings. */
+.scene-chip,
+.reading-pill,
+.empty-chip {
+  border: 1px solid var(--lum-line);
+  background-color: var(--lum-glass-strong);
+  box-shadow: 0 6px 18px rgba(8, 14, 28, .07);
+}
+
+.scene-chip:active,
+.reading-pill:active { transform: scale(.97); }
+
+.scene-chip.active,
+.scene-chip[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--lum-accent) 55%, transparent);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--lum-accent) 24%, transparent);
+}
+
+.reading-bar {
+  background: color-mix(in srgb, var(--fg) 9%, transparent);
+}
+
+.reading-bar i {
+  background: linear-gradient(90deg, var(--lum-accent), var(--lum-accent-3));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--lum-accent) 45%, transparent);
+}
+
+/* Compact Home tiles: two columns, primary toggle visible, details one tap. */
+.home-groups .room-group > .grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.home-groups .tile.compact {
+  min-height: 118px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-radius: var(--lum-radius-lg);
+}
+
+.home-groups .tile.compact .tile-head { align-items: center; }
+.home-groups .tile.compact .tile-icon {
+  background: color-mix(in srgb, var(--lum-accent) 14%, transparent);
+  color: var(--lum-accent);
+}
+.home-groups .tile.compact .tile-title h2 { letter-spacing: -.25px; }
+.home-groups .tile.compact .tile-body { margin-top: auto; }
+.home-groups .tile.compact .primary-row {
+  border: 1px solid var(--lum-line);
+  border-radius: 14px;
+  background: var(--lum-well);
+}
+.home-groups .tile.compact .status {
+  border: 1px solid var(--lum-line);
+  background: var(--lum-glass-strong);
+}
+.home-groups .tile.compact .compact-open {
+  color: var(--lum-accent);
+  border-color: color-mix(in srgb, var(--lum-accent) 28%, transparent);
+  font-size: 17px;
+  line-height: 1;
+}
+
+/* Tactile switches and protected controls. */
+.switch .track,
+.toggle .track {
+  background: color-mix(in srgb, var(--fg) 18%, transparent);
+}
+
+.switch input:checked + .track,
+.toggle.on {
+  background: linear-gradient(120deg, var(--lum-accent), var(--lum-accent-2));
+}
+
+.tile[data-critical="true"] .switch-control {
+  border-color: color-mix(in srgb, var(--ds-warm) 48%, var(--lum-line));
+  background: color-mix(in srgb, var(--ds-warm) 11%, transparent);
+}
+
+.tile[data-critical="true"] .switch-control.armed {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ds-warm) 24%, transparent);
+}
+
+/* LUMEN atmosphere / theme controls. */
+.palette-switch,
+.theme-switch {
+  border: 1px solid var(--lum-line);
+  background-color: var(--lum-well);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.palette-switch {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.palette-switch button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--ds-fast) var(--lum-ease), color var(--ds-fast) var(--lum-ease);
+}
+
+.palette-switch button::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--lum-accent), var(--lum-accent-2));
+}
+
+.palette-switch button[data-palette-option="rose"]::before {
+  background: linear-gradient(135deg, #fda4af, #c084fc);
+}
+
+.palette-switch button[data-palette-option="frost"]::before {
+  background: linear-gradient(135deg, #e0f2fe, #60a5fa);
+}
+
+.palette-switch button[aria-pressed="true"] {
+  background: var(--lum-glass-strong);
+  color: var(--lum-accent);
+  box-shadow: 0 3px 10px rgba(8, 14, 28, .10);
+}
+
+.footer-appearance {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Device detail sheet. Desktop keeps a side sheet; phone uses a bottom sheet. */
+.device-sheet {
+  width: min(460px, 100vw);
+  background: var(--lum-glass-strong);
+  -webkit-backdrop-filter: blur(26px) saturate(160%);
+  backdrop-filter: blur(26px) saturate(160%);
+}
+
+.device-sheet .drawer-head { align-items: flex-start; }
+.device-sheet .drawer-title { min-width: 0; }
+.device-sheet .drawer-title h2 {
+  font-size: 18px;
+  letter-spacing: -.4px;
+  overflow-wrap: anywhere;
+}
+.device-sheet .drawer-title p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.device-sheet .drawer-body { padding: 14px; }
+
+.device-sheet .detail-card {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.device-sheet .detail-card::before { display: none; }
+.device-sheet .detail-card:hover { transform: none; box-shadow: none; }
+.device-sheet .detail-card [data-open-details] { display: none; }
+.device-sheet .detail-card .primary-row {
+  border: 1px solid var(--lum-line);
+  background: var(--lum-well);
+}
+.device-sheet .detail-card details.more[open] {
+  border: 1px solid var(--lum-line);
+  border-radius: 14px;
+  padding: 10px;
+  background: var(--lum-well);
+}
+
+/* Motion is decorative only; reduced motion below removes all of it. */
+@keyframes lum-float {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(10px, 8px, 0); }
+}
+
+@media (max-width: 760px) {
+  .appbar { flex-wrap: wrap; padding-bottom: 64px; }
+  .appbar .view-tabs {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    z-index: 50;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    height: 70px;
+    padding: 8px 6px;
+    border-radius: 26px;
+    background-color: var(--lum-dock);
+    box-shadow: 0 12px 32px rgba(8, 14, 28, .28), inset 0 1px 0 color-mix(in srgb, #fff 30%, transparent);
+  }
+  .appbar .view-tabs button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+    padding: 4px 2px;
+    font-size: 10px;
+  }
+  .appbar .view-tabs button::before {
+    content: attr(data-glyph);
+    font-size: 18px;
+    line-height: 1;
+    font-weight: 500;
+  }
+  .appbar .view-tabs button.active {
+    color: var(--lum-accent);
+    background: color-mix(in srgb, var(--lum-accent) 14%, transparent);
+  }
+  main { padding-bottom: 132px; }
+  .hero { min-height: 144px; padding: 16px; }
+  .stat-grid { width: 100%; }
+  .section-head { margin-top: 18px; }
+  .footer-appearance { width: 100%; justify-content: space-between; }
+
+  .device-sheet {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    width: auto;
+    max-height: 84dvh;
+    border-left: 0;
+    border-radius: 28px;
+    transform: translateY(105%);
+  }
+  .device-sheet.open { transform: none; }
+  .device-sheet .drawer-head {
+    position: relative;
+    padding-top: 22px;
+  }
+  .device-sheet .drawer-head::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--lum-line);
+    transform: translateX(-50%);
+  }
+  .device-sheet .drawer-body { padding-bottom: 28px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero::before { animation: none !important; }
+  .scene-chip, .reading-pill, .view-tabs button { transition-duration: .01ms !important; }
+}
+
+:root[data-effects="off"] .hero::before { display: none; }
+:root[data-effects="off"] .scene-chip,
+:root[data-effects="off"] .reading-pill,
+:root[data-effects="off"] .view-tabs button { transition: none !important; }

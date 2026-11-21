@@ -1,0 +1,12 @@
+{
+  "domain": "mylocal_devices",
+  "name": "MY Local Devices Tuya",
+  "codeowners": ["@Muhammadusamataj"],
+  "config_flow": true,
+  "documentation": "https://github.com/Muhammadusamataj/MYlocal-devices-tuya/blob/main/docs/custom-integration.md",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/Muhammadusamataj/MYlocal-devices-tuya/issues",
+  "requirements": [],
+  "version": "1.0.1"
+}

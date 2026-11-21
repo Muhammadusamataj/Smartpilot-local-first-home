@@ -1,0 +1,43 @@
+<!-- LOGIN -->
+<section id="login" class="card hidden">
+  <h2>Log in</h2>
+  <label for="usercode">Smart Life user code</label>
+  <input id="usercode" type="text" placeholder="e.g. abcdef123456" autocomplete="off" spellcheck="false">
+  <div class="login-actions"><button id="startBtn" class="primary">Get QR code</button></div>
+
+  <div class="steps-title">Where to find your user code</div>
+  <ol class="steps">
+    <li>Open the <b>Smart Life</b> app on your phone</li>
+    <li>Tap <b>Me</b> in the bottom-right</li>
+    <li>Tap the <b>⚙️ Settings</b> gear in the top-right</li>
+    <li>Tap <b>Account and Security</b></li>
+    <li>Scroll to the bottom and copy your <b>User Code</b>, then paste it above</li>
+  </ol>
+</section>
+
+<!-- QR -->
+<section id="qr" class="card hidden">
+  <h2>Scan to confirm</h2>
+  <div class="qr-wrap"><img id="qrImg" alt="Login QR code"></div>
+  <div class="qr-actions"><button id="saveQrBtn">Save QR image</button></div>
+
+  <div class="steps-title">How to scan the QR code</div>
+  <ol class="steps">
+    <li><b>Dosra phone ho to:</b> usme Smart Life kholein → <b>➕ → Scan</b> → ye QR scan karein.</li>
+    <li><b>Same phone ho to:</b> upar <b>Save QR image</b> dabayein — image Gallery me save ho jayegi. Phir Smart Life → <b>Scan → Album/Gallery</b> se wo image choose karein.</li>
+    <li><b>PC/TV ho to:</b> QR ko screen mirror/cast karke us screen ko Smart Life se scan karein.</li>
+    <li><b>Confirm login</b> dabayein — bas, baaki sab app khud kar lega.</li>
+  </ol>
+  <div class="note">
+    ℹ️ The app will ask you to confirm login for <b>“Home Assistant”</b>. That's expected. This tool signs in through Home Assistant's Tuya app, so please make sure it was <b>you</b> who started this.
+  </div>
+  <p class="hint qr-waiting"><span class="spinner"></span> Waiting for you to confirm…</p>
+  <div class="qr-cancel"><button id="cancelBtn">Cancel</button></div>
+</section>
+
+<!-- LOADING -->
+<section id="loading" class="card hidden">
+  <div class="big-spinner"></div>
+  <p id="loadingMsg" class="loading-message">Loading your devices…</p>
+  <p class="hint">This can take a moment if you have a lot of devices.</p>
+</section>

@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Pilot · Local Devices</title>
+<link rel="icon" href="icon.png" type="image/png">
+<link rel="stylesheet" href="static/css/base.css">
+<link rel="stylesheet" href="static/css/local-control.css">
+<link rel="stylesheet" href="static/css/design-system.css">
+<link rel="stylesheet" href="static/css/lumen.css">
+<link rel="stylesheet" href="static/css/pilot-theme.css">
+</head>
+<body>
+
+<header class="appbar">
+  <div class="brand pilot-brand" aria-label="Smart Pilot Tuya local devices">
+    <span class="logo" aria-hidden="true">⌁</span>
+    <div class="pilot-wordmark">SMART <em>PILOT</em><small>LOCAL-FIRST HOME</small></div>
+  </div>
+  <nav class="view-tabs" role="tablist" aria-label="Views">
+    <button type="button" role="tab" data-view="home" data-glyph="⌂" class="active" aria-selected="true">Home</button>
+    <button type="button" role="tab" data-view="devices" data-glyph="▦" aria-selected="false">Devices</button>
+    <button type="button" role="tab" data-view="scenes" data-glyph="✦" aria-selected="false">Scenes</button>
+    <button type="button" role="tab" data-view="advanced" data-glyph="⚙" aria-selected="false">Advanced</button>
+  </nav>
+  <div class="search" >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input type="search" id="deviceSearch" placeholder="Find device, room or home" aria-label="Find device">
+  </div>
+  <div class="spacer"></div>
+  <button type="button" class="icon-btn primary" id="addBtn" title="Add device" aria-label="Add device">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+  <button type="button" class="icon-btn" id="settingsBtn" title="Advanced settings" aria-label="Advanced settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.56V21h-4v-.1a1.7 1.7 0 0 0-1-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06L4.2 17l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1H3v-4h.1a1.7 1.7 0 0 0 1.56-1 1.7 1.7 0 0 0-.34-1.87L4.2 7l2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.56V3h4v.1a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06L19.8 7l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.56 1H21v4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
+</header>
+
+<main>
+
+  <section class="view-panel" data-view-panel="home">
+    <div class="pilot-eyebrow">SMART HOME · LOCAL CONTROL</div>
+    <div class="pilot-headline">
+      <div><h1>Home Intelligence</h1><p>Smart Life devices · Private LAN access</p></div>
+      <span class="pilot-local-pill">● LOCAL FIRST</span>
+    </div>
+    <div class="hero">
+      <div class="pilot-greeting">
+        <div class="pilot-hero-label">YOUR HOME AT A GLANCE</div>
+        <h2 id="heroTitle">Good evening</h2>
+        <p><span class="dot"></span><span id="summary">Loading…</span></p>
+      </div>
+      <div class="stat-grid" aria-label="Device summary">
+        <div class="stat"><b id="statTotal">0</b><small>Devices</small></div>
+        <div class="stat"><b id="statOnline">0</b><small>Online</small></div>
+        <div class="stat"><b id="statSaved">0</b><small>Saved</small></div>
+        <div class="stat"><b id="statOffline">0</b><small>Offline</small></div>
+      </div>
+    </div>
+
+    <div class="filters" aria-label="Home filters">
+      <select id="homeFilter" aria-label="Filter by home"><option value="">All homes</option></select>
+      <select id="roomFilter" aria-label="Filter by room"><option value="">All rooms</option></select>
+      <select id="categoryFilter" aria-label="Filter by device category"><option value="">All categories</option></select>
+      <label><input type="checkbox" id="favoriteFilter"> Favorites only</label>
+    </div>
+
+    <div class="activity-grid">
+      <div>
+        <div class="section-head"><h2>Quick scenes</h2><p>Tap to run</p></div>
+        <div class="panel quick-scenes" id="quickScenes"><span class="empty-chip">No scenes yet — create one in Scenes.</span></div>
+      </div>
+      <div>
+        <div class="section-head"><h2>Live readings</h2><p>Verified only</p></div>
+        <div class="panel reading-strip" id="readingStrip"><span class="empty-chip">Live readings appear here after a verified local read.</span></div>
+      </div>
+    </div>
+
+    <section id="favoriteSection" hidden>
+      <div class="section-head"><h2>Favorites</h2><p>Your one-tap devices</p></div>
+      <div id="favoriteGrid" class="home-groups"></div>
+    </section>
+
+    <div class="section-head"><h2>All devices</h2><p>Grouped by room · full controls one tap away</p></div>
+    <div id="homeGrid" class="home-groups" aria-busy="true">
+      <div class="ds-skeleton" aria-hidden="true"><span class="ds-skeleton-line"></span><span class="ds-skeleton-line short"></span></div>
+    </div>
+  </section>
+
+  <section class="view-panel" data-view-panel="devices" hidden>
+    <div class="section-head"><h2>Devices</h2><p>Search, select and control</p></div>
+    <div id="devices" class="grid" aria-busy="true">
+      <div class="ds-skeleton" aria-hidden="true"><span class="ds-skeleton-line"></span><span class="ds-skeleton-line short"></span></div>
+    </div>
+    <div class="empty-mini" id="deviceEmpty" hidden><p>No devices match these filters.</p></div>
+  </section>
+
+  <section class="view-panel" data-view-panel="scenes" hidden>
+    <div class="section-head"><h2>Scenes</h2><p>Group actions and optional server schedules</p></div>
+    <div id="sceneList"></div>
+    <div class="section-head"><h2>Scene editor</h2><p>Only real DPs from saved devices</p></div>
+    <div class="panel" id="sceneEditor"></div>
+  </section>
+
+  <section class="view-panel" data-view-panel="advanced" hidden>
+    <div class="section-head"><h2>Advanced</h2><p>Technical details stay out of the daily-use views</p></div>
+    <div class="panel">
+      <p class="note">LAN keys stay encrypted in the device cache. This page never sends them back to the browser. Live status here means a device answered on your local network — a saved IP alone is never shown as online.</p>
+      <p class="note" style="margin-top:10px">Scenes and schedules run on the server. Closing this WebView or phone does not stop a server-side schedule, but schedules need an always-on PC, Home Assistant add-on, or trusted hub.</p>
+      <button type="button" class="btn" data-open-drawer="network" style="margin-top:12px">Open network &amp; scan settings →</button>
+    </div>
+  </section>
+
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Advanced settings">
+  <div class="drawer-head">
+    <h2>Advanced settings</h2>
+    <button type="button" class="icon-btn" id="closeDrawer" aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body">
+
+    <section class="group" id="addGroup">
+      <h3>Device add karein</h3>
+      <div class="note" style="margin-bottom:10px">Local key aur IP se device directly LAN par chalega. Cloud request nahi hoga.</div>
+      <form id="addForm">
+        <div class="field"><label for="devName">Device name</label><input id="devName" required placeholder="e.g. Living Room Plug" maxlength="60"></div>
+        <div class="field"><label for="devId">Device ID</label><input id="devId" required placeholder="Tuya device id" maxlength="64"></div>
+        <div class="field"><label for="devKey">Local key (16–32 characters)</label><input id="devKey" required placeholder="0123456789abcdef" maxlength="32"></div>
+        <div class="field-row">
+          <div class="field"><label for="devIp">IP address</label><input id="devIp" required placeholder="192.168.1.50"></div>
+          <div class="field"><label for="devVersion">Version</label><select id="devVersion"><option>3.5</option><option>3.4</option><option>3.3</option><option>3.2</option><option>3.1</option></select></div>
+        </div>
+        <div class="field"><label for="devDp">ON/OFF DP (usually 1)</label><input id="devDp" value="1" inputmode="numeric"></div>
+        <button class="btn primary" type="submit" style="width:100%">Save device</button>
+      </form>
+    </section>
+
+    <section class="group">
+      <h3>Homes &amp; rooms</h3>
+      <p class="note" style="margin-bottom:10px">Names are saved locally only. They never become device credentials.</p>
+      <div id="organizeList"></div>
+      <button type="button" class="btn" id="saveOrganize" style="width:100%;margin-top:8px">Save home &amp; room names</button>
+    </section>
+
+    <section class="group">
+      <h3>Network &amp; scan</h3>
+      <p class="network-line" id="networkLine">Detected network: searching…</p>
+      <button type="button" class="btn" id="scanBtn" style="width:100%">Auto scan network</button>
+      <span id="scanStatus" style="font-size:12px;color:var(--muted)"></span>
+      <details style="margin-top:10px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--muted)">Manually set subnet</summary>
+        <div class="scan-box">
+          <input type="text" id="scanTargets" value="" placeholder="192.168.1.0/24" aria-label="LAN subnet to scan">
+          <button type="button" class="btn" id="scanCustomBtn">Scan</button>
+        </div>
+      </details>
+    </section>
+
+    <section class="group">
+      <h3>Device IPs</h3>
+      <p class="note" style="margin-bottom:10px">Har device ke <b>Edit</b> se name, IP, protocol version aur (zarurat ho to) local key badal sakte hain. Saved key screen par kabhi nahi dikhti.</p>
+      <div id="ipList"><p class="note">Koi device nahi mila.</p></div>
+    </section>
+
+    <section class="group">
+      <h3>Appearance</h3>
+      <div class="switch-line"><span>Theme</span>
+        <div class="theme-switch" role="group" aria-label="Theme">
+          <button type="button" data-theme-option="system" aria-pressed="true">System</button>
+          <button type="button" data-theme-option="light" aria-pressed="false">Light</button>
+          <button type="button" data-theme-option="dark" aria-pressed="false">Dark</button>
+        </div>
+      </div>
+      <div class="switch-line"><span>Palette</span>
+        <div class="palette-switch" role="group" aria-label="Palette">
+          <button type="button" data-palette-option="midnight" aria-pressed="true">Midnight</button>
+          <button type="button" data-palette-option="frost" aria-pressed="false">Frost</button>
+          <button type="button" data-palette-option="rose" aria-pressed="false">Rose</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="group">
+      <h3>Behaviour</h3>
+      <div class="switch-line"><span>Auto refresh (silent)</span><label class="switch"><input type="checkbox" id="autoRefresh" checked><span class="track"><span class="thumb"></span></span></label></div>
+      <button type="button" class="btn" id="refreshAll" style="width:100%">Refresh all now</button>
+      <p class="note" style="margin-top:12px">
+        IP aur protocol ek baar save ho gaye to app unhi se chalata hai. Network badalne par khud hi thoda reconnect karta hai — baar baar scan karne ki zarurat nahi.
+      </p>
+    </section>
+
+    <section class="group">
+      <h3>Remote access</h3>
+      
+      <p class="note">Direct Tailscale binding default me band hai. Remote access ke liye Home Assistant add-on + Tailscale/WireGuard use karein. Desktop par chahin to <code>--tailscale</code> flag se direct binding on kar sakte hain.</p>
+      
+    </section>
+
+    <section class="group">
+      <h3>Setup (alag screen)</h3>
+      <p class="note" style="margin-bottom:10px">QR login, Smart Life device list aur advanced scan ab yahan alag hain. Roz ke liye yahi Devices screen khulti hai.</p>
+      <a class="btn" href="./" style="width:100%;display:block;text-align:center">Setup / Smart Life login →</a>
+    </section>
+
+  </div>
+</aside>
+
+<aside class="drawer device-sheet" id="deviceSheet" aria-label="Device details" aria-hidden="true">
+  <div class="drawer-head">
+    <div class="drawer-title">
+      <h2 id="deviceSheetTitle">Device</h2>
+      <p id="deviceSheetSubtitle">Live controls and settings</p>
+    </div>
+    <button type="button" class="icon-btn" id="closeDeviceSheet" aria-label="Close device details">✕</button>
+  </div>
+  <div class="drawer-body" id="deviceSheetBody"></div>
+</aside>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="static/js/shared/theme.js"></script>
+<script type="module" src="static/js/shared/palette.js"></script>
+<script type="module" src="static/js/features/local-control/main.js"></script>
+</body>
+</html>

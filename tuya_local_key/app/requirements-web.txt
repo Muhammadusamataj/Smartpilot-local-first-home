@@ -1,0 +1,9 @@
+# Self-contained web/app dependencies.
+# Do NOT reference requirements.txt here: the Home Assistant add-on build
+# context only contains the files in tuya_local_key/app/.
+tuya-device-sharing-sdk>=0.2.15
+qrcode[pil]>=7.4
+cryptography>=41.0
+tinytuya>=1.21.1
+flask>=3.0
+waitress>=3.0

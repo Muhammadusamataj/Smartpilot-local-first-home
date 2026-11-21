@@ -1,0 +1,40 @@
+name: MY Local Devices Tuya
+version: "4.7"
+slug: tuya_local_key
+description: Smart Pilot unified Tuya plus experimental Haier LAN climate controls.
+url: https://github.com/Muhammadusamataj/MYlocal-devices-tuya
+arch:
+  - aarch64
+  - amd64
+# No `image`: Home Assistant builds this add-on locally from the committed
+# `tuya_local_key/app/` source. Run `python tools/sync_addon.py` after edits.
+init: false
+startup: application
+boot: manual
+ingress: true
+ingress_port: 8000
+ingress_entry: /local
+panel_icon: mdi:key-wireless
+panel_title: MY Local Devices
+panel_admin: true
+ports:
+  8000/tcp: null
+ports_description:
+  8000/tcp: Direct web UI port, optional when not using ingress.
+environment:
+  SESSION_FILE: /data/session.json
+  QR_SCHEME: smartlife
+  PORT: "8000"
+options:
+  QR_SCHEME: smartlife
+  DEVICE_CACHE: "on"
+  CHECK_FOR_UPDATES: true
+  AUTO_SETUP: "on"
+schema:
+  QR_SCHEME: "list(smartlife|tuyaSmart)"
+  DEVICE_CACHE: "list(on|off)"
+  CHECK_FOR_UPDATES: bool
+  AUTO_SETUP: "list(on|off)"
+  AUTH_USERNAME: "str?"
+  AUTH_PASSWORD: "password?"
+  LAN_SUBNET: "str?"

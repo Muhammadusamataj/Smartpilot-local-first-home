@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "MY Local Devices Tuya",
+        "description": "Connect to the MY Local Devices Tuya add-on. The add-on URL is detected from Supervisor automatically. Leave it blank unless you run the web app elsewhere.",
+        "data": {
+          "addon_url": "Add-on URL (optional)",
+          "username": "Username (optional)",
+          "password": "Password (optional)"
+        }
+      }
+    },
+    "error": {
+      "addon_not_found": "Add-on not found. Install and start MY Local Devices Tuya first.",
+      "cannot_connect": "Cannot reach the add-on. Check that it is running and the URL/credentials are correct.",
+      "already_configured": "This integration is already configured."
+    },
+    "abort": {
+      "already_configured": "This integration is already configured."
+    }
+  }
+}

@@ -1,0 +1,39 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Run all tests
+        run: pytest -q
+
+  source-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify add-on and offline APK sources are in sync
+        run: |
+          python tools/sync_addon.py
+          python -c "import build_offline_apk as b; b._sync_sources()"
+          git diff --exit-code -- tuya_local_key/app android_offline/app/src/main/python

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Pilot · Tuya Local Key</title>
+<link rel="icon" href="icon.png" type="image/png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="stylesheet" href="static/css/base.css">
+<link rel="stylesheet" href="static/css/header.css">
+<link rel="stylesheet" href="static/css/footer.css">
+<link rel="stylesheet" href="static/css/auth.css">
+<link rel="stylesheet" href="static/css/devices.css">
+<link rel="stylesheet" href="static/css/panel.css">
+<link rel="stylesheet" href="static/css/setup.css">
+<link rel="stylesheet" href="static/css/network.css">
+<link rel="stylesheet" href="static/css/troubleshoot.css">
+<link rel="stylesheet" href="static/css/values.css">
+<link rel="stylesheet" href="static/css/design-system.css">
+<link rel="stylesheet" href="static/css/lumen.css">
+<link rel="stylesheet" href="static/css/utilities.css">
+<link rel="stylesheet" href="static/css/pilot-theme.css">
+</head>
+<body>
+{% include "partials/header.html" %}
+<main>
+  <div class="pilot-welcome">
+    <div class="pilot-eyebrow">SMART HOME · SECURE SETUP</div>
+    <h2>Connect your Smart Life devices</h2>
+    <p>Get local keys securely, then control compatible devices over your home Wi-Fi.</p>
+    <a class="pilot-welcome-link" href="local">Open local dashboard <span aria-hidden="true">›</span></a>
+  </div>
+  <div id="banner" class="banner hidden"></div>
+  {% include "partials/auth.html" %}
+  {% include "partials/devices.html" %}
+</main>
+{% include "partials/footer.html" %}
+{% if check_for_updates %}{% include "partials/updates.html" %}{% endif %}
+{% include "partials/logout.html" %}
+{% include "partials/panel.html" %}
+<script id="app-config" type="application/json">{{ {"gatewayCategories": gateway_categories, "checkForUpdates": check_for_updates} | tojson }}</script>
+<script type="module" src="static/js/shared/theme.js"></script>
+<script type="module" src="static/js/shared/palette.js"></script>
+<script type="module" src="static/js/app.js"></script>
+</body>
+</html>

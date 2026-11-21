@@ -1,0 +1,27 @@
+<header>
+  <div class="header-identity">
+    <a id="homeLink" class="app-brand" href="./" aria-label="Tuya Local Key home">
+      <span class="pilot-root-logo" aria-hidden="true">⌁</span>
+      <span class="pilot-root-wordmark"><strong>SMART <em>PILOT</em></strong><small>Tuya Local Keys</small></span>
+    </a>
+    <a class="local-nav" href="local" title="Devices: control directly over LAN, without the cloud">Devices</a>
+    {% if check_for_updates %}<div class="header-meta">
+      <a id="updateBadge" class="update-badge hidden" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 12V4m-3 3 3-3 3 3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="update-label-full">Update available</span><span class="update-label-short">Update</span>
+      </a>
+    </div>{% endif %}
+  </div>
+  <div class="header-actions hidden" id="headerActions">
+    <button id="csvBtn">Export CSV</button>
+    <button id="scanBtn" aria-expanded="false" aria-controls="scanBox">Scan network</button>
+    <button id="refreshBtn">Refresh</button>
+    <button id="logoutBtn">Log out</button>
+    <div class="more-wrap" id="moreWrap">
+      <button id="moreBtn" class="icon-btn more-btn" type="button" aria-haspopup="menu"
+              aria-expanded="false" aria-controls="moreMenu" aria-label="More actions" title="More actions"></button>
+      <div id="moreMenu" class="more-menu hidden" role="menu" aria-label="More actions">
+      </div>
+    </div>
+  </div>
+</header>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tuya Local Key</string>
+    <string name="server_url_hint">http://192.168.1.10:8000/</string>
+    <string name="open">Open</string>
+</resources>

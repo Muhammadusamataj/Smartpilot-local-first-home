@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tuya Local Key (Offline 2)</string>
+    <string name="starting">Starting local server…</string>
+    <string name="ready">Ready</string>
+    <string name="ready_direct">Ready · Direct</string>
+
+    <string name="remote_settings">Remote access</string>
+    <string name="remote_close">Close</string>
+    <string name="remote_access_toggle">Direct access over Tailscale</string>
+    <string name="remote_user_hint">Username</string>
+    <string name="remote_pass_hint">Password</string>
+    <string name="remote_show">Show</string>
+    <string name="remote_hide">Hide</string>
+    <string name="remote_copy">Copy details</string>
+    <string name="remote_copied">Copied</string>
+    <string name="remote_apply">Apply</string>
+
+    <string name="phone_settings">Phone</string>
+    <string name="phone_close">Close</string>
+    <string name="phone_title">Phone setup</string>
+    <string name="phone_wifi">Wi-Fi: %1$s</string>
+    <string name="phone_wifi_none">not connected</string>
+    <string name="phone_server_running">Local server: running</string>
+    <string name="phone_server_stopped">Local server: stopped</string>
+    <string name="phone_server_error">Local server: failed — tap Phone for details</string>
+    <string name="phone_notifications_allowed">Notifications: allowed</string>
+    <string name="phone_notifications_blocked">Notifications: blocked</string>
+    <string name="phone_enable">Enable</string>
+    <string name="phone_battery_exempt">Battery: unrestricted</string>
+    <string name="phone_battery_optimized">Battery: optimized</string>
+    <string name="phone_exempt">No limits</string>
+    <string name="phone_open_settings">Settings</string>
+    <string name="phone_settings_unavailable">Phone settings are unavailable.</string>
+    <string name="phone_vivo_hint">Vivo: allow Autostart, High performance/Keep running, background data and this notification. Everything runs on the phone — Home Assistant is not required.</string>
+
+    <string name="notification_channel">Local control</string>
+    <string name="notification_channel_desc">Keeps the offline device server available on this phone.</string>
+    <string name="notification_title">Smart Pilot local control</string>
+    <string name="notification_starting">Starting local server…</string>
+    <string name="notification_ready">Local control running</string>
+    <string name="notification_direct">Direct mode running</string>
+    <string name="notification_error">Local server needs attention</string>
+</resources>

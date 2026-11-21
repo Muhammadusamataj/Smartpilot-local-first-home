@@ -1,0 +1,137 @@
+/* Smart Pilot: Haier Pilot visual language adapted to existing Tuya web + offline Android.
+   Presentation-only: existing element IDs, forms, JS handlers and API contracts are retained. */
+:root:not([data-theme="light"]) {
+  color-scheme:dark;
+  --bg:#081023; --card:#15233b; --fg:#eff5ff; --muted:#96aac5;
+  --border:rgba(174,206,255,.16); --accent:#66e9b3; --accent-fg:#09252d;
+  --ok:#66e9b3; --off:#ff8d98; --warn:#f1c77a; --code-bg:#0d1b32;
+  --ds-bg:#081023;--ds-bg-2:#10203b;--ds-fg:#eff5ff;--ds-muted:#96aac5;
+  --ds-surface:rgba(29,43,72,.70);--ds-surface-strong:rgba(23,35,60,.92);
+  --ds-surface-solid:#15233b;--ds-well:rgba(9,22,43,.78);
+  --ds-line:rgba(174,206,255,.16);--ds-line-strong:rgba(174,206,255,.25);
+  --ds-accent:#66e9b3;--ds-accent-2:#81b5ff;--ds-ok:#66e9b3;
+  --ds-shadow-1:0 11px 32px rgba(0,0,0,.22);--ds-shadow-2:0 23px 60px rgba(0,0,0,.35);
+  --lum-accent:#66e9b3;--lum-accent-2:#81b5ff;--lum-glow-a:rgba(35,145,156,.2);
+  --lum-glow-b:rgba(36,89,165,.19);--lum-glow-c:rgba(38,88,141,.14);
+  --lum-glass:rgba(27,43,71,.70);--lum-glass-strong:rgba(23,36,61,.93);
+  --lum-well:rgba(7,20,40,.78);--lum-line:rgba(174,206,255,.16);
+  --lum-shadow:0 24px 52px rgba(0,0,0,.30);
+}
+:root[data-theme="light"] {
+  --bg:#edf5fc;--card:#f9fcff;--fg:#10233e;--muted:#62748b;
+  --border:rgba(27,70,116,.16);--accent:#008b87;--accent-fg:#fff;
+  --ds-accent:#008b87;--ds-accent-2:#4383ca;--lum-accent:#008b87;
+  --lum-glass:rgba(255,255,255,.78);--lum-glass-strong:rgba(255,255,255,.93);
+  --lum-well:rgba(221,235,251,.70);--lum-line:rgba(27,70,116,.14);
+}
+:root:not([data-theme="light"])[data-palette="frost"]{--accent:#8dd6ff;--ds-accent:#8dd6ff;--lum-accent:#8dd6ff}
+:root:not([data-theme="light"])[data-palette="rose"]{--accent:#f7a7d1;--ds-accent:#f7a7d1;--lum-accent:#f7a7d1}
+body { background-color:var(--bg) !important; background-image:
+  radial-gradient(ellipse 84vw 67vw at -15% -13%,rgba(23,89,131,.40),transparent 79%),
+  radial-gradient(ellipse 84vw 80vw at 112% 22%,rgba(23,65,109,.44),transparent 76%),
+  linear-gradient(180deg,#081023 0%,#0b1630 80%,#081023 100%) !important;
+  background-attachment:fixed !important;color:var(--fg);-webkit-font-smoothing:antialiased;
+}
+:root[data-theme="light"] body{background-image:radial-gradient(ellipse at 4% 0,rgba(117,197,236,.25),transparent 63%),linear-gradient(#edf5fc,#e5f0fd)!important}
+button,input,select,textarea{font-family:inherit}
+button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+/* Glass typography and controls */
+.appbar,body>header{background:rgba(9,20,42,.79)!important;backdrop-filter:blur(20px) saturate(160%)!important;-webkit-backdrop-filter:blur(20px) saturate(160%)!important;border-bottom:1px solid var(--border)!important;box-shadow:0 10px 30px rgba(0,0,0,.13)!important}
+:root[data-theme="light"] .appbar,:root[data-theme="light"] body>header{background:rgba(246,251,255,.85)!important}
+.appbar{min-height:72px;gap:16px;padding:11px clamp(16px,3vw,30px)!important}
+.pilot-brand{gap:12px;flex-shrink:0}
+.appbar .pilot-brand .logo,.pilot-root-logo{width:46px;height:46px;border-radius:15px;background:linear-gradient(142deg,#4ee3be,#568ffc);box-shadow:0 9px 25px rgba(79,194,223,.22);display:grid!important;place-items:center;color:#082538;font-weight:900;font-size:28px;flex-shrink:0}
+.pilot-wordmark{display:flex;flex-direction:column;font-size:18px;line-height:1.04;letter-spacing:.1px;font-weight:800;white-space:nowrap}
+.pilot-wordmark em,.pilot-root-wordmark em{color:#78efc8;font-style:normal}
+.pilot-wordmark small,.pilot-root-wordmark small{display:block;font-size:9px;font-weight:650;letter-spacing:1.5px;margin-top:6px;color:var(--muted)}
+.appbar .icon-btn{width:44px;height:44px;border-radius:14px;background:rgba(255,255,255,.07);color:#c6e4ff;border:1px solid var(--border)}
+.appbar .icon-btn.primary{background:linear-gradient(135deg,#62dbc1,#83b7ff);color:#0a2a40;border-color:transparent}
+.view-tabs{background:rgba(7,20,42,.78)!important;border:1px solid var(--border)!important;border-radius:15px!important;padding:5px!important}
+.view-tabs button{color:var(--muted)!important;border-radius:11px!important;font-weight:730!important;padding:11px 14px!important}
+.view-tabs button.active{background:linear-gradient(130deg,#7ce2e1,#80b9ff)!important;color:#082537!important;box-shadow:0 5px 19px rgba(80,160,225,.25)!important}
+.search input,.filters select,.filters input,.home-filter,.sheet select,.sheet input{background:rgba(7,22,45,.62)!important;color:var(--fg)!important;border:1px solid var(--border)!important;border-radius:12px!important}
+:root[data-theme="light"] .search input,:root[data-theme="light"] .filters select,:root[data-theme="light"] .filters input,:root[data-theme="light"] .home-filter{background:rgba(255,255,255,.7)!important}
+main{max-width:1200px;padding-left:clamp(16px,3vw,28px)!important;padding-right:clamp(16px,3vw,28px)!important}
+.pilot-eyebrow{font-size:10px;color:#6ccfd1;font-weight:850;letter-spacing:2.25px;margin:17px 0 8px}
+.pilot-headline{display:flex;align-items:center;justify-content:space-between;gap:15px;margin:2px 0 18px}
+.pilot-headline h1{font-size:clamp(26px,4vw,33px);letter-spacing:-1.15px;font-weight:820;margin:3px 0 2px}
+.pilot-headline p{color:var(--muted);font-size:12.5px;margin:0}
+.pilot-local-pill{flex-shrink:0;padding:9px 12px;border:1px solid rgba(70,220,167,.30);background:rgba(58,191,139,.12);color:var(--ok);font-weight:790;font-size:10px;letter-spacing:.5px;border-radius:999px}
+.hero{padding:22px!important;background:linear-gradient(135deg,rgba(31,54,89,.83),rgba(15,29,54,.94))!important;border:1px solid var(--border)!important;border-radius:25px!important;box-shadow:0 20px 50px rgba(0,0,0,.25)!important;align-items:stretch!important;margin:14px 0 26px!important;gap:22px!important}
+.hero::before{border:1px solid rgba(129,181,255,.16)!important}
+.pilot-greeting{min-width:220px;flex:1}
+.pilot-hero-label{font-size:10px;letter-spacing:1.55px;font-weight:800;color:#abc4e0;margin-bottom:12px}
+.hero .pilot-greeting h2{font-size:clamp(26px,4vw,35px);line-height:1.1;letter-spacing:-1.2px;margin:0;font-weight:800}
+.hero .pilot-greeting p{font-size:13px;margin:14px 0 0;line-height:1.45;color:#a6bfd8}
+.hero .stat-grid{flex:1.4;grid-template-columns:repeat(4,minmax(72px,1fr));gap:9px;align-self:center}
+.hero .stat{background:rgba(5,19,40,.52)!important;border-radius:15px!important;padding:14px 8px!important;border:1px solid rgba(174,206,255,.1)!important;box-shadow:none!important}
+.hero .stat b{font-size:23px!important;font-weight:830;color:#dff9ff!important;margin-bottom:5px}
+.hero .stat small{font-size:10px;letter-spacing:.35px;text-transform:uppercase;color:#a1b6d0}
+.section-head{align-items:baseline!important;margin-top:27px!important}
+.section-head h2{font-weight:790!important;font-size:17px!important;letter-spacing:-.35px}
+.section-head p{font-size:11px!important}
+.panel,.tile,.device-card,.scene-card,.group,.card,.settings-card,.table-scroll,.filter-popover{background:linear-gradient(145deg,rgba(34,53,83,.76),rgba(17,31,54,.86))!important;border:1px solid var(--border)!important;border-radius:22px!important;box-shadow:0 20px 46px rgba(0,0,0,.19)!important;backdrop-filter:blur(18px)}
+:root[data-theme="light"] .panel,:root[data-theme="light"] .tile,:root[data-theme="light"] .device-card,:root[data-theme="light"] .scene-card,:root[data-theme="light"] .group,:root[data-theme="light"] .card{background:rgba(255,255,255,.85)!important}
+.tile::before,.device-card::before{width:3px!important;background:linear-gradient(#79e3e2,#78aeff)!important}
+.tile.offline::before,.device-card.offline::before{background:var(--off)!important}
+.tile-title h2{font-size:15px;letter-spacing:-.2px}
+.tile-icon{background:rgba(103,182,246,.11)!important;border:1px solid rgba(122,191,248,.12);border-radius:15px!important;color:#8fc9ff!important}
+.primary-row,.read-only-row,.cap-item,.chip,.device-card .primary-row{background:rgba(6,22,45,.55)!important;border:1px solid rgba(174,206,255,.08)!important;border-radius:13px!important}
+:root[data-theme="light"] .primary-row,:root[data-theme="light"] .read-only-row,:root[data-theme="light"] .cap-item,:root[data-theme="light"] .chip{background:rgba(229,242,253,.8)!important}
+.switch input:checked+.track{background:linear-gradient(130deg,#55e7ae,#68d8dc)!important}
+.switch .track{background:#475974}
+.scene-chip,.reading-pill,.empty-chip,.action-pill,.chip{background:rgba(9,25,49,.75);border:1px solid var(--border)}
+.btn.primary,button.primary:not(.icon-btn),.action{background:linear-gradient(125deg,#66e9b3,#80baff)!important;border-color:transparent!important;color:#082733!important;box-shadow:0 7px 21px rgba(73,192,176,.13)}
+.btn,.local-nav,.more-menu,.more-menu .menu-item,.view-button{border-radius:12px!important}
+.local-nav{background:rgba(70,195,169,.12);border:1px solid rgba(97,227,194,.25);color:#91f1cc}
+.pilot-root-logo{width:44px;height:44px}
+.pilot-root-wordmark{display:flex;flex-direction:column;line-height:1.05;min-width:0}
+.pilot-root-wordmark strong{font-size:18px;letter-spacing:-.35px;white-space:nowrap}
+.pilot-root-wordmark small{letter-spacing:.4px;font-size:10px;margin-top:5px}
+body>header{padding:12px clamp(16px,3vw,26px)!important}
+header .header-actions button{background:rgba(255,255,255,.07);border:1px solid var(--border);color:var(--fg)}
+.pilot-welcome{position:relative;overflow:hidden;border-radius:26px;padding:27px clamp(18px,4vw,37px);margin:4px 0 26px;background:linear-gradient(125deg,rgba(33,73,102,.76),rgba(18,35,64,.95));border:1px solid var(--border);box-shadow:0 24px 50px rgba(0,0,0,.22)}
+.pilot-welcome:after{content:'⌁';position:absolute;right:26px;top:1px;color:rgba(143,224,223,.1);font-size:170px;font-weight:800;line-height:1;pointer-events:none}
+.pilot-welcome>*{position:relative;z-index:1}.pilot-welcome h2{font-size:clamp(25px,4vw,35px);letter-spacing:-1px;margin:4px 0 9px}
+.pilot-welcome p{font-size:13px;color:#bdcce1;max-width:600px;margin:0 0 19px}
+.pilot-welcome-link{display:inline-block;padding:11px 15px;background:linear-gradient(130deg,#69e5be,#82b9f8);color:#0a2d41;border-radius:12px;text-decoration:none;font-weight:800;font-size:12px}
+.pilot-welcome-link span{font-size:17px;margin-left:8px}
+/* Search, tables, login, device dialogs remain functional and inherit the new palette. */
+input[type="text"],input[type="search"],input[type="number"],select,textarea{accent-color:var(--accent)}
+.app-footer{color:var(--muted)!important;background:rgba(8,17,33,.60)!important;border-top:1px solid var(--border)!important}
+.view-tabs button[data-glyph]::before{display:none}
+@media(min-width:900px){.appbar .search{max-width:250px}}
+@media(max-width:850px){.hero .stat-grid{grid-template-columns:repeat(2,minmax(90px,1fr))}}
+@media(max-width:680px){
+ .appbar{padding:12px 16px!important;min-height:75px!important;flex-wrap:nowrap!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+ .appbar .pilot-brand .logo{display:grid!important;width:44px;height:44px}
+ .appbar .pilot-wordmark{display:flex!important;font-size:17px}
+ .appbar .search{display:none!important}
+ .pilot-headline{align-items:flex-end}
+ .pilot-headline h1{font-size:29px}
+ .pilot-local-pill{font-size:9px;padding:7px 9px}
+ .hero{padding:19px!important}
+ .pilot-greeting{min-width:unset;flex-basis:100%}
+ .hero .stat-grid{width:100%;grid-template-columns:repeat(4,minmax(0,1fr))}
+ .hero .stat{padding:12px 4px!important}
+ .hero .stat b{font-size:20px!important}
+ .hero .stat small{font-size:9px!important}
+ /* Use the existing functional view tab buttons as a genuine bottom navigation. */
+ .appbar .view-tabs{position:fixed!important;top:auto!important;left:0!important;right:0!important;bottom:0!important;z-index:50!important;display:flex!important;order:initial!important;margin:0!important;width:100%!important;max-width:none!important;gap:4px!important;padding:9px 10px max(10px,env(safe-area-inset-bottom))!important;border-radius:0!important;border:0!important;border-top:1px solid var(--border)!important;box-shadow:0 -12px 26px rgba(0,0,0,.27)!important;background:rgba(10,23,47,.96)!important;backdrop-filter:blur(20px)}
+ .appbar .view-tabs button{display:flex!important;flex:1!important;flex-direction:column!important;align-items:center!important;gap:3px!important;padding:6px 2px!important;font-size:10px!important;border-radius:11px!important}
+ .appbar .view-tabs button[data-glyph]::before{display:block!important;content:attr(data-glyph);font-size:20px;line-height:1.2;font-weight:500}
+ main{padding:14px 16px 110px!important}
+ body>header .pilot-root-wordmark strong{display:block!important;font-size:17px}
+ body>header .app-brand h1{display:block}
+ .app-footer{padding-bottom:75px!important}
+}
+@media(max-width:400px){.pilot-local-pill{white-space:nowrap}.pilot-headline h1{font-size:25px}.hero .stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.pilot-wordmark small{font-size:8px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* v0.6 Vivo/Android touch performance: keep the glass gradient while avoiding
+   large-area backdrop-blur repaint during mobile scrolling and sheet motion. */
+@media(max-width:720px){
+  .panel,.tile,.device-card,.scene-card,.group,.card,.settings-card,.table-scroll,.filter-popover,
+  .appbar .view-tabs{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+  .tile:hover{transform:none}
+}
