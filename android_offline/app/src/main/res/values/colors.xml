@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="status_bg">#E8EEF5</color>
-    <color name="status_fg">#1F2937</color>
+    <color name="status_bg">#26374E</color>
+    <color name="status_fg">#EFF6FF</color>
     <color name="panel_bg">#F5F7FA</color>
 </resources>
