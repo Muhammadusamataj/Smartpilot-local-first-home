@@ -354,3 +354,23 @@ main { max-width:100%; overflow-x:hidden }
 .pilot-home .pilot-home-device-card .pilot-mini-signal.stale {
   color:#e9b45d;background:rgba(233,180,93,.14)
 }
+
+/* Additive Safety & Automation cards (Settings panel only). */
+.pilot-extras-grid {
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px
+}
+.pilot-extra-card { display:flex;flex-direction:column;gap:8px }
+.pilot-extra-card h3 { margin:0;font-size:14px;font-weight:700 }
+.pilot-extra-body { font-size:12px;line-height:1.45;color:var(--muted,#9db0c8);overflow-wrap:anywhere }
+.pilot-extra-body b { color:var(--text,#eaf2ff) }
+.pilot-extra-row {
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:6px 0;border-bottom:1px solid rgba(157,176,200,.12)
+}
+.pilot-extra-row:last-child { border-bottom:0 }
+.pilot-rule-presets,.pilot-inline-actions { display:flex;flex-wrap:wrap;gap:8px }
+.pilot-extra-card .btn { padding:7px 11px;font-size:11px }
+.pilot-extra-card .btn.danger { color:#ff9b9b }
+.pilot-extra-badge { font-weight:700 }
+.pilot-extra-badge.ok { color:#4ad9a5 }
+.pilot-extra-badge.warn { color:#e9b45d }

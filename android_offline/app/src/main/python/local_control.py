@@ -19,11 +19,12 @@ import time
 import uuid
 from pathlib import Path
 
-from flask import Blueprint, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, Response, jsonify, redirect, render_template, request, url_for
 
 import device_cache
 import device_values
 import lan_scan
+import pilot_extras
 import tuya_devices
 import tuya_versions
 
@@ -1762,3 +1763,158 @@ def local_delete_device():
 
 # The timer is started once at import; pytest/TESTING never starts a thread.
 _start_scheduler()
+
+
+# --- Additive Smart Pilot services ---------------------------------------
+# Nothing above this line was changed. These callbacks expose existing,
+# already-verified read/write primitives to the new module.
+
+def _extras_read_state(device_id, dp):
+    with _busy_guard(device_id) as acquired:
+        if not acquired:
+            return None
+        try:
+            context = _context(device_id)
+            outcome = device_values.read(context)
+            if outcome.get("status") != "ok":
+                return None
+            return outcome.get("dps", {}).get(str(dp))
+        except Exception:
+            return None
+
+
+def _extras_set_value(device_id, dp, value):
+    with _busy_guard(device_id, wait_seconds=2.5) as acquired:
+        if not acquired:
+            return {"ok": False, "error": "busy"}
+        try:
+            context = _context(device_id)
+            device = _by_id(_devices()).get(device_id)
+            point = ({item["dp"]: item for item in _points(device)}.get(str(dp))
+                     if device else None)
+            if not point:
+                return {"ok": False, "error": "unknown_dp"}
+            coerced, error = _coerce(value, point)
+            if error:
+                return {"ok": False, "error": error}
+            outcome = _send(context, str(dp), coerced)
+            if outcome.get("ok"):
+                _remember_success(device_id, context)
+            return outcome
+        except Exception as error:
+            return {"ok": False, "error": type(error).__name__}
+
+
+def _extras_list_devices():
+    return [dict(device, points=_points(device)) for device in _devices()]
+
+
+def _extras_ac_status():
+    try:
+        import haier_control
+        return haier_control.pilot_extras_status()
+    except Exception:
+        return []
+
+
+def _extras_claim_scene():
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    claimed = []
+    for scene in _due_scenes(_load_scenes()):
+        if _set_scene_last_run(scene["id"], today):
+            claimed.append(scene)
+    return claimed
+
+
+pilot_extras.configure(
+    read_state=_extras_read_state,
+    set_value=_extras_set_value,
+    list_devices=_extras_list_devices,
+    read_scenes=_load_scenes,
+    claim_scene=_extras_claim_scene,
+    execute_scene=lambda scene: _execute_scene(scene, update_last_run=False),
+    ac_status=_extras_ac_status,
+)
+
+
+@bp.get("/api/local/scheduler")
+def local_scheduler_status():
+    return jsonify(pilot_extras.scheduler_info())
+
+
+@bp.post("/api/local/scheduler/tick")
+def local_scheduler_tick():
+    return jsonify(pilot_extras.tick_scheduler())
+
+
+@bp.get("/api/local/rules")
+def local_rules_list():
+    return jsonify({"rules": pilot_extras.list_rules()})
+
+
+@bp.post("/api/local/rules")
+def local_rules_save():
+    rule, error = pilot_extras.save_rule(request.get_json(silent=True))
+    if error:
+        return jsonify({"error": error}), 400
+    return jsonify({"ok": True, "rule": rule})
+
+
+@bp.delete("/api/local/rules")
+def local_rules_delete():
+    if not pilot_extras.delete_rule(str(request.args.get("id") or "").strip()):
+        return jsonify({"error": "unknown_rule"}), 404
+    return jsonify({"ok": True})
+
+
+@bp.get("/api/local/events")
+def local_events():
+    return jsonify(pilot_extras.events_since(request.args.get("since", 0)))
+
+
+@bp.get("/api/local/usage")
+def local_usage_summary():
+    return jsonify(pilot_extras.usage_summary())
+
+
+@bp.get("/api/local/backup")
+def local_backup():
+    try:
+        payload = pilot_extras.backup_bytes()
+    except Exception:
+        return jsonify({"error": "backup_failed"}), 500
+    return Response(payload, mimetype="application/zip", headers={
+        "Content-Disposition": 'attachment; filename="smart-pilot-backup.zip"',
+        "Cache-Control": "no-store",
+    })
+
+
+@bp.post("/api/local/restore")
+def local_restore():
+    upload = request.files.get("file")
+    if upload is None:
+        return jsonify({"error": "missing_file"}), 400
+    try:
+        restored = pilot_extras.restore_bytes(upload.read(25 * 1024 * 1024 + 1))
+    except Exception as error:
+        return jsonify({"error": str(error) or "restore_failed"}), 400
+    return jsonify({"ok": True, "restored": restored})
+
+
+def _extras_loop():
+    while True:
+        time.sleep(60)
+        if _testing_mode():
+            continue
+        try:
+            pilot_extras.evaluate_rules()
+        except Exception:
+            pass
+        try:
+            pilot_extras.record_usage()
+        except Exception:
+            pass
+
+
+if not _testing_mode():
+    threading.Thread(target=_extras_loop, name="smartpilot-extras", daemon=True).start()

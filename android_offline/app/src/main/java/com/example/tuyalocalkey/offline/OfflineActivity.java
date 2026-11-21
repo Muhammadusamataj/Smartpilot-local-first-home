@@ -2,7 +2,9 @@ package com.example.tuyalocalkey.offline;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlarmManager;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ContentValues;
@@ -16,6 +18,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.text.method.HideReturnsTransformationMethod;
@@ -36,6 +39,8 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import org.json.JSONObject;
 
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -186,6 +191,7 @@ public class OfflineActivity extends Activity {
         });
 
         web.addJavascriptInterface(new QrSaver(), "TuyaNative");
+        web.addJavascriptInterface(new PilotBridge(), "PilotNative");
         web.setDownloadListener(new DownloadListener() {
             @Override
             public void onDownloadStart(String url, String userAgent, String disposition,
@@ -199,6 +205,7 @@ public class OfflineActivity extends Activity {
         });
 
         ensureNotificationPermission();
+        scheduleAlarm();
         startLocalService();
         waitForServer();
     }
@@ -470,12 +477,72 @@ public class OfflineActivity extends Activity {
         }, "tuya-probe").start();
     }
 
+    /** 15-minute alarm keeps scene schedules ticking after the app is backgrounded. */
+    private void scheduleAlarm() {
+        try {
+            Intent intent = new Intent(this, ScheduleReceiver.class);
+            intent.setAction(ScheduleReceiver.TICK);
+            PendingIntent pending = PendingIntent.getBroadcast(this, 1002, intent,
+                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            AlarmManager alarm = (AlarmManager) getSystemService(ALARM_SERVICE);
+            if (alarm != null) {
+                long interval = 15 * 60 * 1000L;
+                alarm.setInexactRepeating(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        SystemClock.elapsedRealtime() + interval, interval, pending);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Could not schedule scene alarm", e);
+        }
+    }
+
     private static boolean portOpen() {
         try (Socket socket = new Socket()) {
             socket.connect(new InetSocketAddress("127.0.0.1", 8000), 250);
             return true;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /** Native update controls exposed only to the trusted local page. */
+    public class PilotBridge {
+        private boolean trusted() {
+            return isTrusted(Uri.parse(web.getUrl() == null ? "" : web.getUrl()));
+        }
+
+        private void callback(java.util.function.Consumer<UpdateManager.Callback> action) {
+            UpdateManager.Callback wrapped = result -> {
+                String json = result == null ? "{}" : result.toString();
+                handler.post(() -> web.evaluateJavascript(
+                        "window.pilotUpdateResult && window.pilotUpdateResult(" +
+                        JSONObject.quote(json) + ")", null));
+            };
+            action.accept(wrapped);
+        }
+
+        @JavascriptInterface
+        public String updateState() {
+            return trusted() ? UpdateManager.state(OfflineActivity.this) : "{\"platform\":\"android\"}";
+        }
+
+        @JavascriptInterface
+        public void checkUpdate() {
+            if (trusted()) callback(done -> UpdateManager.check(OfflineActivity.this, done));
+        }
+
+        @JavascriptInterface
+        public void installUpdate() {
+            if (trusted()) callback(done -> UpdateManager.install(OfflineActivity.this, done));
+        }
+
+        @JavascriptInterface
+        public void rollback() {
+            if (trusted()) callback(done -> UpdateManager.rollback(OfflineActivity.this, done));
+        }
+
+        @JavascriptInterface
+        public void openInstallPermission() {
+            if (trusted()) UpdateManager.openInstallPermission(OfflineActivity.this);
         }
     }
 

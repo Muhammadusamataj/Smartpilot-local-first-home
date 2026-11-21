@@ -27,8 +27,8 @@ DIST = ROOT / "dist"
 
 PY_MODULES = [
     "android_entry.py", "app.py", "device_cache.py", "device_preferences.py",
-    "device_values.py", "lan_scan.py", "local_control.py", "haier_control.py",
-    "haier_hrdp_adapter.py", "support_report.py",
+    "device_values.py", "lan_scan.py", "local_control.py", "pilot_extras.py",
+    "haier_control.py", "haier_hrdp_adapter.py", "support_report.py",
     "tuya_devices.py", "tuya_versions.py", "updates.py", "pyproject.toml",
 ]
 

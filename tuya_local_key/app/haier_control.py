@@ -491,6 +491,17 @@ def _write(slot: str, command: str, value, *, automatic=False) -> dict:
             _auto_last[slot] = now
         if result.get("confirmed"):
             _cache[slot] = {"verified": True, "read_at": time.time(), "data": result.get("status", {})}
+        if automatic and result.get("confirmed"):
+            # Additive: surface automatic AC changes to the new event log so the
+            # phone can show a notification. Never affects the write itself.
+            try:
+                import pilot_extras
+                pilot_extras.emit(
+                    "ac_auto", "Auto-Pilot changed " + SLOTS[slot],
+                    "%s -> %s (verified by read-back)" % (command, str(value)),
+                )
+            except Exception:
+                pass
         return result
 
 
@@ -744,6 +755,28 @@ def haier_command():
         return jsonify({"error": str(exc)}), 400
     except (HaierError, OSError) as exc:
         return jsonify({"error": str(exc)}), 503
+
+
+def pilot_extras_status() -> list[dict]:
+    """Read-only snapshot for per-device last-verified ON/OFF timestamps."""
+    try:
+        current = _load()
+    except Exception:
+        return []
+    rows = []
+    for slot in SLOTS:
+        summary = _summary(slot, current.get(slot, {}))
+        status = summary.get("status") or {}
+        rows.append({
+            "id": slot,
+            "name": summary.get("name"),
+            "verified": summary.get("verified"),
+            "last_read": summary.get("last_read"),
+            "power_on": status.get("power_on") if summary.get("verified") else None,
+            "target_c": status.get("target_c") if summary.get("verified") else None,
+            "mode": summary.get("mode"),
+        })
+    return rows
 
 
 # Restore a previously opted-in Auto mode on server restart, if its encrypted

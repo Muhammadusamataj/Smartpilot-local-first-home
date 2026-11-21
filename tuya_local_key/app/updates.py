@@ -11,8 +11,8 @@ import threading
 import time
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
-REPOSITORY = "https://github.com/Muhammadusamataj/MYlocal-devices-tuya"
-RELEASE_API = "https://api.github.com/repos/Muhammadusamataj/MYlocal-devices-tuya/releases/latest"
+REPOSITORY = "https://github.com/Muhammadusamataj/Smartpilot-local-first-home"
+RELEASE_API = "https://api.github.com/repos/Muhammadusamataj/Smartpilot-local-first-home/releases/latest"
 SUPERVISOR_API = "http://supervisor/addons/self/info"
 CHECK_INTERVAL = 24 * 3600
 ERROR_RETRY = CHECK_INTERVAL

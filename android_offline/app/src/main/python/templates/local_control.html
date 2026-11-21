@@ -75,6 +75,52 @@
       <p class="note" style="margin-top:10px">Scenes and schedules run on the server. Closing this WebView or phone does not stop a server-side schedule, but schedules need an always-on PC, Home Assistant add-on, or trusted hub.</p>
       <button type="button" class="btn" data-open-drawer="network" style="margin-top:12px">Open network &amp; scan settings →</button>
     </div>
+
+    <div class="section-head" style="margin-top:20px"><h2>Safety &amp; Automation</h2><p>On-device rules, schedules, usage and updates</p></div>
+    <div class="pilot-extras-grid">
+      <div class="panel pilot-extra-card">
+        <h3>Schedules</h3>
+        <div id="schedulerInfo" class="pilot-extra-body">Checking…</div>
+        <button type="button" class="btn" id="schedulerTick" style="margin-top:8px">Run due scenes now</button>
+      </div>
+      <div class="panel pilot-extra-card">
+        <h3>Safety rules</h3>
+        <div id="rulesInfo" class="pilot-extra-body">Loading…</div>
+        <div class="pilot-rule-presets">
+          <button type="button" class="btn" data-rule-preset="motor">Motor: OFF after 30 min ON</button>
+          <button type="button" class="btn" data-rule-preset="geyser">Geyser: OFF after 60 min ON</button>
+        </div>
+      </div>
+      <div class="panel pilot-extra-card">
+        <h3>Usage &amp; verification</h3>
+        <div id="usageInfo" class="pilot-extra-body">Loading…</div>
+      </div>
+      <div class="panel pilot-extra-card">
+        <h3>Activity</h3>
+        <div id="eventsInfo" class="pilot-extra-body">Loading…</div>
+      </div>
+      <div class="panel pilot-extra-card">
+        <h3>Backup &amp; restore</h3>
+        <div class="pilot-extra-body">
+          <p class="note">Keys remain encrypted inside the downloaded ZIP. Keep the file offline and restore only on this app.</p>
+          <div class="pilot-inline-actions">
+            <button type="button" class="btn" id="backupDownload">Download backup</button>
+            <label class="btn" for="restoreFile">Restore…</label>
+            <input type="file" id="restoreFile" accept=".zip,application/zip" hidden>
+          </div>
+        </div>
+      </div>
+      <div class="panel pilot-extra-card" id="updateCard">
+        <h3>App updates &amp; rollback</h3>
+        <div id="updateInfo" class="pilot-extra-body">Checking GitHub Releases…</div>
+        <div class="pilot-inline-actions">
+          <button type="button" class="btn" id="updateCheck">Check for update</button>
+          <button type="button" class="btn" id="updateInstall" hidden>Install update</button>
+          <button type="button" class="btn" id="updateRollback" hidden>Roll back</button>
+          <button type="button" class="btn" id="updatePermission" hidden>Allow install</button>
+        </div>
+      </div>
+    </div>
   </section>
   <section class="view-panel" data-view-panel="autopilot" hidden>
     <div class="pilot-eyebrow">HAIER · DIRECT LOCAL NETWORK</div>
@@ -215,5 +261,6 @@
 <script type="module" src="static/js/shared/palette.js"></script>
 <script type="module" src="static/js/features/local-control/main.js"></script>
 <script type="module" src="static/js/features/local-control/haier.js"></script>
+<script type="module" src="static/js/features/local-control/extras.js"></script>
 </body>
 </html>

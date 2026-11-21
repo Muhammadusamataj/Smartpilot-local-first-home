@@ -17,11 +17,22 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.util.Base64;
 import android.util.Log;
 
 import com.chaquo.python.android.AndroidPlatform;
 import com.chaquo.python.Python;
 import com.chaquo.python.PyObject;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Owns the embedded Python server for the whole app lifetime.
@@ -34,10 +45,14 @@ import com.chaquo.python.PyObject;
 public class LocalControlService extends Service {
     private static final String TAG = "TuyaLocalService";
     private static final String CHANNEL_ID = "smart-pilot-local-control";
+    private static final String EVENT_CHANNEL_ID = "smart-pilot-events";
     private static final int NOTIFICATION_ID = 1001;
+    private static final int EVENT_NOTIFICATION_BASE = 2000;
     private static final int PORT = 8000;
+    private static final int[] EVENT_IDS = {2000, 2001, 2002, 2003, 2004};
 
     private static volatile boolean running = false;
+    private static volatile int lastEventId = -1;
     private static volatile String lastError = "";
     private static volatile String lastHint = "";
     private static volatile String appliedConfigKey = "";
@@ -47,6 +62,15 @@ public class LocalControlService extends Service {
     private SharedPreferences prefs;
     private ConnectivityManager.NetworkCallback networkCallback;
     private WifiManager.WifiLock wifiLock;
+    private final Set<Integer> notifiedEvents = new HashSet<>();
+
+    private final Runnable eventPoll = new Runnable() {
+        @Override
+        public void run() {
+            new Thread(LocalControlService.this::fetchEvents, "smartpilot-events").start();
+            main.postDelayed(this, 5000);
+        }
+    };
 
     public static boolean isRunning() {
         return running;
@@ -74,6 +98,7 @@ public class LocalControlService extends Service {
         acquireWifiLock();
         registerNetworkCallback();
         running = true;
+        main.postDelayed(eventPoll, 5000);
     }
 
     @Override
@@ -98,6 +123,7 @@ public class LocalControlService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        main.removeCallbacks(eventPoll);
         releaseWifiLock();
         unregisterNetworkCallback();
         stopPython();
@@ -253,6 +279,93 @@ public class LocalControlService extends Service {
         channel.setDescription(getString(R.string.notification_channel_desc));
         channel.setSound(null, null);
         notificationManager.createNotificationChannel(channel);
+        NotificationChannel alerts = new NotificationChannel(EVENT_CHANNEL_ID,
+                "Smart Pilot activity", NotificationManager.IMPORTANCE_DEFAULT);
+        alerts.setDescription("Scene, safety-rule and AC automation alerts");
+        notificationManager.createNotificationChannel(alerts);
+    }
+
+    /** Poll the local event log; no device data leaves the phone. */
+    private void fetchEvents() {
+        HttpURLConnection connection = null;
+        try {
+            int since = Math.max(0, lastEventId);
+            connection = (HttpURLConnection) new URL(
+                    "http://127.0.0.1:8000/api/local/events?since=" + since).openConnection();
+            connection.setConnectTimeout(1200);
+            connection.setReadTimeout(2000);
+            if (prefs.getBoolean(OfflineActivity.KEY_ENABLED, false)) {
+                String user = prefs.getString(OfflineActivity.KEY_USER, "tuya");
+                String password = prefs.getString(OfflineActivity.KEY_PASSWORD, "");
+                String token = Base64.encodeToString(
+                        (user + ":" + password).getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
+                connection.setRequestProperty("Authorization", "Basic " + token);
+            }
+            if (connection.getResponseCode() != 200) return;
+            JSONObject payload;
+            try (InputStream in = connection.getInputStream()) {
+                java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+                byte[] chunk = new byte[4096];
+                int count;
+                while ((count = in.read(chunk)) != -1 && buffer.size() < 256 * 1024) {
+                    buffer.write(chunk, 0, count);
+                }
+                payload = new JSONObject(new String(buffer.toByteArray(), StandardCharsets.UTF_8));
+            }
+            final JSONObject result = payload;
+            main.post(() -> showEventNotifications(result));
+        } catch (Exception ignored) {
+            // The server may still be starting; the next poll will catch up.
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private void showEventNotifications(JSONObject payload) {
+        int latest = payload.optInt("latest", 0);
+        if (lastEventId < 0) {  // baseline on start: never replay old events
+            lastEventId = latest;
+            return;
+        }
+        JSONArray events = payload.optJSONArray("events");
+        if (events != null) {
+            for (int i = 0; i < events.length(); i++) {
+                JSONObject event = events.optJSONObject(i);
+                if (event == null) continue;
+                int id = event.optInt("id", 0);
+                String kind = event.optString("kind", "");
+                if (id <= lastEventId || notifiedEvents.contains(id)) continue;
+                if (!kind.equals("scene") && !kind.equals("scene_error") &&
+                        !kind.equals("rule") && !kind.equals("rule_error") &&
+                        !kind.equals("ac_auto") && !kind.equals("backup")) continue;
+                showEventNotification(id,
+                        event.optString("title", "Smart Pilot"),
+                        event.optString("body", ""));
+                notifiedEvents.add(id);
+                if (notifiedEvents.size() > 50) notifiedEvents.clear();
+            }
+        }
+        lastEventId = Math.max(lastEventId, latest);
+    }
+
+    private void showEventNotification(int id, String title, String body) {
+        if (notificationManager == null || !notificationManager.areNotificationsEnabled()) return;
+        Intent open = new Intent(this, OfflineActivity.class);
+        open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent pending = PendingIntent.getActivity(this, 0, open,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? new Notification.Builder(this, EVENT_CHANNEL_ID)
+                : new Notification.Builder(this);
+        builder.setSmallIcon(R.drawable.ic_stat_local)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setContentIntent(pending)
+                .setCategory(Notification.CATEGORY_MESSAGE)
+                .setAutoCancel(true);
+        int index = Math.min(EVENT_IDS.length - 1,
+                Math.max(0, (id - EVENT_NOTIFICATION_BASE) % EVENT_IDS.length));
+        notificationManager.notify(EVENT_IDS[index], builder.build());
     }
 
     private String notificationText(Config config) {
