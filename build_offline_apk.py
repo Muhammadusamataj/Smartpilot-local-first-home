@@ -27,7 +27,8 @@ DIST = ROOT / "dist"
 
 PY_MODULES = [
     "android_entry.py", "app.py", "device_cache.py", "device_preferences.py",
-    "device_values.py", "lan_scan.py", "local_control.py", "haier_control.py", "support_report.py",
+    "device_values.py", "lan_scan.py", "local_control.py", "haier_control.py",
+    "haier_hrdp_adapter.py", "support_report.py",
     "tuya_devices.py", "tuya_versions.py", "updates.py", "pyproject.toml",
 ]
 
@@ -74,6 +75,10 @@ def _sync_sources() -> None:
         if not source.is_dir():
             raise SystemExit(f"Missing source folder: {source}")
         shutil.copytree(source, PY_DIR / name, dirs_exist_ok=True)
+    vendor = ROOT / "haismart_hrdp"
+    if not vendor.is_dir():
+        raise SystemExit(f"Missing vendored source: {vendor}")
+    shutil.copytree(vendor, PY_DIR / "haismart_hrdp", dirs_exist_ok=True)
     icon = ROOT / "tuya_local_key" / "icon.png"
     if icon.exists():
         target = PY_DIR / "tuya_local_key"

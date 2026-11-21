@@ -161,3 +161,42 @@ def test_failed_refresh_revokes_cached_verification(monkeypatch):
     assert h._cache["pro"]["verified"] is False
     assert h._cache["pro"]["data"] is None
     h._cache.pop("pro", None)
+
+
+def test_config_saves_discovery_identity_without_returning_the_key(tmp_path, monkeypatch):
+    monkeypatch.setattr(h, "LOCAL_FILE", tmp_path / "haier.enc")
+    monkeypatch.setattr(h, "KEY_FILE", tmp_path / "haier.key")
+    monkeypatch.setattr(h, "jsonify", lambda value: value)
+    monkeypatch.setattr(h, "_body", lambda: {
+        "slot": "pro", "ip": "192.168.1.50", "device_id": DID, "local_key": KEY,
+        "key_version": 4, "uplus_id": "AABBCCDD", "product_code": "AAC1UKZ01",
+    })
+
+    result = h.haier_config()
+
+    assert result["ok"] is True
+    saved = h._load()["pro"]
+    assert saved["uplus_id"] == "AABBCCDD"
+    assert saved["product_code"] == "AAC1UKZ01"
+    assert "local_key" not in result["device"]
+
+
+def test_bad_discovery_identity_is_rejected():
+    with pytest.raises(ValueError):
+        h._validate_model_id("bad;id", "uPlus ID")
+
+
+def test_discover_route_returns_identity_fields_only(monkeypatch):
+    monkeypatch.setattr(h, "jsonify", lambda value: value)
+    monkeypatch.setattr(h, "request", types.SimpleNamespace(args={}))
+    monkeypatch.setattr(h.hrdp, "discover", lambda **kwargs: [{
+        "ip": "192.168.1.50", "device_id": DID, "uplus_id": "AABBCCDD",
+        "cloud_state_name": "disconnected", "cloud_connected": False,
+    }])
+
+    result = h.haier_discover()
+
+    assert result["ok"] is True
+    assert result["devices"][0]["device_id"] == DID
+    assert "local_key" not in result
+    assert "local_key" not in result["devices"][0]

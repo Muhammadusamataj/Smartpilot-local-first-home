@@ -37,3 +37,11 @@ The desktop EXE and the offline Android entry point now **refuse a non-loopback 
 On Home Assistant, ingress already authenticates access, so these credentials are **ignored for ingress requests**. Set them only if you enable the direct port access and want a separate login there.
 
 The device list is also stored on disk, encrypted. See [Device List Cache](caching-and-changes.md#device-list-cache) for what that does and does not protect.
+
+## Haier local devices
+
+Open **Auto-Pilot** on the Home screen and use the ⚙ button on either Haier card. **Scan LAN** uses Haier's key-free UDISCOVERY protocol on UDP port 7083 and fills the IP and Wi-Fi module ID; you still paste the device's 32-hex local key and version. The key is encrypted with the app's own Fernet key and is never returned by a GET endpoint or shown in logs.
+
+The app vendors the HA-free `haismart_hrdp` local protocol library. It recognises many more Haier report layouts than the original two-slot decoder, including compact and extended families, and reports an explicit localKey-rotation error when the appliance announces a newer key version. Unknown layouts are shown as **READ ONLY**; writes still require the previously confirmed 125/127-byte classic layout and the existing allowlist. No Haier cloud login, Home Assistant, or account token is used.
+
+The extended decoder needs Python 3.11+ (Docker and the offline Android build already use 3.12). On Python 3.10 the app automatically falls back to the original classic codec. Broadcast discovery must be able to bind UDP 7083; if your network or another service blocks that port, enter the LAN address manually. Only one local session per appliance is supported, so do not run another Haier integration against the same unit at the same time.

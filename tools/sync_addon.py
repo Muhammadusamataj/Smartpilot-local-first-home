@@ -27,6 +27,7 @@ PY_FILES = [
     "lan_scan.py",
     "local_control.py",
     "haier_control.py",
+    "haier_hrdp_adapter.py",
     "support_report.py",
     "tuya_devices.py",
     "updates.py",
@@ -53,6 +54,11 @@ def main() -> None:
 
     for folder in ("templates", "static"):
         shutil.copytree(ROOT / folder, TARGET / folder)
+
+    vendor = ROOT / "haismart_hrdp"
+    if not vendor.is_dir():
+        raise SystemExit(f"Missing vendored source: {vendor}")
+    shutil.copytree(vendor, TARGET / "haismart_hrdp")
 
     icon = ROOT / "tuya_local_key" / "icon.png"
     target_icon = TARGET / "tuya_local_key" / "icon.png"

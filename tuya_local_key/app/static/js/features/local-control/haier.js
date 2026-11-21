@@ -126,13 +126,43 @@ function setupCard(slot, root) {
   panel.innerHTML = `<form data-haier-form="${esc(slot)}" autocomplete="off">
      <h4>Direct LAN connection — ${esc(known?.name || 'Haier')}</h4>
      <p>Your key is encrypted on the app server / phone and is not returned to this page. Never share screenshots with the key visible.</p>
+     <button class="haier-action" type="button" data-haier-scan>Scan LAN for Haier devices</button>
+     <div class="haier-discover" aria-live="polite"></div>
      <label>LAN IPv4 address<input name="ip" required placeholder="192.168.1.50" value="${esc(known?.ip||'')}" inputmode="decimal"></label>
-     <label>Wi-Fi module Device ID<input name="device_id" required maxlength="32" placeholder="12-32 character module ID"></label>
+     <label>Wi-Fi module Device ID<input name="device_id" required maxlength="32" placeholder="12-32 character module ID" value="${esc(known?.device_id||'')}"></label>
      <label>Haier Local Key (32 hex)<input name="local_key" required type="password" maxlength="32" placeholder="Paste from Haier local key sensor"></label>
-     <label>Local Key version<input name="key_version" type="number" min="0" max="65535" value="0"></label>
-     <p class="haier-warning">Save resets this AC to Manual mode. Don't run HA's HaiSmart integration polling the same AC during direct-LAN tests.</p>
+     <label>Local Key version<input name="key_version" type="number" min="0" max="65535" value="${esc(known?.key_version||0)}"></label>
+     <input type="hidden" name="uplus_id" value="${esc(known?.uplus_id||'')}">
+     <input type="hidden" name="product_code" value="${esc(known?.product_code||'')}">
+     <p class="haier-warning">Scan fills the IP and module ID. You still need the 32-hex local key. Save resets this AC to Manual mode. Don't run HA's HaiSmart integration polling the same AC during direct-LAN tests.</p>
      <button class="haier-action important" type="submit">Save encrypted connection</button>
    </form>`;
+}
+
+async function scanLan(cardRoot) {
+  const out = cardRoot.querySelector('.haier-config .haier-discover');
+  if (!out) return;
+  out.innerHTML = '<p class="haier-warning">Scanning local network…</p>';
+  try {
+    const response = await api('/api/haier/discover', {timeout: 12000});
+    const found = response.devices || [];
+    out.innerHTML = found.length
+      ? `<p class="haier-warning">Found ${found.length} Haier device(s). Tap Use, then paste the local key.</p>`
+        + found.map(device => `<div class="haier-discover-row"><span>${esc(device.ip)} · ${esc(device.device_id)}${device.cloud_state_name ? ' · cloud '+esc(device.cloud_state_name) : ''}</span><button class="haier-action" type="button" data-haier-use data-ip="${esc(device.ip)}" data-device-id="${esc(device.device_id)}" data-uplus-id="${esc(device.uplus_id||'')}">Use</button></div>`).join('')
+      : `<p class="haier-warning">No devices answered. Broadcast discovery needs UDP 7083; enter the LAN details manually if your network blocks it.</p>`;
+  } catch (err) {
+    out.innerHTML = `<p class="haier-warning">Scan failed: ${esc(err.message)}. You can still enter the details manually.</p>`;
+  }
+}
+
+function useDiscovered(button) {
+  const form = button.closest('form');
+  if (!form) return;
+  const set = (name, value) => { const field = form.querySelector(`[name="${name}"]`); if (field) field.value = value; };
+  set('ip', button.dataset.ip || '');
+  set('device_id', button.dataset.deviceId || '');
+  set('uplus_id', button.dataset.uplusId || '');
+  toast('Haier device details filled', 'ok');
 }
 async function handler(event) {
   const button = event.target.closest('button');
@@ -149,6 +179,8 @@ async function handler(event) {
   if (!button || !cardRoot) return;
   const slot = cardRoot.dataset.haierSlot;
   if (button.hasAttribute('data-haier-setup')) { setupCard(slot,cardRoot); return; }
+  if (button.hasAttribute('data-haier-scan')) { await scanLan(cardRoot); return; }
+  if (button.hasAttribute('data-haier-use')) { useDiscovered(button); return; }
   if (button.hasAttribute('data-haier-read')) { await send(slot,'read'); return; }
   if (button.hasAttribute('data-haier-mode')) {
     const mode = button.dataset.haierMode;
@@ -169,7 +201,7 @@ async function formHandler(event) {
   event.preventDefault();
   const slot=form.dataset.haierForm;
   const fields=new FormData(form);
-  const payload={ip:String(fields.get('ip')||'').trim(),device_id:String(fields.get('device_id')||'').trim(),local_key:String(fields.get('local_key')||'').trim(),key_version:Number(fields.get('key_version')||0)};
+  const payload={ip:String(fields.get('ip')||'').trim(),device_id:String(fields.get('device_id')||'').trim(),local_key:String(fields.get('local_key')||'').trim(),key_version:Number(fields.get('key_version')||0),uplus_id:String(fields.get('uplus_id')||'').trim(),product_code:String(fields.get('product_code')||'').trim()};
   try { await send(slot,'config',payload); }
   finally { form.querySelector('[name=local_key]').value=''; }
 }

@@ -27,6 +27,8 @@ from urllib.parse import urlparse
 
 from flask import Blueprint, jsonify, request
 
+import haier_hrdp_adapter as hrdp
+
 try:
     from cryptography.fernet import Fernet
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -84,7 +86,14 @@ def _valid_ip(host: str) -> str:
     return str(addr)
 
 
-def _validate_device(host, device_id, local_key, key_version=0):
+def _validate_model_id(value, label, max_length=64):
+    text = str(value or "").strip()
+    if text and not re.fullmatch(rf"[a-zA-Z0-9_.-]{{1,{max_length}}}", text):
+        raise ValueError(f"{label} contains unexpected characters")
+    return text
+
+
+def _validate_device(host, device_id, local_key, key_version=0, *, uplus_id="", product_code=""):
     host = _valid_ip(str(host))
     device_id, local_key = str(device_id).strip(), str(local_key).strip()
     if not re.fullmatch(r"[a-zA-Z0-9]{12,32}", device_id):
@@ -94,7 +103,9 @@ def _validate_device(host, device_id, local_key, key_version=0):
     if isinstance(key_version, bool) or not str(key_version).isdigit() or not 0 <= int(key_version) <= 65535:
         raise ValueError("Key version must be 0–65535")
     return {"ip": host, "device_id": device_id, "local_key": local_key,
-            "key_version": int(key_version)}
+            "key_version": int(key_version),
+            "uplus_id": _validate_model_id(uplus_id, "uPlus ID"),
+            "product_code": _validate_model_id(product_code, "Product code", 32)}
 
 
 def _atomic_private(path: Path, data: bytes):
@@ -157,7 +168,11 @@ def _summary(slot: str, entry: dict) -> dict:
     # new response verifies the device, even when we still know its name/IP.
     fresh = bool(c.get("verified") and time.time() - c.get("read_at", 0) < 120)
     result = {"id": slot, "name": SLOTS[slot], "configured": bool(entry.get("ip") and entry.get("local_key")),
-              "ip": entry.get("ip"), "mode": entry.get("mode", "manual"),
+              "ip": entry.get("ip"), "uplus_id": entry.get("uplus_id") or None,
+              "product_code": entry.get("product_code") or None,
+              "key_version": int(entry.get("key_version") or 0),
+              "extended_decoder": hrdp.available(),
+              "mode": entry.get("mode", "manual"),
               "pause_until": float(entry.get("pause_until") or 0),
               "auto_power_on": False,  # intentionally unsupported in this safe version
               "verified": fresh,
@@ -372,6 +387,18 @@ def _set_field(raw: bytes, name: str, value: int) -> bytes:
 
 
 def _read_device(entry: dict) -> dict:
+    # Prefer the vendored HA-free decoder: it recognises far more report layouts
+    # and explains key rotation. It is READ-ONLY; writes still go through the
+    # confirmed-classic allowlist below. Fall back if the library is unavailable
+    # on this interpreter or this unit only speaks the older classic layout.
+    if hrdp.available():
+        try:
+            return hrdp.read_status(entry)
+        except hrdp.LocalKeyRotation as exc:
+            raise HaierError(str(exc)) from exc
+        except (hrdp.AdapterDecodeError, OSError):
+            pass
+
     # ONE operation per session, sending read-only extended-status query.
     # It normally returns a current-status frame as well; fallback is get-all.
     with _Session(entry) as session:
@@ -577,9 +604,27 @@ def haier_devices():
         if any(row.get("mode") == "auto" for row in current.values()):
             _ensure_auto_loop()
         return jsonify({"devices": [_summary(s, current[s]) for s in SLOTS],
-                        "notes": "Direct LAN only; unknown layouts read-only; no HA dependency"})
+                        "notes": "Direct LAN only; unknown layouts read-only; no cloud or HA dependency"})
     except HaierError as exc:
         return jsonify({"error": str(exc)}), 503
+
+
+@bp.get("/api/haier/discover")
+def haier_discover():
+    """Key-free UDISCOVERY scan; returns identities only, never stored keys."""
+    try:
+        args = getattr(request, "args", {}) or {}
+        host = str(args.get("host") or "").strip() or None
+        devices = hrdp.discover(host=host)
+        return jsonify({"ok": True, "devices": devices, "available": True,
+                        "notes": "Key-free LAN discovery; local key is still required to control a unit"})
+    except hrdp.AdapterUnavailable as exc:
+        return jsonify({"ok": False, "devices": [], "available": False,
+                        "error": str(exc)}), 503
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except OSError as exc:
+        return jsonify({"error": "Haier LAN discovery did not answer"}), 503
 
 
 @bp.post("/api/haier/config")
@@ -588,7 +633,8 @@ def haier_config():
         data = _body()
         slot = _slot(data.get("slot"))
         new = _validate_device(data.get("ip"), data.get("device_id"),
-                               data.get("local_key"), data.get("key_version", 0))
+                               data.get("local_key"), data.get("key_version", 0),
+                               uplus_id=data.get("uplus_id"), product_code=data.get("product_code"))
         with LOCK:
             config = _load()
             config[slot] = {**new, "mode": "manual", "pause_until": 0, "auto_power_on": False}
