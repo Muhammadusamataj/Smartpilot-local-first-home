@@ -904,8 +904,8 @@ function renderDetailSheet() {
   card.classList.add("detail-card");
   card.querySelector("[data-open-details]")?.remove();
   card.dataset.keepOpen = "1";
-  const more = card.querySelector("details.more");
-  if (more) more.open = true;
+  // Advanced/raw Tuya DPs stay collapsed until deliberately opened.
+  // The everyday sheet should show understandable controls first.
   body.replaceChildren(card);
   const title = $("deviceSheetTitle");
   const subtitle = $("deviceSheetSubtitle");
