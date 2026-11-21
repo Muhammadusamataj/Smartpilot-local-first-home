@@ -4,8 +4,10 @@ import { api, esc, toast } from "./api.js";
 import { homeTile, sortHomeItems, showOnHome } from "./home-layout.js";
 
 const slots = ["pro", "ff"];
+const POLL_MS = 60000;
 let data = [];
 let busy = new Set();
+const polling = new Set();
 const $ = id => document.getElementById(id);
 
 function value(data, key, suffix="") {
@@ -104,6 +106,36 @@ async function getDevices() {
     toast('Haier backend unavailable: '+err.message, 'warn');
   }
 }
+
+// Quiet background LAN read. The strict /read endpoint is still used by the
+// Refresh button; /poll keeps the last good state if the AC is briefly busy.
+async function pollSlot(slot) {
+  if (polling.has(slot) || busy.has(slot) || document.hidden) return;
+  polling.add(slot);
+  try {
+    const response = await api('/api/haier/poll', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({slot}), timeout: 18000
+    });
+    if (response.ok && response.device) {
+      data = data.map(device => device.id === slot ? {...device, ...response.device} : device);
+      draw();
+    }
+  } catch (err) {
+    // Silent by design: a transient LAN conflict must not disable controls or
+    // spam the user. The next poll retries; /devices still enforces freshness.
+  } finally {
+    polling.delete(slot);
+  }
+}
+async function pollAll() {
+  if (document.hidden || document.querySelector('.haier-config:not([hidden]) form')) return;
+  // ACs accept one local session at a time, so poll sequentially.
+  for (const device of data) {
+    if (device.configured) await pollSlot(device.id);
+  }
+}
+
 async function send(slot, path, payload = {}) {
   if (busy.has(slot)) return;
   busy.add(slot);
@@ -209,7 +241,10 @@ export function mountHaier() {
   document.addEventListener('click',handler);
   document.addEventListener('submit',formHandler);
   getDevices();
-  // Poll only while the page is visible. A background daemon handles Auto when enabled.
+  // First fresh read soon after open, then every minute while visible. A
+  // background daemon handles Auto when enabled, even with the phone closed.
+  setTimeout(pollAll, 3000);
+  setInterval(pollAll, POLL_MS);
   setInterval(()=>{if(!document.hidden) getDevices();},45000);
 }
 mountHaier();

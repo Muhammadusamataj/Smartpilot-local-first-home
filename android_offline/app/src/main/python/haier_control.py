@@ -711,6 +711,26 @@ def haier_read():
         return jsonify({"error": str(exc)}), 503
 
 
+@bp.post("/api/haier/poll")
+def haier_poll():
+    """Background UI refresh: fetch live status, but never revoke the last
+    verified read on a transient failure (e.g. HA briefly owning the AC's
+    single LAN session). The explicit /read endpoint stays strict."""
+    try:
+        slot = _slot(_body().get("slot"))
+        with LOCK:
+            entry = _load()[slot]
+            if not entry.get("ip"):
+                raise ValueError("Configure this Haier AC first")
+            data = _read_device(entry)
+            _cache[slot] = {"verified": True, "read_at": time.time(), "data": data}
+            return jsonify({"ok": True, "status": data, "device": _summary(slot, entry)})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except (HaierError, OSError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
+
+
 @bp.post("/api/haier/command")
 def haier_command():
     try:
