@@ -14,9 +14,12 @@ services:
       # - CHECK_FOR_UPDATES=false   # disable all update checks
       # Prefills "Scan network" (local IPs and protocol versions over TCP 6668). Several subnets are fine, comma-separated.
       # - LAN_SUBNET=192.168.2.0/24    # your IoT VLAN or subnet
-      # Optional login. Set BOTH to require a username + password (recommended when the port is reachable beyond localhost). Leave unset for no auth.
+      # Optional login. The Docker entry point refuses a non-loopback bind when these are unset.
+      # Set BOTH to require a username + password (recommended when the port is reachable beyond localhost),
+      # or set ALLOW_NO_AUTH=1 to accept an unauthenticated LAN bind explicitly.
       # - AUTH_USERNAME=admin
       # - AUTH_PASSWORD=change-me
+      # - ALLOW_NO_AUTH=1
     restart: unless-stopped
 
 volumes:

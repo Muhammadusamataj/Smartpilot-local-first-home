@@ -8,6 +8,7 @@
 | `AUTH_USERNAME` | _(unset)_ | Username for optional HTTP Basic Auth. Login is required only when **both** `AUTH_USERNAME` and `AUTH_PASSWORD` are set. Ignored under Home Assistant ingress. |
 | `AUTH_PASSWORD` | _(unset)_ | Password for optional HTTP Basic Auth. Ignored under Home Assistant ingress. |
 | `ALLOW_NO_AUTH` | _(unset)_ | Explicit opt-in to run without Basic Auth on a non-loopback bind address. Required only when `AUTH_USERNAME`/`AUTH_PASSWORD` are not set and a launcher is told to bind beyond localhost; with `ALLOW_NO_AUTH=1` a warning is printed and the start is allowed. Does not apply to Home Assistant ingress. |
+| `INGRESS_ONLY` | _(unset)_ | Safe no-password exception for the Home Assistant add-on. Set to `1`/`true` by the add-on: the Supervisor proxy is the only accepted request source, so a published direct port cannot expose device keys. |
 | `DEVICE_CACHE` | `on` | Set to `off` to keep the device list in memory only instead of storing it. See [Device List Cache](caching-and-changes.md#device-list-cache). |
 | `DEVICE_CACHE_FILE` | `devices.cache` beside `SESSION_FILE` | Path of the encrypted device-list cache. |
 | `DEVICE_CACHE_KEY_FILE` | `cache.key` beside `SESSION_FILE` | Path of the key that decrypts the device-list cache and the scan results. |
@@ -32,9 +33,9 @@ This changes only how you reach the app's **UI**. Tuya devices are ordinary IP d
 
 By default the web UI has no authentication, so anyone who can reach the port can see device `localKey` values. Set **both** `AUTH_USERNAME` and `AUTH_PASSWORD` to require a login. This is recommended whenever the port is reachable beyond localhost. Basic Auth sends credentials unencrypted over plain HTTP, so keep it on a trusted network or behind a TLS reverse proxy, and do not expose it directly to the internet.
 
-The desktop EXE and the offline Android entry point now **refuse a non-loopback bind** (for example `0.0.0.0`) when no auth is configured, unless `ALLOW_NO_AUTH=1` is set as an explicit opt-in. Both default to localhost (`127.0.0.1`), so the normal out-of-the-box start is unaffected. If you deliberately need a no-auth LAN bind, set `ALLOW_NO_AUTH=1` to accept the risk; a warning is printed at startup. This setting does not change Home Assistant ingress behaviour.
+Every production server startup now **refuses a non-loopback bind** (for example `0.0.0.0`) when no authentication is configured. The Docker images use the `wsgi:app` entry point, which runs this check before Waitress opens the socket. The desktop EXE and the offline Android entry point call the same guard. Loopback-only starts (including the Android app's default `127.0.0.1` server) are unchanged. If you deliberately need a no-auth LAN bind, set `ALLOW_NO_AUTH=1` to accept the risk; a warning is printed at startup.
 
-On Home Assistant, ingress already authenticates access, so these credentials are **ignored for ingress requests**. Set them only if you enable the direct port access and want a separate login there.
+On Home Assistant, ingress already authenticates access, so these credentials are **ignored for ingress requests**. The add-on sets `INGRESS_ONLY=true`: startup on the internal network is allowed without a password, but only requests from the Supervisor proxy (`172.30.32.2` with `X-Ingress-Path`) are accepted. Direct requests to a published port receive HTTP 403 unless you also set `AUTH_USERNAME`/`AUTH_PASSWORD`. This is an intentional behavior change: add-on users who relied on unauthenticated direct-port access must now set credentials or use ingress.
 
 The device list is also stored on disk, encrypted. See [Device List Cache](caching-and-changes.md#device-list-cache) for what that does and does not protect.
 

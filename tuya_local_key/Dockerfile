@@ -29,4 +29,4 @@ RUN mkdir -p /data
 EXPOSE 8000
 VOLUME ["/data"]
 
-CMD ["sh", "-c", "exec waitress-serve --listen=0.0.0.0:${PORT:-8000} --threads=8 app:app"]
+CMD ["sh", "-c", "exec waitress-serve --listen=0.0.0.0:${PORT:-8000} --threads=8 wsgi:app"]

@@ -21,6 +21,7 @@ TARGET = ADDON / "app"
 
 PY_FILES = [
     "app.py",
+    "wsgi.py",
     "device_cache.py",
     "device_preferences.py",
     "device_values.py",
