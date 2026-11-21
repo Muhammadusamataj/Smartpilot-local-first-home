@@ -423,15 +423,21 @@ function renderHomeQuickDevices(devices) {
   for (const device of ordered) {
     const verified = device.verified === true;
     const id = String(device.id);
+    // Same information architecture as the Devices tab: identity on the left
+    // (icon, name, room, readable status pill), power action on the right.
+    const status = verified ? "Online" : statusLabel(device);
+    const statusKind = verified ? "online" : (device.lan_known ? "stale" : "offline");
     // The navigation button and inline power button are siblings:
     // never nest an interactive toggle inside another button.
     const markup = `<div class="pilot-home-device-card">
       <button type="button" class="pilot-device-mini${verified ? ' is-verified' : ''}"
         data-device-id="${esc(id)}" data-search="${esc(deviceSearchText(device))}"
         aria-label="Open ${esc(device.name)} details">
-        <span class="pilot-device-mini-head"><span class="pilot-mini-icon" aria-hidden="true">${deviceIcon(device).svg}</span>
-        <span class="pilot-mini-signal ${verified?'online':''}">${verified?'ONLINE':esc(statusLabel(device))}</span></span>
-        <strong>${esc(device.name)}</strong><small>${esc(roomName(device))}</small>
+        <span class="pilot-device-mini-head">
+          <span class="pilot-mini-icon" aria-hidden="true">${deviceIcon(device).svg}</span>
+          <span class="pilot-mini-copy"><strong>${esc(device.name)}</strong><small>${esc(roomName(device))}</small></span>
+        </span>
+        <span class="pilot-mini-signal ${statusKind}"><i aria-hidden="true"></i>${esc(status)}</span>
       </button>
       <div class="pilot-home-inline-power" data-quick-power></div>
     </div>`;
