@@ -74,3 +74,51 @@
   .pilot-home .pilot-home-tools {gap:2px}
   .pilot-home .pilot-home-tools button {font-size:10px!important;padding:5px!important}
 }
+
+
+/* Calm, high-contrast premium surfaces with consistent typography. */
+@media(max-width:720px) {
+  .pilot-home, [data-view-panel="devices"] {max-width:560px;margin-left:auto;margin-right:auto}
+  .pilot-home-section-head h2,
+  [data-view-panel="devices"] .section-head h2 {letter-spacing:-.45px!important}
+  .pilot-ac-mini strong {font-size:13px!important;line-height:1.32!important}
+  .pilot-ac-mini-temps b {font-size:25px!important;letter-spacing:-1px!important}
+  .pilot-device-mini strong {font-size:12px!important;line-height:1.4!important}
+  #devices .tile-title h2 {font-size:13px!important;font-weight:700!important}
+  #devices .tile .status {font-size:10px!important;font-weight:700!important}
+  .pilot-home .pilot-home-tile .pilot-ac-mini,
+  .pilot-home .pilot-home-tile .pilot-device-mini,
+  #devices .tile {
+    background:linear-gradient(150deg,#1A304A,#14253B)!important;
+    border:1px solid rgba(164,206,239,.12)!important;
+    box-shadow:0 5px 22px rgba(2,9,24,.19)!important;
+  }
+  :root[data-theme="light"] .pilot-home .pilot-home-tile .pilot-ac-mini,
+  :root[data-theme="light"] .pilot-home .pilot-home-tile .pilot-device-mini,
+  :root[data-theme="light"] #devices .tile {
+    background:linear-gradient(145deg,#FFFFFF,#F4F9FF)!important;
+    border:1px solid rgba(38,71,112,.12)!important;
+    box-shadow:0 5px 18px rgba(40,81,120,.07)!important;
+  }
+  #devices .tile:active,.pilot-home-tile > button:active {transform:scale(.99)!important}
+  #deviceSheet .primary-row {align-items:center!important;min-height:82px!important}
+  #deviceSheet .tile[data-critical="true"] .switch-control {
+    padding:0!important;border:0!important;border-radius:0!important;
+    background:transparent!important;box-shadow:none!important;
+    display:flex!important;flex-direction:column!important;
+    align-items:flex-end!important;justify-content:center!important;gap:6px!important;
+  }
+  #deviceSheet .tile[data-critical="true"] .switch-control::after {display:none!important}
+  #deviceSheet .pilot-command-note {
+    font-size:10.5px!important;max-width:153px!important;
+    text-align:right!important;line-height:1.25!important;
+  }
+  #deviceSheet .pilot-switch-button {min-width:58px;min-height:35px}
+  #deviceSheet details.more {margin-top:15px!important;padding-top:14px!important}
+  #deviceSheet details.more summary {font-size:12px!important;line-height:1.5!important}
+  #deviceSheet .cap-item {padding:12px!important}
+  #deviceSheet .cap-label {font-size:11px!important}
+  #deviceSheet .cap-value {font-size:15px!important}
+  #deviceSheet .drawer-body .tile-foot {margin-top:12px!important}
+  .pilot-settings-grid .pilot-setting-tile {border-radius:14px!important}
+}
