@@ -42,6 +42,25 @@ finished APK's signer too. Neither copy is bundled in source ZIPs or Git.
 > `python tools/install_preserving_data.py --yes`, which backs up data,
 > uninstalls, installs, and restores. After v1.16, normal in-app updates work.
 
+## Where app-data backups are saved
+
+Backups are **not** kept in a temp folder or deleted after use. They live in a
+visible folder outside the repo:
+
+```
+C:\Users\abc\Documents\SmartPilot-Backups\
+├── RESTORE.txt                              # plain-language steps
+├── smartpilot-data-<timestamp>.tar           # full private app data
+├── smartpilot-data-<timestamp>.json          # sha256 + contents manifest
+└── smartpilot-previous-<timestamp>.apk       # rollback copy of installed APK
+```
+
+Create one any time with `--backup-only` (no uninstall/install). Verify with
+`--verify-backup`, restore with `--restore-only <tar>`. See
+[`tools/README.md`](../tools/README.md#app-data-backups) for the exact commands.
+The tar contains encryption keys — keep this folder private and back it up
+separately from the source code.
+
 ## Where the production release key lives
 
 The release keystore and its credentials are stored **outside this repository**,
