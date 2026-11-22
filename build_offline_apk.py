@@ -21,6 +21,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from tools.ensure_signing_key import ensure_key
+
 ROOT = Path(__file__).resolve().parent
 PROJECT = ROOT / "android_offline"
 PY_DIR = PROJECT / "app" / "src" / "main" / "python"
@@ -154,6 +156,7 @@ def main() -> None:
 
     sdk = _sdk_root(args.sdk_root)
     _check_java()
+    ensure_key(EXPECTED_SIGNER_SHA256)
     if not args.no_sync:
         _sync_sources()
     (PROJECT / "local.properties").write_text(f"sdk.dir={sdk.as_posix()}\n", encoding="utf-8")

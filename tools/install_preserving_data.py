@@ -23,6 +23,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from build_offline_apk import EXPECTED_SIGNER_SHA256
 
 PACKAGE = "com.example.tuyalocalkey.offline.v2.debug"
@@ -30,7 +31,7 @@ PACKAGE = "com.example.tuyalocalkey.offline.v2.debug"
 
 def run(cmd, *, binary=False, stdin=None):
     return subprocess.run(
-        cmd, input=stdin, stdout=subprocess.PIPE if binary else None,
+        cmd, input=stdin, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, text=not binary,
     )
 
@@ -98,7 +99,8 @@ def main() -> None:
 
     pwd = run(adb_cmd("shell", "run-as", PACKAGE, "pwd"))
     data_dir = (pwd.stdout or "").strip()
-    if pwd.returncode != 0 or data_dir != f"/data/data/{PACKAGE}":
+    valid_dirs = {f"/data/data/{PACKAGE}", f"/data/user/0/{PACKAGE}"}
+    if pwd.returncode != 0 or data_dir not in valid_dirs:
         raise SystemExit(
             "run-as failed or returned an unexpected directory. The installed app must "
             f"be debuggable and rooted at /data/data/{PACKAGE}; got {data_dir!r}."

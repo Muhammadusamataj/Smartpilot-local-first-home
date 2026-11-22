@@ -50,7 +50,7 @@ Device panel previews are cropped to the panel so their contents remain readable
 
 ## Android signing and safe upgrades
 
-Debug builds must keep the **same signing certificate** across releases, or Android refuses to upgrade an installed APK with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. The build script copies `tools/keys/debug.keystore` when present and verifies the finished APK against `EXPECTED_SIGNER_SHA256`; it fails the build on a mismatch. That keystore is deliberately gitignored — keep a private copy outside the source ZIP.
+Debug builds must keep the **same signing certificate** across releases, or Android refuses to upgrade an installed APK with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. The build script calls `tools/ensure_signing_key.py`, which restores `tools/keys/debug.keystore` from the private backup at `%USERPROFILE%\.smartpilot-signing\debug.keystore` when needed and verifies its fingerprint, then verifies the finished APK against `EXPECTED_SIGNER_SHA256`. It fails the build on any mismatch. The keystore is deliberately gitignored and is never bundled in a source ZIP; keep the backup copy outside the repo.
 
 If a release was already signed with a different certificate, `python tools/install_preserving_data.py --yes` copies the debuggable app's private data off the phone, reinstalls the new APK, and restores the data. It requires a connected adb device and explicit confirmation.
 
