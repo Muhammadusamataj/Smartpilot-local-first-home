@@ -25,6 +25,9 @@ environment:
   SESSION_FILE: /data/session.json
   QR_SCHEME: smartlife
   PORT: "8000"
+  # HA authenticates the sidebar session; only the Supervisor proxy may reach
+  # the app. A published direct port therefore cannot expose device keys.
+  INGRESS_ONLY: "true"
 options:
   QR_SCHEME: smartlife
   DEVICE_CACHE: "on"

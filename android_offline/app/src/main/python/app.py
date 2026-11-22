@@ -43,7 +43,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, Response, jsonify, render_template, request, send_file
 
 import device_cache
 import device_preferences
@@ -82,6 +82,14 @@ QR_SCHEME = _setting("QR_SCHEME", "smartlife")
 LAN_SUBNET = _setting("LAN_SUBNET")
 AUTH_USERNAME = _setting("AUTH_USERNAME")
 AUTH_PASSWORD = _setting("AUTH_PASSWORD")
+# Home Assistant ingress is the only supported no-password remote mode: HA
+# authenticates the user, and the Supervisor proxies every request from a
+# fixed peer. The add-on sets INGRESS_ONLY explicitly so an unrelated token
+# in another deployment cannot silently turn off authentication.
+SUPERVISOR_PROXY = "172.30.32.2"
+INGRESS_ONLY = _setting("INGRESS_ONLY").strip().lower() not in {
+    "off", "0", "false", "no", "",
+}
 CHECK_FOR_UPDATES = _setting("CHECK_FOR_UPDATES", "true").strip().lower() not in {"off", "0", "false", "no"}
 # After a QR login (and on startup when a scan is missing), fetch the device
 # list and scan each device's /24 automatically. Set AUTO_SETUP=off to disable.
@@ -346,35 +354,53 @@ def _update_status(manual):
                                           supervisor_token=token, manual=manual))
 
 
+def _is_supervisor_ingress():
+    """True only for a real HA Supervisor proxied request.
+
+    The peer address comes from the socket, not from a spoofable forwarding
+    header. HA strips and rewrites X-Ingress-Path itself.
+    """
+    return (request.remote_addr == SUPERVISOR_PROXY
+            and bool(request.headers.get("X-Ingress-Path")))
+
+
 @app.before_request
 def _require_auth():
     # Read at request time so the Android app can switch its opt-in direct
     # mode on/off without a full process restart.
     username = _setting("AUTH_USERNAME")
     password = _setting("AUTH_PASSWORD")
-    if not (username and password):
+
+    if username and password:
+        # Trust Supervisor's proxy peer, never a client-supplied header alone.
+        if _is_supervisor_ingress():
+            return
+
+        auth = request.authorization
+        ok = bool(auth) and auth.type == "basic" and (
+            hmac.compare_digest((auth.username or "").encode(), username.encode())
+            & hmac.compare_digest((auth.password or "").encode(), password.encode())
+        )
+        if not ok:
+            return ("Authentication required.", 401,
+                    {"WWW-Authenticate": 'Basic realm="Tuya Local Key"'})
+
+        # Basic Auth is attached automatically by browsers on cross-site requests.
+        # Reject a foreign Origin on state-changing API calls (curl/mobile clients
+        # that send no Origin still work). Ingress requests are already exempted.
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.path.startswith("/api/"):
+            origin = request.headers.get("Origin")
+            if origin and urlparse(origin).netloc.lower() != request.host.lower():
+                return ("Cross-origin request blocked.", 403)
         return
 
-    # Trust Supervisor's proxy peer, never a client-supplied header alone.
-    if request.remote_addr == "172.30.32.2" and request.headers.get("X-Ingress-Path"):
-        return
-
-    auth = request.authorization
-    ok = bool(auth) and auth.type == "basic" and (
-        hmac.compare_digest((auth.username or "").encode(), username.encode())
-        & hmac.compare_digest((auth.password or "").encode(), password.encode())
-    )
-    if not ok:
-        return ("Authentication required.", 401,
-                {"WWW-Authenticate": 'Basic realm="Tuya Local Key"'})
-
-    # Basic Auth is attached automatically by browsers on cross-site requests.
-    # Reject a foreign Origin on state-changing API calls (curl/mobile clients
-    # that send no Origin still work). Ingress requests are already exempted.
-    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.path.startswith("/api/"):
-        origin = request.headers.get("Origin")
-        if origin and urlparse(origin).netloc.lower() != request.host.lower():
-            return ("Cross-origin request blocked.", 403)
+    # No app-level credentials. In ingress-only deployments HA has already
+    # authenticated the user, but only the Supervisor proxy may reach us.
+    # This closes a published direct port without breaking sidebar access.
+    if INGRESS_ONLY:
+        if _is_supervisor_ingress():
+            return
+        return ("Home Assistant ingress only.", 403)
 
 
 @app.after_request
@@ -1425,6 +1451,27 @@ app.register_blueprint(local_control.bp)
 import haier_control  # noqa: E402
 app.register_blueprint(haier_control.bp)
 
+# Additive: an opt-in client mode forwards a small allowlist of API calls to a
+# family hub. Default is off, so every existing installation is unaffected.
+import family_hub  # noqa: E402
+app.register_blueprint(family_hub.bp)
+
+
+@app.before_request
+def _family_hub_proxy():
+    if not family_hub.should_proxy(request.method, request.path):
+        return None
+    path = request.path
+    if request.query_string:
+        path += "?" + request.query_string.decode("utf-8", "replace")
+    try:
+        code, raw, ctype = family_hub.proxy_request(
+            request.method, path, request.get_data(), request.content_type or ""
+        )
+    except family_hub.FamilyError as exc:
+        return jsonify({"error": str(exc)}), 502
+    return Response(raw, status=code, content_type=ctype)
+
 
 def _auth_is_configured():
     """The same credentials _require_auth() enforces, re-read for launchers."""
@@ -1477,10 +1524,14 @@ def check_no_auth_binding(host=None):
     """Guard a server start that would expose local keys without auth.
 
     Callers pass the address they bind to; otherwise HOST, SERVER_HOST,
-    FLASK_RUN_HOST, WAITRESS_HOST or --host supplies it. Never called at import
-    time, so a Flask test client can reload the app without credentials.
+    FLASK_RUN_HOST, WAITRESS_HOST or --host supplies it. Production WSGI
+    startup imports wsgi.py, which calls this before the socket is opened.
+    It is not called by importing app.py itself, so a Flask test client can
+    reload the app without credentials. INGRESS_ONLY is a deliberate safe
+    exception: HA has authenticated the user and the Supervisor is the only
+    permitted request source.
     """
-    if _auth_is_configured():
+    if _auth_is_configured() or INGRESS_ONLY:
         return
     bind_host = _binding_host(host)
     if _is_loopback_host(bind_host):
@@ -1488,7 +1539,8 @@ def check_no_auth_binding(host=None):
     message = (
         "AUTH_USERNAME/AUTH_PASSWORD are not set: binding to "
         f"{bind_host} would expose device local keys over HTTP without "
-        "authentication. Set AUTH_USERNAME and AUTH_PASSWORD, or set "
+        "authentication. Set AUTH_USERNAME and AUTH_PASSWORD, set "
+        "INGRESS_ONLY=1 for Home Assistant Supervisor ingress, or set "
         "ALLOW_NO_AUTH=1 to accept that risk explicitly."
     )
     if os.environ.get("ALLOW_NO_AUTH") != "1":

@@ -190,7 +190,7 @@ def build(devices, results, device_id, snapshot_at, job=None, session=None, now=
     now = time.time() if now is None else now
     report = {
         "schema_version": 1, "generated_at": _timestamp(now),
-        "app": {"name": "Tuya Local Key", "version": app_version()},
+        "app": {"name": "Smart Pilot Local", "version": app_version()},
         "runtime": {"python": platform.python_version(), "os": platform.system(),
                     "architecture": platform.machine(),
                     "dependencies": {name: _package_version(name) for name in

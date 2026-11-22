@@ -26,6 +26,7 @@
     <button type="button" role="tab" data-view="home" data-glyph="⌂" class="active" aria-selected="true">Home</button>
     <button type="button" role="tab" data-view="devices" data-glyph="▦" aria-selected="false">Devices</button>
     <button type="button" role="tab" data-view="autopilot" data-glyph="✧" aria-selected="false">Auto-Pilot</button>
+    <button type="button" role="tab" data-view="scenes" data-glyph="⚡" aria-selected="false">Scenes</button>
     <button type="button" role="tab" data-view="settings" data-glyph="⚙" aria-selected="false">Settings</button>
   </nav>
   <div class="search" {% if not ready %}hidden{% endif %}>
@@ -69,26 +70,81 @@
       <button type="button" class="pilot-setting-tile" data-open-drawer="appearance"><b>◐ Appearance</b><small>Dark/Light theme and colour palette</small></button>
       <button type="button" class="pilot-setting-tile" data-open-drawer="add"><b>＋ Manage devices</b><small>Add devices, room names and local connection</small></button>
     </div>
+    <div data-family-hub></div>
     <div class="panel">
       <p class="note">LAN keys stay encrypted in the device cache. This page never sends them back to the browser. Live status here means a device answered on your local network — a saved IP alone is never shown as online.</p>
       <p class="note" style="margin-top:10px">Scenes and schedules run on the server. Closing this WebView or phone does not stop a server-side schedule, but schedules need an always-on PC, Home Assistant add-on, or trusted hub.</p>
       <button type="button" class="btn" data-open-drawer="network" style="margin-top:12px">Open network &amp; scan settings →</button>
+    </div>
+
+    <div class="section-head" style="margin-top:20px"><h2>Safety &amp; Automation</h2><p>On-device rules, schedules, usage and updates</p></div>
+    <div class="pilot-extras-grid">
+      <div class="panel pilot-extra-card">
+        <h3>Schedules</h3>
+        <div id="schedulerInfo" class="pilot-extra-body">Checking…</div>
+        <button type="button" class="btn" id="schedulerTick" style="margin-top:8px">Run due scenes now</button>
+      </div>
+      <div class="panel pilot-extra-card">
+        <h3>Safety rules</h3>
+        <div id="rulesInfo" class="pilot-extra-body">Loading…</div>
+        <div class="pilot-rule-presets">
+          <button type="button" class="btn" data-rule-preset="motor">Motor: OFF after 30 min ON</button>
+          <button type="button" class="btn" data-rule-preset="geyser">Geyser: OFF after 60 min ON</button>
+        </div>
+      </div>
+      <div class="panel pilot-extra-card">
+        <h3>Usage &amp; verification</h3>
+        <div id="usageInfo" class="pilot-extra-body">Loading…</div>
+      </div>
+      <div class="panel pilot-extra-card">
+        <h3>Activity</h3>
+        <div id="eventsInfo" class="pilot-extra-body">Loading…</div>
+      </div>
+      <div class="panel pilot-extra-card">
+        <h3>Backup &amp; restore</h3>
+        <div class="pilot-extra-body">
+          <p class="note">Keys remain encrypted inside the downloaded ZIP. Keep the file offline and restore only on this app.</p>
+          <div class="pilot-inline-actions">
+            <button type="button" class="btn" id="backupDownload">Download backup</button>
+            <label class="btn" for="restoreFile">Restore…</label>
+            <input type="file" id="restoreFile" accept=".zip,application/zip" hidden>
+          </div>
+        </div>
+      </div>
+      <div class="panel pilot-extra-card" id="updateCard">
+        <h3>App updates &amp; rollback</h3>
+        <div id="updateInfo" class="pilot-extra-body">Checking GitHub Releases…</div>
+        <div class="pilot-inline-actions">
+          <button type="button" class="btn" id="updateCheck">Check for update</button>
+          <button type="button" class="btn" id="updateInstall" hidden>Install update</button>
+          <button type="button" class="btn" id="updateRollback" hidden>Roll back</button>
+          <button type="button" class="btn" id="updatePermission" hidden>Allow install</button>
+        </div>
+      </div>
     </div>
   </section>
   <section class="view-panel" data-view-panel="autopilot" hidden>
     <div class="pilot-eyebrow">HAIER · DIRECT LOCAL NETWORK</div>
     <div class="pilot-headline"><div><h1>Climate Control</h1><p>No Home Assistant required for the direct LAN link</p></div><span class="pilot-local-pill">● OFFLINE READY*</span></div>
     <div class="haier-intro"><div><h2>My Haier ACs</h2><p>Private Wi-Fi · Manual and Auto</p></div><span class="haier-tag">LIVE DATA ONLY</span></div>
+    <div data-haier-cloud-login></div>
     <div class="haier-grid" data-haier-cards></div>
     <div class="panel"><p class="note">*Local LAN key aur Wi-Fi zaroori hain. Internet nahi. Home Assistant integration ko same waqt poll na karne dein. Unknown models ki writes blocked hain; winter heat abhi disabled hai. Android par background Auto-Pilot phone/OS restrictions ki wajah se 24/7 guaranteed nahi.</p></div>
-    <div class="pilot-scene-section">
+  </section>
+
+  <section class="view-panel pilot-scenes-view" data-view-panel="scenes" hidden>
+    <div class="pilot-scenes-nav">
+      <div><div class="pilot-eyebrow">SMART PILOT · ACTIONS</div><h1>Scenes &amp; Schedules</h1><p>Group actions and optional server timers</p></div>
+      <span class="pilot-local-pill">LOCAL SCENES</span>
+    </div>
 {% if ready %}
-    <div class="section-head"><h2>Scenes</h2><p>Group actions and optional server schedules</p></div>
+    <div class="section-head"><h2>Saved scenes</h2><p>Run or manage scenes</p></div>
     <div id="sceneList"></div>
     <div class="section-head"><h2>Scene editor</h2><p>Only real DPs from saved devices</p></div>
     <div class="panel" id="sceneEditor"></div>
+{% else %}
+    <div class="panel"><p class="note">Add a Tuya device first to create scenes.</p></div>
 {% endif %}
-    </div>
   </section>
 </main>
 
@@ -109,7 +165,7 @@
         <div class="field"><label for="devKey">Local key (16–32 characters)</label><input id="devKey" required placeholder="0123456789abcdef" maxlength="32"></div>
         <div class="field-row">
           <div class="field"><label for="devIp">IP address</label><input id="devIp" required placeholder="192.168.1.50"></div>
-          <div class="field"><label for="devVersion">Version</label><select id="devVersion"><option>3.5</option><option>3.4</option><option>3.3</option><option>3.2</option><option>3.1</option></select></div>
+          <div class="field"><label for="devVersion">Version</label><select id="devVersion"><option value="auto" selected>Auto (detect)</option><option>3.5</option><option>3.4</option><option>3.3</option><option>3.2</option><option>3.1</option></select></div>
         </div>
         <div class="field"><label for="devDp">ON/OFF DP (usually 1)</label><input id="devDp" value="1" inputmode="numeric"></div>
         <button class="btn primary" type="submit" style="width:100%">Save device</button>
@@ -139,7 +195,7 @@
 
     <section class="group">
       <h3>Device IPs</h3>
-      <p class="note" style="margin-bottom:10px">Har device ke <b>Edit</b> se name, IP, protocol version aur (zarurat ho to) local key badal sakte hain. Saved key screen par kabhi nahi dikhti.</p>
+      <p class="note" style="margin-bottom:10px">Har device ke <b>Edit</b> se name, IP, protocol version aur (zarurat ho to) local key badal sakte hain. Version <b>Auto</b> rakhein to app pehli live read par khud version detect karke yaad kar leta hai. Saved key screen par kabhi nahi dikhti.</p>
       <div id="ipList"><p class="note">Koi device nahi mila.</p></div>
     </section>
 
@@ -207,5 +263,7 @@
 <script type="module" src="static/js/shared/palette.js"></script>
 <script type="module" src="static/js/features/local-control/main.js"></script>
 <script type="module" src="static/js/features/local-control/haier.js"></script>
+<script type="module" src="static/js/features/local-control/family.js"></script>
+<script type="module" src="static/js/features/local-control/extras.js"></script>
 </body>
 </html>

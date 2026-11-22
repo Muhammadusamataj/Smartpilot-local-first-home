@@ -279,3 +279,104 @@
     min-height:42px;padding:7px 10px!important;white-space:nowrap
   }
 }
+
+
+/* v0.9 — no sideways scrolling anywhere, and the bottom tab bar stays put.
+   Loaded last so it wins over the older lumen/pilot-theme dock rules. */
+html, body { max-width:100%; overflow-x:hidden!important }
+main { max-width:100%; overflow-x:hidden }
+[data-view-panel] { min-width:0; max-width:100%; overflow-x:hidden }
+.pilot-headline, .haier-intro, .haier-top-control { flex-wrap:wrap!important; min-width:0 }
+.pilot-headline > div, .haier-intro > div { min-width:0 }
+.pilot-headline p { overflow-wrap:anywhere }
+.scene-editor-grid, .action-fields { grid-template-columns:minmax(0,1fr)!important }
+.scene-card { flex-wrap:wrap!important }
+.scene-body { flex:1 1 100%!important; min-width:0!important }
+.schedule-grid { max-width:100%; overflow-wrap:anywhere }
+
+@media(max-width:720px){
+  [data-view-panel="autopilot"] .pilot-headline .pilot-local-pill { display:none!important }
+  .haier-grid { grid-template-columns:minmax(0,1fr)!important }
+}
+
+/* Scenes now own a dedicated tab; Auto-Pilot stays climate-only. */
+.pilot-scenes-view { max-width:940px; margin:0 auto }
+.pilot-scenes-nav { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; margin:4px 0 14px; flex-wrap:wrap }
+.pilot-scenes-nav > div { min-width:0 }
+.pilot-scenes-nav h1 { font-size:clamp(24px,5vw,32px); letter-spacing:-1px; margin:3px 0 2px }
+.pilot-scenes-nav p { color:var(--muted); font-size:12px; margin:0; overflow-wrap:anywhere }
+.appbar { transform:none!important; filter:none!important; backdrop-filter:none!important; -webkit-backdrop-filter:none!important; contain:none!important; will-change:auto!important; perspective:none!important }
+@media(max-width:680px){
+  .appbar .view-tabs{
+    position:fixed!important; top:auto!important; left:0!important; right:0!important; bottom:0!important;
+    width:100%!important; max-width:100%!important; margin:0!important;
+    z-index:9999!important; border-radius:0!important; display:flex!important; flex-wrap:nowrap!important; order:initial!important;
+    background:#101e34!important; backdrop-filter:none!important; -webkit-backdrop-filter:none!important;
+    transform:none!important; filter:none!important; contain:none!important;
+    box-shadow:0 -12px 26px rgba(0,0,0,.27)!important;
+  }
+  /* Keep device search reachable on phones. The wordmark yields the space;
+     navigation tabs are already a fixed bottom bar at this width. */
+  .appbar .search { display:block!important; flex:1 1 auto!important; min-width:0!important; max-width:none!important; order:2!important }
+  .appbar .pilot-wordmark { display:none!important }
+  .appbar .pilot-brand { flex:0 0 auto!important }
+  .appbar .spacer { display:none!important }
+  main { padding-bottom:110px!important }
+}
+
+/* Home smart-device cards mirror the Devices tab: identity + readable status
+   on the left, verified power action on the right. */
+.pilot-home .pilot-home-device-card .pilot-device-mini {
+  display:flex;flex-direction:column;align-items:stretch;
+  justify-content:center;gap:7px;min-width:0;padding:0!important
+}
+.pilot-home .pilot-home-device-card .pilot-device-mini-head {
+  display:flex;align-items:center;justify-content:flex-start;gap:10px;width:100%;min-width:0
+}
+.pilot-home .pilot-home-device-card .pilot-mini-copy {
+  display:flex;flex-direction:column;gap:2px;min-width:0;text-align:left
+}
+.pilot-home .pilot-home-device-card .pilot-mini-copy strong {
+  font-size:13px!important;font-weight:700!important;line-height:1.3!important;
+  white-space:normal!important;overflow-wrap:anywhere
+}
+.pilot-home .pilot-home-device-card .pilot-mini-copy small {
+  font-size:10px!important;line-height:1.3;
+  white-space:normal!important;overflow:visible!important;text-overflow:clip!important;
+  overflow-wrap:anywhere
+}
+.pilot-home .pilot-home-device-card .pilot-mini-signal {
+  display:inline-flex;align-items:center;gap:6px;align-self:flex-start;margin-left:29px;
+  font-size:10px!important;font-weight:700;line-height:1;
+  padding:5px 9px;border-radius:999px;white-space:nowrap;
+  color:#9db0c8;background:rgba(157,176,200,.14)
+}
+.pilot-home .pilot-home-device-card .pilot-mini-signal i {
+  width:6px;height:6px;border-radius:50%;background:currentColor;flex:0 0 6px
+}
+.pilot-home .pilot-home-device-card .pilot-mini-signal.online {
+  color:#4ad9a5;background:rgba(74,217,165,.14)
+}
+.pilot-home .pilot-home-device-card .pilot-mini-signal.stale {
+  color:#e9b45d;background:rgba(233,180,93,.14)
+}
+
+/* Additive Safety & Automation cards (Settings panel only). */
+.pilot-extras-grid {
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px
+}
+.pilot-extra-card { display:flex;flex-direction:column;gap:8px }
+.pilot-extra-card h3 { margin:0;font-size:14px;font-weight:700 }
+.pilot-extra-body { font-size:12px;line-height:1.45;color:var(--muted,#9db0c8);overflow-wrap:anywhere }
+.pilot-extra-body b { color:var(--text,#eaf2ff) }
+.pilot-extra-row {
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:6px 0;border-bottom:1px solid rgba(157,176,200,.12)
+}
+.pilot-extra-row:last-child { border-bottom:0 }
+.pilot-rule-presets,.pilot-inline-actions { display:flex;flex-wrap:wrap;gap:8px }
+.pilot-extra-card .btn { padding:7px 11px;font-size:11px }
+.pilot-extra-card .btn.danger { color:#ff9b9b }
+.pilot-extra-badge { font-weight:700 }
+.pilot-extra-badge.ok { color:#4ad9a5 }
+.pilot-extra-badge.warn { color:#e9b45d }

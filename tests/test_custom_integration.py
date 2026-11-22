@@ -84,3 +84,43 @@ def test_custom_repository_slug_prefix_is_found():
 def test_addon_can_also_be_found_by_name():
     addons = [{"slug": "xyz_custom", "name": "MY Local Devices Tuya"}]
     assert pure.find_addon(addons, "tuya_local_key", "MY Local Devices Tuya") == "xyz_custom"
+
+
+def test_diagnostics_sensor_allowlist_never_leaks_secrets_or_values():
+    body = {
+        "network": {
+            "wifi": {"connected": True, "ipv4": "192.168.100.21/24",
+                     "ssid": "secret-ssid", "dns": "1.1.1.1"},
+            "vpn": {"connected": True, "tailscale_ip": "100.1.2.3"},
+            "default_route": {"transport": "vpn", "is_default": True},
+        },
+        "addresses": {"saved_ip": "192.168.100.50", "reachable_confidence": "dp_response"},
+        "tcp6668": {"state": "open", "elapsed_ms": 12.5},
+        "protocol": {"detected": "3.4", "handshake": {
+            "match": True, "session_key_installed": True, "error_kind": None}},
+        "status": {"result": "ok", "dp_ids": ["1", "18"], "dps": {"1": True}},
+        "history": {"fail_count": 3, "recovery_reason": "read_ok"},
+        "local_key": "5vps+n4FwxR2?df;", "token": "secret-token",
+    }
+
+    clean = pure.sanitize_diagnostics(body)
+    text = str(clean)
+
+    assert clean["confidence"] == "dp_response"
+    assert clean["tcp_state"] == "open"
+    assert clean["protocol_detected"] == "3.4"
+    assert clean["default_route"] == "vpn"
+    assert clean["dp_ids"] == ["1", "18"]
+    assert clean["fail_count"] == 3
+    for forbidden in ("local_key", "token", "ssid", "dns", "dps", "secret", "1.1.1.1"):
+        assert forbidden not in text
+
+
+def test_diagnostics_sensor_rejects_malformed_and_unsafe_codes():
+    clean = pure.sanitize_diagnostics({
+        "history": {"fail_count": "many", "recovery_reason": "Traceback (most recent call last)"},
+        "tcp6668": {"state": "OSError: [Errno 113] No route"},
+    })
+    assert clean["fail_count"] == 0
+    assert clean["recovery_reason"] == ""
+    assert clean["tcp_state"] == ""

@@ -240,7 +240,8 @@ def test_app_icon_uses_ingress_relative_urls(webapp):
 
     assert response.status_code == 200
     assert 'href="icon.png"' in response.text
-    assert 'src="icon.png"' in response.text
+    # The icon is referenced by <link rel=icon> / apple-touch-icon, not an
+    # <img>. What matters is that every icon URL stays ingress-relative.
     assert 'href="/icon.png"' not in response.text
     assert 'src="/icon.png"' not in response.text
 
@@ -471,7 +472,8 @@ def test_auth_reads_home_assistant_options(tmp_path, monkeypatch):
 # Refusing to bind without authentication (see check_no_auth_binding)
 # --------------------------------------------------------------------------- #
 def _no_auth_app(tmp_path, monkeypatch):
-    for name in ("ALLOW_NO_AUTH", "HOST", "SERVER_HOST", "FLASK_RUN_HOST", "WAITRESS_HOST"):
+    for name in ("ALLOW_NO_AUTH", "INGRESS_ONLY", "HOST", "SERVER_HOST",
+                 "FLASK_RUN_HOST", "WAITRESS_HOST"):
         monkeypatch.delenv(name, raising=False)
     module = _reload_app(monkeypatch, tmp_path)
     monkeypatch.setattr(sys, "argv", ["app.py"])
@@ -565,6 +567,89 @@ def test_ingress_bypass_is_unchanged_by_the_binding_check(tmp_path, monkeypatch,
     assert client.get("/api/state").status_code == 401
     assert client.get("/api/state", environ_overrides={"REMOTE_ADDR": "172.30.32.2"}).status_code == 401
     assert capsys.readouterr().err == ""
+
+
+def test_no_auth_binding_error_documents_the_ingress_exception(tmp_path, monkeypatch):
+    module = _no_auth_app(tmp_path, monkeypatch)
+
+    with pytest.raises(RuntimeError) as raised:
+        module.check_no_auth_binding("0.0.0.0")
+
+    message = str(raised.value)
+    assert "INGRESS_ONLY=1" in message
+    assert "AUTH_USERNAME" in message and "AUTH_PASSWORD" in message
+    assert "ALLOW_NO_AUTH=1" in message
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "192.168.1.25"])
+def test_ingress_only_allows_non_loopback_binding(tmp_path, monkeypatch, capsys, host):
+    module = _no_auth_app(tmp_path, monkeypatch)
+    monkeypatch.setattr(module, "INGRESS_ONLY", True)
+
+    module.check_no_auth_binding(host)
+
+    assert capsys.readouterr().err == ""
+
+
+def test_ingress_only_environment_enables_the_documented_exception(tmp_path, monkeypatch):
+    for name in ("ALLOW_NO_AUTH", "HOST", "SERVER_HOST", "FLASK_RUN_HOST", "WAITRESS_HOST"):
+        monkeypatch.delenv(name, raising=False)
+    module = _reload_app(monkeypatch, tmp_path, INGRESS_ONLY="true")
+    monkeypatch.setattr(sys, "argv", ["app.py"])
+
+    assert module.INGRESS_ONLY is True
+    module.check_no_auth_binding("0.0.0.0")
+
+    client = module.app.test_client()
+    assert client.get("/api/state").status_code == 403
+    assert client.get(
+        "/api/state", headers={"X-Ingress-Path": "/api/hassio_ingress/abc"},
+        environ_overrides={"REMOTE_ADDR": "172.30.32.2"},
+    ).status_code == 200
+
+
+def test_ingress_only_accepts_only_the_supervisor_proxy(tmp_path, monkeypatch):
+    module = _no_auth_app(tmp_path, monkeypatch)
+    monkeypatch.setattr(module, "INGRESS_ONLY", True)
+    client = module.app.test_client()
+    ingress_headers = {"X-Ingress-Path": "/api/hassio_ingress/abc123"}
+
+    ok = client.get(
+        "/api/state", headers=ingress_headers,
+        environ_overrides={"REMOTE_ADDR": "172.30.32.2"},
+    )
+    assert ok.status_code == 200
+    assert ok.json == {"logged_in": False}
+
+    blocked = (
+        ({}, None),
+        ({}, "192.168.1.25"),
+        (ingress_headers, "192.168.1.25"),
+        ({}, "172.30.32.2"),
+        ({"X-Ingress-Path": "/api/hassio_ingress/fake",
+          "X-Forwarded-For": "172.30.32.2",
+          "X-Real-IP": "172.30.32.2",
+          "Forwarded": "for=172.30.32.2"}, "192.168.1.25"),
+    )
+    for headers, peer in blocked:
+        overrides = {"REMOTE_ADDR": peer} if peer else {}
+        response = client.get("/api/state", headers=headers, environ_overrides=overrides)
+        assert response.status_code == 403, (headers, peer)
+        assert "local_key" not in response.text.lower()
+        assert "password" not in response.text.lower()
+
+
+def test_ingress_only_does_not_replace_configured_basic_auth(tmp_path, monkeypatch):
+    module = _reload_app(monkeypatch, tmp_path, AUTH_USERNAME="admin", AUTH_PASSWORD="secret")
+    monkeypatch.setattr(module, "INGRESS_ONLY", True)
+    client = module.app.test_client()
+
+    assert client.get("/api/state").status_code == 401
+    assert client.get("/api/state", auth=("admin", "secret")).status_code == 200
+    assert client.get(
+        "/api/state", headers={"X-Ingress-Path": "/api/hassio_ingress/abc"},
+        environ_overrides={"REMOTE_ADDR": "172.30.32.2"},
+    ).status_code == 200
 
 
 def test_login_start_validates_user_code(webapp):

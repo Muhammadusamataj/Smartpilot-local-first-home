@@ -34,6 +34,10 @@ repository of type *Integration*, but copying the folder is enough.
 - `sensor.*` — numeric/string DPs such as power, current, energy, and enums. DPs that
   appear only in the live LAN read are added as `sensor.<device> DP <number>` entities,
   so readings are not lost when the cached Tuya DP spec is incomplete.
+- `sensor.<device> LAN diagnostics` — read-only reachability facts for a device that
+  failed a live read. It reports sanitised network/route, TCP 6668, protocol handshake,
+  DP-read and failure-history facts. It never exposes keys, tokens, raw errors or DP
+  values, and queries the add-on at most once every 5 minutes per failed device.
 
 Entity state refreshes every 20 seconds from the add-on's local LAN cache. Commands
 are sent immediately to the device over LAN.
@@ -70,4 +74,7 @@ entities:
 - **Cannot connect** — check the add-on logs. If you set `AUTH_USERNAME` and
   `AUTH_PASSWORD` in the add-on, enter the same values in the integration setup.
 - **Entities are unavailable** — the add-on could not reach the device on LAN port
-  6668. Check `LAN_SUBNET` and run **Auto scan** in the add-on once.
+  6668. Check `LAN_SUBNET` and run **Auto scan** in the add-on once. Open the
+  `<device> LAN diagnostics` sensor for sanitised route, TCP, handshake and read facts.
+  Wi-Fi/VPN/default-route values need a recent app version on the phone; without them
+  the sensor still reports TCP and DP-read results.

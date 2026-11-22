@@ -46,6 +46,9 @@ Thumbs.db
 .claude/
 plans/
 
+# Upstream reference source drop (only vendored haismart_hrdp/ is committed)
+haismart-local-main/
+
 # Local state, credentials and secrets
 tuya-login-qr.png
 *.csv

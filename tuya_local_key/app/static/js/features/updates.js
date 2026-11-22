@@ -10,7 +10,7 @@ function updateLink(value) {
   try {
     const url = new URL(value);
     if (url.protocol !== "https:" || url.username || url.password || url.port) return null;
-    if (url.hostname === "github.com" && /^\/Muhammadusamataj\/MYlocal-devices-tuya\/releases\/tag\/v?\d+\.\d+(?:\.\d+)?$/i.test(url.pathname) && !url.search && !url.hash) return url.href;
+    if (url.hostname === "github.com" && /^\/Muhammadusamataj\/(MYlocal-devices-tuya|Smartpilot-local-first-home)\/releases\/tag\/v?\d+\.\d+(?:\.\d+)?$/i.test(url.pathname) && !url.search && !url.hash) return url.href;
     if (url.hostname === "my.home-assistant.io" && !url.hash &&
         (url.pathname === "/redirect/updates/" && !url.search ||
          url.pathname === "/redirect/supervisor_addon/" && /^\?addon=[a-zA-Z0-9_-]{1,128}$/.test(url.search))) return url.href;

@@ -48,6 +48,31 @@ python tools/screenshots.py setup-tuya-local setup-localtuya setup-tinytuya loca
 
 Device panel previews are cropped to the panel so their contents remain readable. Their height adapts to the content; Raw JSON keeps a scrollable viewport. Local network and the wizard result run a demo check. Current values uses a simulated local reply, and the support report preview exercises the real download with the fake account.
 
+## Android signing and safe upgrades
+
+Debug builds must keep the **same signing certificate** across releases, or Android refuses to upgrade an installed APK with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. The build script calls `tools/ensure_signing_key.py`, which restores `tools/keys/debug.keystore` from the private backup at `%USERPROFILE%\.smartpilot-signing\debug.keystore` when needed and verifies its fingerprint, then verifies the finished APK against `EXPECTED_SIGNER_SHA256`. It fails the build on any mismatch. The keystore is deliberately gitignored and is never bundled in a source ZIP; keep the backup copy outside the repo.
+
+### App data backups
+
+`tools/install_preserving_data.py` also works as a standalone backup tool. Backups live in a **visible folder outside the repo**:
+
+```
+%USERPROFILE%\Documents\SmartPilot-Backups\
+├── RESTORE.txt                              # plain-language restore steps
+├── smartpilot-data-<timestamp>.tar           # full app data (encrypted keys included)
+├── smartpilot-data-<timestamp>.json          # checksum + contents manifest
+└── smartpilot-previous-<timestamp>.apk       # installed APK for rollback
+```
+
+```powershell
+python tools\install_preserving_data.py --backup-only --yes
+python tools\install_preserving_data.py --verify-backup "<path-to-tar>"
+python tools\install_preserving_data.py --restore-only "<path-to-tar>" --yes
+python tools\install_preserving_data.py --yes   # full migrate: backup, uninstall, install, restore
+```
+
+Backups are validated before uninstall (end-of-archive marker, required crypto keys, minimum entry count), kept on failure, and only deleted after a fully verified success when `--delete-backup` is passed. If an install fails, the tool can automatically reinstall the saved APK and restore the data. The backup contains encryption keys — keep the folder private and never upload or share it.
+
 ## Dependency Updates
 
 `update_dependencies.py` looks for new releases of the two libraries the app is built on, tinytuya and tuya-device-sharing-sdk, and moves `requirements.txt` and `pyproject.toml` to them. Each keeps its operator: `>=` stays a minimum, and `==` stays a pin.

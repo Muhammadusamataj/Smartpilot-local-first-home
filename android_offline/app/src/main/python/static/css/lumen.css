@@ -343,7 +343,7 @@ body > header {
     bottom: calc(12px + env(safe-area-inset-bottom));
     z-index: 50;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     height: 70px;
     padding: 8px 6px;
     border-radius: 26px;

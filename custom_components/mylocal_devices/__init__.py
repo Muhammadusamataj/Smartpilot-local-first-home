@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import timedelta
 from typing import Any
 from urllib.parse import quote
@@ -19,10 +20,13 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .api import ApiError, api_request
 from .const import CONF_ADDON_URL, DEFAULT_SCAN_INTERVAL, DOMAIN
-from .pure import merge_live_points
+from .pure import merge_live_points, sanitize_diagnostics
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["switch", "sensor"]
+# Diagnostics do a TCP probe, a handshake and a DP read; only collect them for
+# devices that failed a normal read, and no more often than this.
+DIAGNOSTICS_INTERVAL = 300
 
 
 class MyLocalCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -35,6 +39,7 @@ class MyLocalCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.base_url = base_url
         self.entry_data = entry_data
+        self._diagnostics_cache: dict[str, tuple[float, dict]] = {}
 
     async def _async_update_data(self) -> dict[str, Any]:
         body = await api_request(
@@ -44,22 +49,26 @@ class MyLocalCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not isinstance(devices, list):
             devices = []
 
-        async def read(device: dict) -> dict:
-            if not device.get("reachable") or not device.get("id"):
-                return {}
+        async def read(device: dict) -> tuple[dict, bool]:
+            device_id = str(device.get("id") or "")
+            if not device_id:
+                return {}, False
+            if not device.get("reachable"):
+                return {}, True
             try:
-                return await api_request(
+                result = await api_request(
                     self.hass,
                     self.base_url,
-                    "/api/local/status?id=" + quote(str(device["id"]), safe=""),
+                    "/api/local/status?id=" + quote(device_id, safe=""),
                     entry_data=self.entry_data,
                 )
             except ApiError as error:
-                _LOGGER.debug("Live read failed for %s: %s", device.get("id"), error)
-                return {}
+                _LOGGER.debug("Live read failed for %s: %s", device_id, error)
+                return {}, True
+            return result, result.get("status") != "ok"
 
         results = await asyncio.gather(*(read(device) for device in devices))
-        for device, result in zip(devices, results):
+        for device, (result, failed) in zip(devices, results):
             values: list[dict] = []
             if result.get("status") == "ok" and isinstance(result.get("values"), list):
                 values = [point for point in result["values"] if isinstance(point, dict)]
@@ -69,7 +78,31 @@ class MyLocalCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 for point in values
                 if point.get("dp") is not None
             }
+            device["diagnostics"] = await self._async_diagnostics(device, failed)
         return {"devices": devices}
+
+    async def _async_diagnostics(self, device: dict, failed: bool) -> dict:
+        """Read-only failure facts, throttled and sanitised for the sensor."""
+        device_id = str(device.get("id") or "")
+        cached = self._diagnostics_cache.get(device_id)
+        previous = cached[1] if cached else {}
+        if not device_id or not failed:
+            return previous
+        if cached and time.monotonic() - cached[0] < DIAGNOSTICS_INTERVAL:
+            return previous
+        try:
+            body = await api_request(
+                self.hass,
+                self.base_url,
+                "/api/local/diagnostics?id=" + quote(device_id, safe=""),
+                entry_data=self.entry_data,
+            )
+        except ApiError as error:
+            _LOGGER.debug("Diagnostics unavailable for %s: %s", device_id, error)
+            return previous
+        facts = sanitize_diagnostics(body)
+        self._diagnostics_cache[device_id] = (time.monotonic(), facts)
+        return facts
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

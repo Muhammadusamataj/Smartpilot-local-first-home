@@ -1,9 +1,67 @@
 # Release signing
 
-Release APKs are signed with a dedicated production key, **never** with the
-project debug key (`tools/keys/debug.keystore`, public password `android`).
+Two different APKs exist. Keep their identities separate:
 
-## Where the release key lives
+- **Offline APK** — `dist\SmartPilot-Local.apk`, package
+  `com.example.tuyalocalkey.offline.v2.debug`, published on GitHub Releases.
+  This is the app people install on their phones and upgrade in place. It is
+  signed with the **pinned debug key** described below.
+- **Production release APKs** — `dist\TuyaLocalKey-Offline-release.apk` and
+  `dist\TuyaLocalKey-release.apk`, signed with the dedicated production key.
+
+## Offline APK signing key — WHERE IT IS SAVED
+
+The offline APK must keep the **same certificate** across releases, or Android
+refuses to upgrade an installed copy with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
+The keystore is stored in two places:
+
+```
+tools\keys\debug.keystore                          # used by the build (gitignored)
+C:\Users\abc\.smartpilot-signing\debug.keystore    # private backup OUTSIDE the repo
+```
+
+- Alias: `androiddebugkey`, store/key password: `android` (standard public debug
+  password — no secret is committed).
+- Certificate SHA-256:
+  `bbe14afd137fa6617ade862ea53d6ab0c34ddbf23e1f582bd602651dd7adf00f`
+- Certificate SHA-1:
+  `AE:3D:9B:B3:56:52:21:8F:DD:32:AA:77:9F:C9:82:34:04:DF:DC:AA`
+
+`build_offline_apk.py` calls `tools/ensure_signing_key.py` before every build.
+It restores `tools/keys/debug.keystore` from the backup if missing, verifies the
+fingerprint, and fails the build on any mismatch. After building it verifies the
+finished APK's signer too. Neither copy is bundled in source ZIPs or Git.
+
+> **If the PC is formatted / the repo is moved:** copy
+> `C:\Users\abc\.smartpilot-signing\debug.keystore` back to
+> `tools\keys\debug.keystore`. Losing both copies means a new certificate and an
+> unavoidable uninstall/reinstall for every installed user.
+
+> Upgrading an already-installed v1.11–v1.15 (old signer
+> `a6cf3f81…0830ca58`) to v1.16 needs
+> `python tools/install_preserving_data.py --yes`, which backs up data,
+> uninstalls, installs, and restores. After v1.16, normal in-app updates work.
+
+## Where app-data backups are saved
+
+Backups are **not** kept in a temp folder or deleted after use. They live in a
+visible folder outside the repo:
+
+```
+C:\Users\abc\Documents\SmartPilot-Backups\
+├── RESTORE.txt                              # plain-language steps
+├── smartpilot-data-<timestamp>.tar           # full private app data
+├── smartpilot-data-<timestamp>.json          # sha256 + contents manifest
+└── smartpilot-previous-<timestamp>.apk       # rollback copy of installed APK
+```
+
+Create one any time with `--backup-only` (no uninstall/install). Verify with
+`--verify-backup`, restore with `--restore-only <tar>`. See
+[`tools/README.md`](../tools/README.md#app-data-backups) for the exact commands.
+The tar contains encryption keys — keep this folder private and back it up
+separately from the source code.
+
+## Where the production release key lives
 
 The release keystore and its credentials are stored **outside this repository**,
 in a directory readable only by the current Windows user:
@@ -45,6 +103,7 @@ unintentional debug-signed release cannot be produced.
 
 | Artifact | Package | Version | Signer SHA-256 |
 |---|---|---|---|
+| `dist\SmartPilot-Local.apk` (offline, GitHub Releases) | `com.example.tuyalocalkey.offline.v2.debug` | 17 / 1.16 | `bbe14afd137fa6617ade862ea53d6ab0c34ddbf23e1f582bd602651dd7adf00f` |
 | `dist\TuyaLocalKey-Offline-release.apk` | `com.example.tuyalocalkey.offline.v2` | 7 / 1.6 | `092024131e8d4f49fe557a23c3942743e131d4b5e9dfdedf46ea739e6c2aa003` |
 | `dist\TuyaLocalKey-release.apk` | `com.example.tuyalocalkey` | 7 / 1.6 | `092024131e8d4f49fe557a23c3942743e131d4b5e9dfdedf46ea739e6c2aa003` |
 

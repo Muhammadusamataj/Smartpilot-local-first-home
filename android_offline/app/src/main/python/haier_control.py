@@ -27,6 +27,8 @@ from urllib.parse import urlparse
 
 from flask import Blueprint, jsonify, request
 
+import haier_hrdp_adapter as hrdp
+
 try:
     from cryptography.fernet import Fernet
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -84,7 +86,14 @@ def _valid_ip(host: str) -> str:
     return str(addr)
 
 
-def _validate_device(host, device_id, local_key, key_version=0):
+def _validate_model_id(value, label, max_length=64):
+    text = str(value or "").strip()
+    if text and not re.fullmatch(rf"[a-zA-Z0-9_.-]{{1,{max_length}}}", text):
+        raise ValueError(f"{label} contains unexpected characters")
+    return text
+
+
+def _validate_device(host, device_id, local_key, key_version=0, *, uplus_id="", product_code=""):
     host = _valid_ip(str(host))
     device_id, local_key = str(device_id).strip(), str(local_key).strip()
     if not re.fullmatch(r"[a-zA-Z0-9]{12,32}", device_id):
@@ -94,7 +103,9 @@ def _validate_device(host, device_id, local_key, key_version=0):
     if isinstance(key_version, bool) or not str(key_version).isdigit() or not 0 <= int(key_version) <= 65535:
         raise ValueError("Key version must be 0–65535")
     return {"ip": host, "device_id": device_id, "local_key": local_key,
-            "key_version": int(key_version)}
+            "key_version": int(key_version),
+            "uplus_id": _validate_model_id(uplus_id, "uPlus ID"),
+            "product_code": _validate_model_id(product_code, "Product code", 32)}
 
 
 def _atomic_private(path: Path, data: bytes):
@@ -157,7 +168,11 @@ def _summary(slot: str, entry: dict) -> dict:
     # new response verifies the device, even when we still know its name/IP.
     fresh = bool(c.get("verified") and time.time() - c.get("read_at", 0) < 120)
     result = {"id": slot, "name": SLOTS[slot], "configured": bool(entry.get("ip") and entry.get("local_key")),
-              "ip": entry.get("ip"), "mode": entry.get("mode", "manual"),
+              "ip": entry.get("ip"), "uplus_id": entry.get("uplus_id") or None,
+              "product_code": entry.get("product_code") or None,
+              "key_version": int(entry.get("key_version") or 0),
+              "extended_decoder": hrdp.available(),
+              "mode": entry.get("mode", "manual"),
               "pause_until": float(entry.get("pause_until") or 0),
               "auto_power_on": False,  # intentionally unsupported in this safe version
               "verified": fresh,
@@ -372,6 +387,18 @@ def _set_field(raw: bytes, name: str, value: int) -> bytes:
 
 
 def _read_device(entry: dict) -> dict:
+    # Prefer the vendored HA-free decoder: it recognises far more report layouts
+    # and explains key rotation. It is READ-ONLY; writes still go through the
+    # confirmed-classic allowlist below. Fall back if the library is unavailable
+    # on this interpreter or this unit only speaks the older classic layout.
+    if hrdp.available():
+        try:
+            return hrdp.read_status(entry)
+        except hrdp.LocalKeyRotation as exc:
+            raise HaierError(str(exc)) from exc
+        except (hrdp.AdapterDecodeError, OSError):
+            pass
+
     # ONE operation per session, sending read-only extended-status query.
     # It normally returns a current-status frame as well; fallback is get-all.
     with _Session(entry) as session:
@@ -442,8 +469,7 @@ def _write(slot: str, command: str, value, *, automatic=False) -> dict:
     name, encoded = _encode_command(command, value)
     now = time.time()
     with LOCK:
-        config = _load()
-        entry = config.get(slot)
+        entry = dict(_load().get(slot) or {})
         if not entry or not entry.get("ip"):
             raise ValueError("Configure this Haier AC first")
         if automatic and (entry.get("mode") != "auto" or entry.get("pause_until", 0) > now):
@@ -452,19 +478,33 @@ def _write(slot: str, command: str, value, *, automatic=False) -> dict:
             raise HaierError("Compressor protection: wait 3 minutes after power-off")
         if automatic and now - _auto_last.get(slot, 0) < 300:
             raise HaierError("Auto-Pilot command cooldown")
-        result = _write_device(entry, name, encoded)
+    # The LAN write is read-back verified, but a silent appliance must never
+    # hold the shared state lock while the socket waits.
+    result = _write_device(entry, name, encoded)
+    with LOCK:
         _last_write[slot] = time.time()
         if name == "power" and encoded == 0:
             _last_off[slot] = time.time()
         if not automatic and entry.get("mode") == "auto":
-            entry["pause_until"] = now + 7200
-            config[slot] = entry
+            config = _load()
+            config[slot]["pause_until"] = now + 7200
             _save(config)
         if automatic:
             _auto_last[slot] = now
         if result.get("confirmed"):
             _cache[slot] = {"verified": True, "read_at": time.time(), "data": result.get("status", {})}
-        return result
+    if automatic and result.get("confirmed"):
+        # Additive: surface automatic AC changes to the new event log so the
+        # phone can show a notification. Never affects the write itself.
+        try:
+            import pilot_extras
+            pilot_extras.emit(
+                "ac_auto", "Auto-Pilot changed " + SLOTS[slot],
+                "%s -> %s (verified by read-back)" % (command, str(value)),
+            )
+        except Exception:
+            pass
+    return result
 
 
 def _auto_tick(slot: str, entry: dict):
@@ -472,7 +512,9 @@ def _auto_tick(slot: str, entry: dict):
         return
     with LOCK:
         _auto_checked[slot] = time.time()
-        data = _read_device(entry)
+    # Keep the shared lock free while the AC answers; see /api/haier/poll.
+    data = _read_device(entry)
+    with LOCK:
         _auto_errors.pop(slot, None)
         _cache[slot] = {"verified": True, "read_at": time.time(), "data": data}
         if not data.get("writable") or not data.get("power_on"):
@@ -577,9 +619,27 @@ def haier_devices():
         if any(row.get("mode") == "auto" for row in current.values()):
             _ensure_auto_loop()
         return jsonify({"devices": [_summary(s, current[s]) for s in SLOTS],
-                        "notes": "Direct LAN only; unknown layouts read-only; no HA dependency"})
+                        "notes": "Direct LAN only; unknown layouts read-only; no cloud or HA dependency"})
     except HaierError as exc:
         return jsonify({"error": str(exc)}), 503
+
+
+@bp.get("/api/haier/discover")
+def haier_discover():
+    """Key-free UDISCOVERY scan; returns identities only, never stored keys."""
+    try:
+        args = getattr(request, "args", {}) or {}
+        host = str(args.get("host") or "").strip() or None
+        devices = hrdp.discover(host=host)
+        return jsonify({"ok": True, "devices": devices, "available": True,
+                        "notes": "Key-free LAN discovery; local key is still required to control a unit"})
+    except hrdp.AdapterUnavailable as exc:
+        return jsonify({"ok": False, "devices": [], "available": False,
+                        "error": str(exc)}), 503
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except OSError as exc:
+        return jsonify({"error": "Haier LAN discovery did not answer"}), 503
 
 
 @bp.post("/api/haier/config")
@@ -588,7 +648,8 @@ def haier_config():
         data = _body()
         slot = _slot(data.get("slot"))
         new = _validate_device(data.get("ip"), data.get("device_id"),
-                               data.get("local_key"), data.get("key_version", 0))
+                               data.get("local_key"), data.get("key_version", 0),
+                               uplus_id=data.get("uplus_id"), product_code=data.get("product_code"))
         with LOCK:
             config = _load()
             config[slot] = {**new, "mode": "manual", "pause_until": 0, "auto_power_on": False}
@@ -647,12 +708,15 @@ def haier_read():
     try:
         slot = _slot(_body().get("slot"))
         with LOCK:
-            entry = _load()[slot]
-            if not entry.get("ip"):
-                raise ValueError("Configure this Haier AC first")
-            data = _read_device(entry)
+            entry = dict(_load()[slot])
+        if not entry.get("ip"):
+            raise ValueError("Configure this Haier AC first")
+        # LAN I/O must not hold LOCK: one silent AC must never freeze every
+        # other endpoint (settings, schedules, Tuya controls) behind it.
+        data = _read_device(entry)
+        with LOCK:
             _cache[slot] = {"verified": True, "read_at": time.time(), "data": data}
-            return jsonify({"ok": True, "status": data, "device": _summary(slot, entry)})
+        return jsonify({"ok": True, "status": data, "device": _summary(slot, entry)})
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except (HaierError, OSError) as exc:
@@ -663,6 +727,28 @@ def haier_read():
             if old is not None:
                 _cache[slot] = {"verified": False, "read_at": old.get("read_at"), "data": None}
         return jsonify({"error": str(exc)}), 503
+
+
+@bp.post("/api/haier/poll")
+def haier_poll():
+    """Background UI refresh: fetch live status, but never revoke the last
+    verified read on a transient failure (e.g. HA briefly owning the AC's
+    single LAN session). The explicit /read endpoint stays strict."""
+    try:
+        slot = _slot(_body().get("slot"))
+        with LOCK:
+            entry = dict(_load()[slot])
+        if not entry.get("ip"):
+            raise ValueError("Configure this Haier AC first")
+        # Never hold LOCK across the LAN read; see /api/haier/read above.
+        data = _read_device(entry)
+        with LOCK:
+            _cache[slot] = {"verified": True, "read_at": time.time(), "data": data}
+        return jsonify({"ok": True, "status": data, "device": _summary(slot, entry)})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except (HaierError, OSError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
 
 
 @bp.post("/api/haier/command")
@@ -678,6 +764,73 @@ def haier_command():
         return jsonify({"error": str(exc)}), 400
     except (HaierError, OSError) as exc:
         return jsonify({"error": str(exc)}), 503
+
+
+@bp.get("/api/haier/cloud/status")
+def haier_cloud_status():
+    """Additive: is an optional cloud login saved, and when were keys last renewed?"""
+    try:
+        import haier_cloud_login
+        return jsonify(haier_cloud_login.status())
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 503
+
+
+@bp.post("/api/haier/cloud/login")
+def haier_cloud_login_endpoint():
+    """Optional account login to renew rotated local keys. LAN control stays cloudless.
+
+    Credentials are used once (or a refresh token is kept encrypted on the phone)
+    and never returned. Key values are written straight to the encrypted config.
+    """
+    try:
+        import haier_cloud_login
+        data = _body()
+        username = str(data.get("username") or "").strip()
+        password = str(data.get("password") or "")
+        result = haier_cloud_login.renew(
+            username, password,
+            remember=bool(data.get("remember", True)),
+            zone=str(data.get("zone") or ""),
+        )
+        if not result.get("ok"):
+            return jsonify(result), 502
+        return jsonify(result)
+    except haier_cloud_login.CloudLoginError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except (HaierError, OSError, ValueError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
+
+
+@bp.post("/api/haier/cloud/logout")
+def haier_cloud_logout():
+    try:
+        import haier_cloud_login
+        return jsonify(haier_cloud_login.sign_out())
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 503
+
+
+def pilot_extras_status() -> list[dict]:
+    """Read-only snapshot for per-device last-verified ON/OFF timestamps."""
+    try:
+        current = _load()
+    except Exception:
+        return []
+    rows = []
+    for slot in SLOTS:
+        summary = _summary(slot, current.get(slot, {}))
+        status = summary.get("status") or {}
+        rows.append({
+            "id": slot,
+            "name": summary.get("name"),
+            "verified": summary.get("verified"),
+            "last_read": summary.get("last_read"),
+            "power_on": status.get("power_on") if summary.get("verified") else None,
+            "target_c": status.get("target_c") if summary.get("verified") else None,
+            "mode": summary.get("mode"),
+        })
+    return rows
 
 
 # Restore a previously opted-in Auto mode on server restart, if its encrypted

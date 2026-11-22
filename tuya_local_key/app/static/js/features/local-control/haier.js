@@ -4,8 +4,10 @@ import { api, esc, toast } from "./api.js";
 import { homeTile, sortHomeItems, showOnHome } from "./home-layout.js";
 
 const slots = ["pro", "ff"];
+const POLL_MS = 60000;
 let data = [];
 let busy = new Set();
+const polling = new Set();
 const $ = id => document.getElementById(id);
 
 function value(data, key, suffix="") {
@@ -104,6 +106,36 @@ async function getDevices() {
     toast('Haier backend unavailable: '+err.message, 'warn');
   }
 }
+
+// Quiet background LAN read. The strict /read endpoint is still used by the
+// Refresh button; /poll keeps the last good state if the AC is briefly busy.
+async function pollSlot(slot) {
+  if (polling.has(slot) || busy.has(slot) || document.hidden) return;
+  polling.add(slot);
+  try {
+    const response = await api('/api/haier/poll', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({slot}), timeout: 18000
+    });
+    if (response.ok && response.device) {
+      data = data.map(device => device.id === slot ? {...device, ...response.device} : device);
+      draw();
+    }
+  } catch (err) {
+    // Silent by design: a transient LAN conflict must not disable controls or
+    // spam the user. The next poll retries; /devices still enforces freshness.
+  } finally {
+    polling.delete(slot);
+  }
+}
+async function pollAll() {
+  if (document.hidden || document.querySelector('.haier-config:not([hidden]) form')) return;
+  // ACs accept one local session at a time, so poll sequentially.
+  for (const device of data) {
+    if (device.configured) await pollSlot(device.id);
+  }
+}
+
 async function send(slot, path, payload = {}) {
   if (busy.has(slot)) return;
   busy.add(slot);
@@ -126,15 +158,171 @@ function setupCard(slot, root) {
   panel.innerHTML = `<form data-haier-form="${esc(slot)}" autocomplete="off">
      <h4>Direct LAN connection — ${esc(known?.name || 'Haier')}</h4>
      <p>Your key is encrypted on the app server / phone and is not returned to this page. Never share screenshots with the key visible.</p>
+     <button class="haier-action" type="button" data-haier-scan>Scan LAN for Haier devices</button>
+     <div class="haier-discover" aria-live="polite"></div>
      <label>LAN IPv4 address<input name="ip" required placeholder="192.168.1.50" value="${esc(known?.ip||'')}" inputmode="decimal"></label>
-     <label>Wi-Fi module Device ID<input name="device_id" required maxlength="32" placeholder="12-32 character module ID"></label>
+     <label>Wi-Fi module Device ID<input name="device_id" required maxlength="32" placeholder="12-32 character module ID" value="${esc(known?.device_id||'')}"></label>
      <label>Haier Local Key (32 hex)<input name="local_key" required type="password" maxlength="32" placeholder="Paste from Haier local key sensor"></label>
-     <label>Local Key version<input name="key_version" type="number" min="0" max="65535" value="0"></label>
-     <p class="haier-warning">Save resets this AC to Manual mode. Don't run HA's HaiSmart integration polling the same AC during direct-LAN tests.</p>
+     <label>Local Key version<input name="key_version" type="number" min="0" max="65535" value="${esc(known?.key_version||0)}"></label>
+     <input type="hidden" name="uplus_id" value="${esc(known?.uplus_id||'')}">
+     <input type="hidden" name="product_code" value="${esc(known?.product_code||'')}">
+     <p class="haier-warning">Scan fills the IP and module ID. You still need the 32-hex local key. Save resets this AC to Manual mode. Don't run HA's HaiSmart integration polling the same AC during direct-LAN tests.</p>
      <button class="haier-action important" type="submit">Save encrypted connection</button>
    </form>`;
 }
+
+async function scanLan(cardRoot) {
+  const out = cardRoot.querySelector('.haier-config .haier-discover');
+  if (!out) return;
+  out.innerHTML = '<p class="haier-warning">Scanning local network…</p>';
+  try {
+    const response = await api('/api/haier/discover', {timeout: 12000});
+    const found = response.devices || [];
+    out.innerHTML = found.length
+      ? `<p class="haier-warning">Found ${found.length} Haier device(s). Tap Use, then paste the local key.</p>`
+        + found.map(device => `<div class="haier-discover-row"><span>${esc(device.ip)} · ${esc(device.device_id)}${device.cloud_state_name ? ' · cloud '+esc(device.cloud_state_name) : ''}</span><button class="haier-action" type="button" data-haier-use data-ip="${esc(device.ip)}" data-device-id="${esc(device.device_id)}" data-uplus-id="${esc(device.uplus_id||'')}">Use</button></div>`).join('')
+      : `<p class="haier-warning">No devices answered. Broadcast discovery needs UDP 7083; enter the LAN details manually if your network blocks it.</p>`;
+  } catch (err) {
+    out.innerHTML = `<p class="haier-warning">Scan failed: ${esc(err.message)}. You can still enter the details manually.</p>`;
+  }
+}
+
+function useDiscovered(button) {
+  const form = button.closest('form');
+  if (!form) return;
+  const set = (name, value) => { const field = form.querySelector(`[name="${name}"]`); if (field) field.value = value; };
+  set('ip', button.dataset.ip || '');
+  set('device_id', button.dataset.deviceId || '');
+  set('uplus_id', button.dataset.uplusId || '');
+  toast('Haier device details filled', 'ok');
+}
+// Optional HaiSmart login. It exists ONLY to renew a rotated local key;
+// direct-LAN control never needs it. No password or key is kept in the page.
+let cloudStatus = null;
+let cloudMessage = '';
+
+function cloudCardHtml() {
+  const logged = !!(cloudStatus && cloudStatus.logged_in);
+  const slots = (cloudStatus && cloudStatus.slots) || [];
+  // Haier looks the account up by its registration dialling code. Sending "0"
+  // returns error 30032, which reads like a wrong password.
+  const zoneDefault = (cloudStatus && cloudStatus.zone && cloudStatus.zone !== '0')
+    ? cloudStatus.zone : '92';
+  const saved = logged
+    ? `<div class="haier-cloud-saved">
+        ${cloudStatus.last_renew ? `<p class="note">Last renewed: ${esc(cloudStatus.last_renew)}</p>` : ''}
+        <button class="haier-action important" type="button" data-haier-cloud-renew>Renew keys now</button>
+        <button class="haier-action" type="button" data-haier-cloud-switch>Use another account</button>
+        <button class="haier-action" type="button" data-haier-cloud-logout>Sign out</button>
+      </div>`
+    : `<form data-haier-cloud-form autocomplete="off">
+        <label>Haier account (email / phone)<input name="username" required autocomplete="username" placeholder="you@example.com"></label>
+        <label>Password<input name="password" required type="password" autocomplete="current-password"></label>
+        <label>Country code<input name="zone" inputmode="numeric" list="haier-zones" value="${esc(zoneDefault)}" placeholder="92" required></label>
+        <datalist id="haier-zones">
+          <option value="92">Pakistan (+92)</option><option value="91">India (+91)</option>
+          <option value="65">Singapore (+65)</option><option value="66">Thailand (+66)</option>
+          <option value="60">Malaysia (+60)</option><option value="971">UAE (+971)</option>
+          <option value="44">UK (+44)</option><option value="1">US / Canada (+1)</option>
+        </datalist>
+        <p class="note">Dialling code your Haier account was registered with. Wrong code → error 30032 (looks like a bad password).</p>
+        <label class="haier-cloud-remember"><input type="checkbox" name="remember" checked> Remember login on this phone</label>
+        <button class="haier-action important" type="submit">Login &amp; renew keys</button>
+      </form>`;
+  return `<section class="panel haier-cloud" data-haier-cloud-card>
+    <div class="haier-intro"><div><h3>Renew local key (optional)</h3><p>Only needed if Haier rotates a key · ACs still run offline</p></div><span class="haier-tag">CLOUD LOGIN</span></div>
+    ${slots.length ? `<p class="note">${slots.map(s => esc(s.id.toUpperCase()) + ' · key v' + esc(String(s.key_version))).join(' &nbsp;·&nbsp; ')}</p>` : ''}
+    <p class="haier-warning" data-cloud-msg role="status">${esc(cloudMessage)}</p>
+    ${saved}
+    <p class="note">A fresh key is written encrypted on the phone and never shown here. Direct LAN control still works with the internet off.</p>
+  </section>`;
+}
+
+function drawCloud() {
+  const mount = document.querySelector('[data-haier-cloud-login]');
+  if (mount) mount.innerHTML = cloudCardHtml();
+}
+
+async function getCloudStatus() {
+  try {
+    cloudStatus = await api('/api/haier/cloud/status');
+  } catch (err) {
+    cloudStatus = {logged_in: false, slots: []};
+  }
+  drawCloud();
+}
+
+function cloudResultMessage(result) {
+  const parts = [];
+  const renewed = Object.entries(result.renewed || {});
+  if (renewed.length) parts.push('Key renewed: ' + renewed.map(([s, v]) => s.toUpperCase() + ' v' + v).join(', '));
+  if (result.error) parts.push(result.error);
+  for (const [slot, message] of Object.entries(result.errors || {})) parts.push(slot.toUpperCase() + ': ' + message);
+  return parts.join(' · ') || 'Renewal finished';
+}
+
+async function submitCloudRenew(payload) {
+  cloudMessage = 'Signing in and renewing keys…';
+  const live = document.querySelector('[data-cloud-msg]');
+  if (live) live.textContent = cloudMessage;
+  try {
+    const result = await api('/api/haier/cloud/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload), timeout: 40000
+    });
+    cloudMessage = cloudResultMessage(result);
+    if (result.ok) toast('Haier local key renewed ✓', 'ok');
+    else toast(cloudMessage, 'warn');
+  } catch (err) {
+    cloudMessage = err.message;
+    toast(err.message, 'error');
+  } finally {
+    await getCloudStatus();
+  }
+}
+
+function cloudFormHandler(event) {
+  const form = event.target.closest('[data-haier-cloud-form]');
+  if (!form) return false;
+  event.preventDefault();
+  const fields = new FormData(form);
+  const payload = {
+    username: String(fields.get('username') || '').trim(),
+    password: String(fields.get('password') || ''),
+    zone: String(fields.get('zone') || ''),
+    remember: !!fields.get('remember')
+  };
+  const submit = form.querySelector('button[type=submit]');
+  if (submit) submit.disabled = true;
+  submitCloudRenew(payload);
+  return true;
+}
+
+async function cloudActionHandler(button) {
+  if (button.hasAttribute('data-haier-cloud-switch')) {
+    cloudMessage = '';
+    cloudStatus = {...(cloudStatus || {}), logged_in: false};
+    drawCloud();
+    return;
+  }
+  if (button.hasAttribute('data-haier-cloud-logout')) {
+    try {
+      await api('/api/haier/cloud/logout', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+      cloudMessage = 'Signed out. Direct LAN control is unchanged.';
+    } catch (err) {
+      cloudMessage = err.message;
+    }
+    await getCloudStatus();
+    return;
+  }
+  if (button.hasAttribute('data-haier-cloud-renew')) {
+    await submitCloudRenew({});
+  }
+}
+
 async function handler(event) {
+  const cloudAction = event.target.closest('[data-haier-cloud-renew],[data-haier-cloud-switch],[data-haier-cloud-logout]');
+  if (cloudAction) { await cloudActionHandler(cloudAction); return; }
   const button = event.target.closest('button');
   // A Home summary navigates to the *correct* AC, not the top of a long page.
   const focusedSlot = button?.dataset?.haierFocus;
@@ -149,6 +337,8 @@ async function handler(event) {
   if (!button || !cardRoot) return;
   const slot = cardRoot.dataset.haierSlot;
   if (button.hasAttribute('data-haier-setup')) { setupCard(slot,cardRoot); return; }
+  if (button.hasAttribute('data-haier-scan')) { await scanLan(cardRoot); return; }
+  if (button.hasAttribute('data-haier-use')) { useDiscovered(button); return; }
   if (button.hasAttribute('data-haier-read')) { await send(slot,'read'); return; }
   if (button.hasAttribute('data-haier-mode')) {
     const mode = button.dataset.haierMode;
@@ -164,20 +354,25 @@ async function handler(event) {
   }
 }
 async function formHandler(event) {
+  if (cloudFormHandler(event)) return;
   const form=event.target.closest('[data-haier-form]');
   if(!form) return;
   event.preventDefault();
   const slot=form.dataset.haierForm;
   const fields=new FormData(form);
-  const payload={ip:String(fields.get('ip')||'').trim(),device_id:String(fields.get('device_id')||'').trim(),local_key:String(fields.get('local_key')||'').trim(),key_version:Number(fields.get('key_version')||0)};
+  const payload={ip:String(fields.get('ip')||'').trim(),device_id:String(fields.get('device_id')||'').trim(),local_key:String(fields.get('local_key')||'').trim(),key_version:Number(fields.get('key_version')||0),uplus_id:String(fields.get('uplus_id')||'').trim(),product_code:String(fields.get('product_code')||'').trim()};
   try { await send(slot,'config',payload); }
   finally { form.querySelector('[name=local_key]').value=''; }
 }
 export function mountHaier() {
   document.addEventListener('click',handler);
   document.addEventListener('submit',formHandler);
+  getCloudStatus();
   getDevices();
-  // Poll only while the page is visible. A background daemon handles Auto when enabled.
+  // First fresh read soon after open, then every minute while visible. A
+  // background daemon handles Auto when enabled, even with the phone closed.
+  setTimeout(pollAll, 3000);
+  setInterval(pollAll, POLL_MS);
   setInterval(()=>{if(!document.hidden) getDevices();},45000);
 }
 mountHaier();

@@ -28,9 +28,12 @@ const state = {
   editorMounted: false,
   detailDeviceId: "",
   failedReads: new Map(),
+  queuedReads: new Set(),
 };
 
 const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+// 2 concurrent LAN reads on Android is deliberate: more sockets make the Vivo
+// device reads slow and unreliable. Extra reads wait in the bounded queue.
 const limiter = new LimitedConcurrency(mobile ? 2 : 3);
 
 // Presentation-only classification. These IDs are never sent to the server or
@@ -227,10 +230,13 @@ function markReadOk(cards) {
 // Retry STATUS READS only (never ON/OFF writes), and keep every device isolated.
 async function readLiveStatusWithRetry(deviceId, isCurrent) {
   let lastError;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  // Keep a slow or silent device from holding the UI hostage: the LAN driver
+  // already times out in ~2s, so two short attempts are plenty. Config errors
+  // (key/protocol) are not transient and stop after the first answer.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     if (!isCurrent()) return null;
     try {
-      const data = await api(`/api/local/status?id=${encodeURIComponent(deviceId)}`, { timeout: 12000 });
+      const data = await api(`/api/local/status?id=${encodeURIComponent(deviceId)}`, { timeout: 6000 });
       if (data.status === "ok" && Array.isArray(data.values) && data.values.length > 0) {
         return data;
       }
@@ -241,8 +247,8 @@ async function readLiveStatusWithRetry(deviceId, isCurrent) {
       lastError = error;
       const transient = /busy|timeout|no.values|empty|unreach|connect|network|fetch|initializ|not.ready|timed.out|refused|econn/i
         .test(String(error.code || "") + " " + String(error.message || ""));
-      if (!transient || attempt === 2 || !isCurrent()) break;
-      await new Promise(resolve => setTimeout(resolve, 1100 * (attempt + 1)));
+      if (!transient || attempt === 1 || !isCurrent()) break;
+      await new Promise(resolve => setTimeout(resolve, 600 * (attempt + 1)));
     }
   }
   throw lastError || new Error("No verified live status");
@@ -423,15 +429,21 @@ function renderHomeQuickDevices(devices) {
   for (const device of ordered) {
     const verified = device.verified === true;
     const id = String(device.id);
+    // Same information architecture as the Devices tab: identity on the left
+    // (icon, name, room, readable status pill), power action on the right.
+    const status = verified ? "Online" : statusLabel(device);
+    const statusKind = verified ? "online" : (device.lan_known ? "stale" : "offline");
     // The navigation button and inline power button are siblings:
     // never nest an interactive toggle inside another button.
     const markup = `<div class="pilot-home-device-card">
       <button type="button" class="pilot-device-mini${verified ? ' is-verified' : ''}"
         data-device-id="${esc(id)}" data-search="${esc(deviceSearchText(device))}"
         aria-label="Open ${esc(device.name)} details">
-        <span class="pilot-device-mini-head"><span class="pilot-mini-icon" aria-hidden="true">${deviceIcon(device).svg}</span>
-        <span class="pilot-mini-signal ${verified?'online':''}">${verified?'ONLINE':esc(statusLabel(device))}</span></span>
-        <strong>${esc(device.name)}</strong><small>${esc(roomName(device))}</small>
+        <span class="pilot-device-mini-head">
+          <span class="pilot-mini-icon" aria-hidden="true">${deviceIcon(device).svg}</span>
+          <span class="pilot-mini-copy"><strong>${esc(device.name)}</strong><small>${esc(roomName(device))}</small></span>
+        </span>
+        <span class="pilot-mini-signal ${statusKind}"><i aria-hidden="true"></i>${esc(status)}</span>
       </button>
       <div class="pilot-home-inline-power" data-quick-power></div>
     </div>`;
@@ -594,6 +606,30 @@ function uniqueCards() {
   });
 }
 
+// One queued read per device. `inFlight` alone is not enough because queued
+// tasks have not started yet; without this a cold start can enqueue the same
+// device twice (once from load() and once from the explicit refresh sweep).
+function queueRefresh(card, silent = false) {
+  const id = card?.dataset.id;
+  if (!id || state.queuedReads.has(id) || state.inFlight.has(id)
+      || commandsInFlight.has(String(id))) return;
+  state.queuedReads.add(id);
+  limiter.queue(async () => {
+    try {
+      await refresh(id, card, silent);
+    } finally {
+      state.queuedReads.delete(id);
+    }
+  });
+}
+
+// Cold start, reopen and foreground resume must ask every saved device for a
+// fresh live status — including ones not yet verified — without dropping the
+// extras when the 2-read Android limit is busy.
+function refreshAllDevices(silent = false) {
+  for (const card of uniqueCards()) queueRefresh(card, silent);
+}
+
 function renderAll({ poll = false } = {}) {
   state.renderGeneration += 1;
   const filtered = state.devices.filter(matches);
@@ -615,9 +651,7 @@ function renderAll({ poll = false } = {}) {
     $(id)?.setAttribute("aria-busy", "false");
   }
   if (poll) {
-    for (const card of pollableCards()) {
-      limiter.run(() => refresh(card.dataset.id, card));
-    }
+    for (const card of pollableCards()) queueRefresh(card);
   }
 }
 
@@ -639,7 +673,7 @@ function applyFilter() {
 
 function setView(view) {
   // Backwards-compatible routes: older Home cards and deep links still work.
-  view = ({ac:'autopilot', scenes:'autopilot', advanced:'settings'})[view] || view;
+  view = ({ac:'autopilot', advanced:'settings'})[view] || view;
   if (isHomeEditing() && view !== 'home') setHomeEditing(false);
   state.view = view;
   for (const button of document.querySelectorAll("[data-view]")) {
@@ -650,7 +684,7 @@ function setView(view) {
   for (const section of document.querySelectorAll("[data-view-panel]")) {
     section.hidden = section.dataset.viewPanel !== view;
   }
-  if (view === "autopilot" && !state.editorMounted && $("sceneEditor")) {
+  if (view === "scenes" && !state.editorMounted && $("sceneEditor")) {
     mountSceneEditor($("sceneEditor"), {
       devices: state.devices,
       editingId: "",
@@ -777,9 +811,11 @@ function renderIpList(devices) {
     const editor = document.createElement("form");
     editor.className = "device-edit";
     editor.hidden = true;
-    const currentVersion = String(device.version || "3.4");
-    const versionOptions = ["3.5", "3.4", "3.3", "3.2", "3.1"]
-      .map(v => '<option' + (v === currentVersion ? " selected" : "") + '>' + v + '</option>').join("");
+    const currentVersion = String(device.version || "auto");
+    const autoSelected = currentVersion === "auto" ? " selected" : "";
+    const versionOptions = '<option value="auto"' + autoSelected + '>Auto (detect)</option>' +
+      ["3.5", "3.4", "3.3", "3.2", "3.1"]
+        .map(v => '<option' + (v === currentVersion ? " selected" : "") + '>' + v + '</option>').join("");
     const gatewayHint = device.sub || device.gateway
       ? "Gateway device: IP/version apply to its gateway."
       : "Leave the new key blank to keep the saved key.";
@@ -1014,7 +1050,7 @@ function schedulePoll() {
       for (const card of pollableCards()) {
         const next = Number(state.retries.get(card.dataset.id) || 0);
         if (Date.now() < next) continue;
-        limiter.run(() => refresh(card.dataset.id, card, true));
+        queueRefresh(card, true);
       }
     }
     schedulePoll();
@@ -1092,15 +1128,18 @@ function initEvents() {
     renderAll();
   });
   $("refreshAll")?.addEventListener("click", () => {
-    for (const card of pollableCards()) limiter.run(() => refresh(card.dataset.id, card));
+    for (const card of uniqueCards()) queueRefresh(card);
   });
   $("saveOrganize")?.addEventListener("click", saveOrganize);
   $("autoRefresh")?.addEventListener("change", schedulePoll);
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) {
-      for (const card of pollableCards().slice(0, 8)) limiter.run(() => refresh(card.dataset.id, card, true));
-    }
+    if (!document.hidden) refreshAllDevices(true);
     schedulePoll();
+  });
+  // Reopening from the Android back stack can restore a cached page without a
+  // fresh visibilitychange; pageshow covers that path too.
+  window.addEventListener("pageshow", event => {
+    if (event.persisted) refreshAllDevices(true);
   });
   window.addEventListener("online", () => { toast("Network changed — checking local devices", "ok"); load(true); schedulePoll(); });
   window.addEventListener("offline", () => { toast("Internet offline — local Wi-Fi checks continue", "warn"); schedulePoll(); });
@@ -1141,6 +1180,9 @@ async function boot() {
   initEvents();
   setView("home");
   await load();
+  // load() already refreshes verified cards; this sweep also covers saved
+  // devices that have never answered, so all five get one fresh read.
+  refreshAllDevices(true);
   schedulePoll();
 }
 

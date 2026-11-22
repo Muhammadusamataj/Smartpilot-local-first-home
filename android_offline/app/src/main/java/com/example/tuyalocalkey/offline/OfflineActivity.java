@@ -2,7 +2,9 @@ package com.example.tuyalocalkey.offline;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlarmManager;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ContentValues;
@@ -16,6 +18,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.text.method.HideReturnsTransformationMethod;
@@ -37,6 +40,8 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -54,6 +59,8 @@ public class OfflineActivity extends Activity {
     static final String KEY_PASSWORD = "password";
 
     private WebView web;
+    /** Mirrored on the main thread; JS bridges run on JavaBridge and must never touch WebView. */
+    private volatile String currentUrl = "";
     private TextView status;
     private Button remoteSettings;
     private CheckBox remoteToggle;
@@ -172,6 +179,11 @@ public class OfflineActivity extends Activity {
             }
 
             @Override
+            public void onPageFinished(WebView view, String url) {
+                currentUrl = url == null ? "" : url;
+            }
+
+            @Override
             public void onReceivedHttpAuthRequest(WebView view, HttpAuthHandler authHandler,
                                                   String host, String realm) {
                 if (remoteEnabled()
@@ -186,6 +198,7 @@ public class OfflineActivity extends Activity {
         });
 
         web.addJavascriptInterface(new QrSaver(), "TuyaNative");
+        web.addJavascriptInterface(new PilotBridge(), "PilotNative");
         web.setDownloadListener(new DownloadListener() {
             @Override
             public void onDownloadStart(String url, String userAgent, String disposition,
@@ -199,6 +212,7 @@ public class OfflineActivity extends Activity {
         });
 
         ensureNotificationPermission();
+        scheduleAlarm();
         startLocalService();
         waitForServer();
     }
@@ -347,6 +361,7 @@ public class OfflineActivity extends Activity {
 
     private boolean handleNavigation(String url) {
         if (isTrusted(Uri.parse(url))) {
+            currentUrl = url;
             web.loadUrl(url);
             return true;
         }
@@ -389,7 +404,7 @@ public class OfflineActivity extends Activity {
         }
         ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
         if (clipboard != null) {
-            clipboard.setPrimaryClip(ClipData.newPlainText("Tuya Local Key", details));
+            clipboard.setPrimaryClip(ClipData.newPlainText("Smart Pilot Local", details));
         }
         Toast.makeText(this, R.string.remote_copied, Toast.LENGTH_SHORT).show();
     }
@@ -398,7 +413,7 @@ public class OfflineActivity extends Activity {
     private void applyWebViewAuth(String user, String password) {
         WebViewDatabase.getInstance(getApplicationContext()).clearHttpAuthUsernamePassword();
         web.clearCache(true);
-        web.setHttpAuthUsernamePassword("127.0.0.1", "Tuya Local Key", user, password);
+        web.setHttpAuthUsernamePassword("127.0.0.1", "Smart Pilot Local", user, password);
     }
 
     private void updateRemoteUrl(String user, String password) {
@@ -457,6 +472,7 @@ public class OfflineActivity extends Activity {
                         String password = fieldText(remotePass);
                         applyWebViewAuth(user.isEmpty() ? "tuya" : user, password);
                     }
+                    currentUrl = LOCAL_URL;
                     web.loadUrl(LOCAL_URL);
                 } else if (++attempts > 200) {
                     String error = LocalControlService.getLastError();
@@ -470,6 +486,24 @@ public class OfflineActivity extends Activity {
         }, "tuya-probe").start();
     }
 
+    /** 15-minute alarm keeps scene schedules ticking after the app is backgrounded. */
+    private void scheduleAlarm() {
+        try {
+            Intent intent = new Intent(this, ScheduleReceiver.class);
+            intent.setAction(ScheduleReceiver.TICK);
+            PendingIntent pending = PendingIntent.getBroadcast(this, 1002, intent,
+                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            AlarmManager alarm = (AlarmManager) getSystemService(ALARM_SERVICE);
+            if (alarm != null) {
+                long interval = 15 * 60 * 1000L;
+                alarm.setInexactRepeating(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        SystemClock.elapsedRealtime() + interval, interval, pending);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Could not schedule scene alarm", e);
+        }
+    }
+
     private static boolean portOpen() {
         try (Socket socket = new Socket()) {
             socket.connect(new InetSocketAddress("127.0.0.1", 8000), 250);
@@ -479,11 +513,119 @@ public class OfflineActivity extends Activity {
         }
     }
 
+    /** Native update controls exposed only to the trusted local page. */
+    public class PilotBridge {
+        private boolean trusted() {
+            return isTrusted(Uri.parse(currentUrl));
+        }
+
+        private void callback(java.util.function.Consumer<UpdateManager.Callback> action) {
+            UpdateManager.Callback wrapped = result -> {
+                String json = result == null ? "{}" : result.toString();
+                handler.post(() -> web.evaluateJavascript(
+                        "window.pilotUpdateResult && window.pilotUpdateResult(" +
+                        JSONObject.quote(json) + ")", null));
+            };
+            action.accept(wrapped);
+        }
+
+        @JavascriptInterface
+        public String updateState() {
+            return trusted() ? UpdateManager.state(OfflineActivity.this) : "{\"platform\":\"android\"}";
+        }
+
+        @JavascriptInterface
+        public void checkUpdate() {
+            if (trusted()) callback(done -> UpdateManager.check(OfflineActivity.this, done));
+        }
+
+        @JavascriptInterface
+        public void installUpdate() {
+            if (trusted()) callback(done -> UpdateManager.install(OfflineActivity.this, done));
+        }
+
+        @JavascriptInterface
+        public void rollback() {
+            if (trusted()) callback(done -> UpdateManager.rollback(OfflineActivity.this, done));
+        }
+
+        @JavascriptInterface
+        public void openInstallPermission() {
+            if (trusted()) UpdateManager.openInstallPermission(OfflineActivity.this);
+        }
+
+        /** Family hub setup: reveal the existing opt-in Direct mode panel. */
+        @JavascriptInterface
+        public void openDirectSettings() {
+            if (trusted()) runOnUiThread(() -> setPanelOpen(true));
+        }
+
+        /** Save a generated file to Downloads. WebView cannot save blob: URLs. */
+        @JavascriptInterface
+        public void saveDownload(String name, String base64, String mime) {
+            if (!trusted()) {
+                Log.w(TAG, "Blocked download save from untrusted origin");
+                return;
+            }
+            try {
+                String data = base64 == null ? "" : base64;
+                int comma = data.indexOf(',');
+                if (comma >= 0) data = data.substring(comma + 1);
+                byte[] bytes = Base64.decode(data, Base64.DEFAULT);
+                if (bytes.length == 0) throw new IllegalStateException("empty download");
+
+                String safe = (name == null || !name.matches("[A-Za-z0-9._-]+"))
+                        ? "smart-pilot-download.bin" : name;
+                final String fileName = safe;
+                String type = (mime == null || mime.isEmpty())
+                        ? "application/octet-stream" : mime;
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
+                    values.put(MediaStore.Downloads.MIME_TYPE, type);
+                    values.put(MediaStore.Downloads.RELATIVE_PATH,
+                            Environment.DIRECTORY_DOWNLOADS + "/SmartPilot");
+                    values.put(MediaStore.Downloads.IS_PENDING, 1);
+                    Uri uri = getContentResolver().insert(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                    if (uri == null) throw new IllegalStateException("Downloads insert failed");
+                    try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                        out.write(bytes);
+                    }
+                    values.clear();
+                    values.put(MediaStore.Downloads.IS_PENDING, 0);
+                    getContentResolver().update(uri, values, null, null);
+                } else {
+                    java.io.File dir = new java.io.File(
+                            Environment.getExternalStoragePublicDirectory(
+                                    Environment.DIRECTORY_DOWNLOADS), "SmartPilot");
+                    if (!dir.exists() && !dir.mkdirs()) {
+                        throw new IllegalStateException("could not create Downloads/SmartPilot");
+                    }
+                    try (java.io.FileOutputStream out =
+                                 new java.io.FileOutputStream(new java.io.File(dir, fileName))) {
+                        out.write(bytes);
+                    }
+                }
+
+                final long size = bytes.length;
+                handler.post(() -> Toast.makeText(OfflineActivity.this,
+                        "Saved to Downloads/SmartPilot/" + fileName + " (" + size + " bytes)",
+                        Toast.LENGTH_LONG).show());
+            } catch (Exception e) {
+                Log.e(TAG, "Could not save download", e);
+                handler.post(() -> Toast.makeText(OfflineActivity.this,
+                        "Save failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        }
+    }
+
     /** JavaScript bridge used by the QR screen to save the PNG to Gallery. */
     public class QrSaver {
         @JavascriptInterface
         public void saveQr(String dataUrl) {
-            if (!isTrusted(Uri.parse(web.getUrl() == null ? "" : web.getUrl()))) {
+            if (!isTrusted(Uri.parse(currentUrl))) {
                 Log.w(TAG, "Blocked QR save from untrusted origin");
                 return;
             }
