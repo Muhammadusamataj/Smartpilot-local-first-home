@@ -227,10 +227,13 @@ function markReadOk(cards) {
 // Retry STATUS READS only (never ON/OFF writes), and keep every device isolated.
 async function readLiveStatusWithRetry(deviceId, isCurrent) {
   let lastError;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  // Keep a slow or silent device from holding the UI hostage: the LAN driver
+  // already times out in ~2s, so two short attempts are plenty. Config errors
+  // (key/protocol) are not transient and stop after the first answer.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     if (!isCurrent()) return null;
     try {
-      const data = await api(`/api/local/status?id=${encodeURIComponent(deviceId)}`, { timeout: 12000 });
+      const data = await api(`/api/local/status?id=${encodeURIComponent(deviceId)}`, { timeout: 6000 });
       if (data.status === "ok" && Array.isArray(data.values) && data.values.length > 0) {
         return data;
       }
@@ -241,8 +244,8 @@ async function readLiveStatusWithRetry(deviceId, isCurrent) {
       lastError = error;
       const transient = /busy|timeout|no.values|empty|unreach|connect|network|fetch|initializ|not.ready|timed.out|refused|econn/i
         .test(String(error.code || "") + " " + String(error.message || ""));
-      if (!transient || attempt === 2 || !isCurrent()) break;
-      await new Promise(resolve => setTimeout(resolve, 1100 * (attempt + 1)));
+      if (!transient || attempt === 1 || !isCurrent()) break;
+      await new Promise(resolve => setTimeout(resolve, 600 * (attempt + 1)));
     }
   }
   throw lastError || new Error("No verified live status");

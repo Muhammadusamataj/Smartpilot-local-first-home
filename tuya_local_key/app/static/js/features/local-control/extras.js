@@ -225,7 +225,9 @@ function init() {
   });
 
   window.pilotUpdateResult = updateResult;
-  refreshAll();
+  // Defer the five auxiliary settings reads so they do not compete with the
+  // first device status reads (the visible content) on a phone's WebView.
+  setTimeout(refreshAll, 2500);
   setInterval(() => {
     const panel = document.querySelector('[data-view-panel="settings"]');
     if (panel && !panel.hidden) refreshAll();
