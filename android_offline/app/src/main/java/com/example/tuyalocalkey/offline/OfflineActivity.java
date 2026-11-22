@@ -59,6 +59,8 @@ public class OfflineActivity extends Activity {
     static final String KEY_PASSWORD = "password";
 
     private WebView web;
+    /** Mirrored on the main thread; JS bridges run on JavaBridge and must never touch WebView. */
+    private volatile String currentUrl = "";
     private TextView status;
     private Button remoteSettings;
     private CheckBox remoteToggle;
@@ -174,6 +176,11 @@ public class OfflineActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return handleNavigation(request.getUrl().toString());
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                currentUrl = url == null ? "" : url;
             }
 
             @Override
@@ -354,6 +361,7 @@ public class OfflineActivity extends Activity {
 
     private boolean handleNavigation(String url) {
         if (isTrusted(Uri.parse(url))) {
+            currentUrl = url;
             web.loadUrl(url);
             return true;
         }
@@ -464,6 +472,7 @@ public class OfflineActivity extends Activity {
                         String password = fieldText(remotePass);
                         applyWebViewAuth(user.isEmpty() ? "tuya" : user, password);
                     }
+                    currentUrl = LOCAL_URL;
                     web.loadUrl(LOCAL_URL);
                 } else if (++attempts > 200) {
                     String error = LocalControlService.getLastError();
@@ -507,7 +516,7 @@ public class OfflineActivity extends Activity {
     /** Native update controls exposed only to the trusted local page. */
     public class PilotBridge {
         private boolean trusted() {
-            return isTrusted(Uri.parse(web.getUrl() == null ? "" : web.getUrl()));
+            return isTrusted(Uri.parse(currentUrl));
         }
 
         private void callback(java.util.function.Consumer<UpdateManager.Callback> action) {
@@ -550,7 +559,7 @@ public class OfflineActivity extends Activity {
     public class QrSaver {
         @JavascriptInterface
         public void saveQr(String dataUrl) {
-            if (!isTrusted(Uri.parse(web.getUrl() == null ? "" : web.getUrl()))) {
+            if (!isTrusted(Uri.parse(currentUrl))) {
                 Log.w(TAG, "Blocked QR save from untrusted origin");
                 return;
             }

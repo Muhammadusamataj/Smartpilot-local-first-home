@@ -469,8 +469,7 @@ def _write(slot: str, command: str, value, *, automatic=False) -> dict:
     name, encoded = _encode_command(command, value)
     now = time.time()
     with LOCK:
-        config = _load()
-        entry = config.get(slot)
+        entry = dict(_load().get(slot) or {})
         if not entry or not entry.get("ip"):
             raise ValueError("Configure this Haier AC first")
         if automatic and (entry.get("mode") != "auto" or entry.get("pause_until", 0) > now):
@@ -479,30 +478,33 @@ def _write(slot: str, command: str, value, *, automatic=False) -> dict:
             raise HaierError("Compressor protection: wait 3 minutes after power-off")
         if automatic and now - _auto_last.get(slot, 0) < 300:
             raise HaierError("Auto-Pilot command cooldown")
-        result = _write_device(entry, name, encoded)
+    # The LAN write is read-back verified, but a silent appliance must never
+    # hold the shared state lock while the socket waits.
+    result = _write_device(entry, name, encoded)
+    with LOCK:
         _last_write[slot] = time.time()
         if name == "power" and encoded == 0:
             _last_off[slot] = time.time()
         if not automatic and entry.get("mode") == "auto":
-            entry["pause_until"] = now + 7200
-            config[slot] = entry
+            config = _load()
+            config[slot]["pause_until"] = now + 7200
             _save(config)
         if automatic:
             _auto_last[slot] = now
         if result.get("confirmed"):
             _cache[slot] = {"verified": True, "read_at": time.time(), "data": result.get("status", {})}
-        if automatic and result.get("confirmed"):
-            # Additive: surface automatic AC changes to the new event log so the
-            # phone can show a notification. Never affects the write itself.
-            try:
-                import pilot_extras
-                pilot_extras.emit(
-                    "ac_auto", "Auto-Pilot changed " + SLOTS[slot],
-                    "%s -> %s (verified by read-back)" % (command, str(value)),
-                )
-            except Exception:
-                pass
-        return result
+    if automatic and result.get("confirmed"):
+        # Additive: surface automatic AC changes to the new event log so the
+        # phone can show a notification. Never affects the write itself.
+        try:
+            import pilot_extras
+            pilot_extras.emit(
+                "ac_auto", "Auto-Pilot changed " + SLOTS[slot],
+                "%s -> %s (verified by read-back)" % (command, str(value)),
+            )
+        except Exception:
+            pass
+    return result
 
 
 def _auto_tick(slot: str, entry: dict):
@@ -510,7 +512,9 @@ def _auto_tick(slot: str, entry: dict):
         return
     with LOCK:
         _auto_checked[slot] = time.time()
-        data = _read_device(entry)
+    # Keep the shared lock free while the AC answers; see /api/haier/poll.
+    data = _read_device(entry)
+    with LOCK:
         _auto_errors.pop(slot, None)
         _cache[slot] = {"verified": True, "read_at": time.time(), "data": data}
         if not data.get("writable") or not data.get("power_on"):
@@ -704,12 +708,15 @@ def haier_read():
     try:
         slot = _slot(_body().get("slot"))
         with LOCK:
-            entry = _load()[slot]
-            if not entry.get("ip"):
-                raise ValueError("Configure this Haier AC first")
-            data = _read_device(entry)
+            entry = dict(_load()[slot])
+        if not entry.get("ip"):
+            raise ValueError("Configure this Haier AC first")
+        # LAN I/O must not hold LOCK: one silent AC must never freeze every
+        # other endpoint (settings, schedules, Tuya controls) behind it.
+        data = _read_device(entry)
+        with LOCK:
             _cache[slot] = {"verified": True, "read_at": time.time(), "data": data}
-            return jsonify({"ok": True, "status": data, "device": _summary(slot, entry)})
+        return jsonify({"ok": True, "status": data, "device": _summary(slot, entry)})
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except (HaierError, OSError) as exc:
@@ -730,12 +737,14 @@ def haier_poll():
     try:
         slot = _slot(_body().get("slot"))
         with LOCK:
-            entry = _load()[slot]
-            if not entry.get("ip"):
-                raise ValueError("Configure this Haier AC first")
-            data = _read_device(entry)
+            entry = dict(_load()[slot])
+        if not entry.get("ip"):
+            raise ValueError("Configure this Haier AC first")
+        # Never hold LOCK across the LAN read; see /api/haier/read above.
+        data = _read_device(entry)
+        with LOCK:
             _cache[slot] = {"verified": True, "read_at": time.time(), "data": data}
-            return jsonify({"ok": True, "status": data, "device": _summary(slot, entry)})
+        return jsonify({"ok": True, "status": data, "device": _summary(slot, entry)})
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     except (HaierError, OSError) as exc:
