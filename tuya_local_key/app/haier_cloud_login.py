@@ -61,6 +61,12 @@ def _domains(zone: str) -> dict:
     return {"uhome": "uhome-sgp.haieriot.net", "gateway": "gw-sgp.haieriot.net"}
 
 
+def _zone(value: str) -> str:
+    """Normalise the account's dialling code (``+92`` / `` 92 `` -> ``92``)."""
+    text = str(value or "").strip().lstrip("+")
+    return text if text.isdigit() else (text or "0")
+
+
 def _strip_ws(text: str) -> str:
     return text.replace(" ", "").replace("\t", "").replace("\r", "").replace("\n", "")
 
@@ -100,6 +106,17 @@ def _http(method: str, url: str, payload: dict | None, headers: dict) -> dict:
 def _check(resp: dict, what: str) -> dict:
     code = str(resp.get("retCode", "00000"))
     if code not in ("00000", "", "None"):
+        if code == "30032" and what == "login":
+            # Haier reports a wrong account REGION with the same code as a wrong
+            # password. The dialling code is the only field a user cannot simply
+            # re-read, so name it explicitly (Pakistan accounts use 92).
+            raise CloudLoginError(
+                "30032: account not found in this region. Set Country code to the "
+                "dialling code your Haier account was registered with (Pakistan 92, "
+                "India 91, Singapore 65). If it is still 30032, this account has no "
+                "password (Google/Facebook sign-up) — share the ACs to an email/password "
+                "account and log in with that."
+            )
         raise CloudLoginError(f"{what}: {code} {resp.get('retInfo', '')}".strip())
     return resp
 
@@ -138,18 +155,23 @@ def _request(host: str, path: str, payload: dict | None, access: str,
     return _http(method, url, payload, headers)
 
 
-def _login(username: str, password: str) -> dict:
+def _login(username: str, password: str, zone: str = "") -> dict:
     if not username or not password:
         raise CloudLoginError("Email/phone and password are required")
+    # Haier routes the account lookup by its dialling code. Sending "0" for an
+    # account registered as +92 returns 30032 ("account not registered"), which
+    # reads exactly like a wrong password.
+    zone = _zone(zone)
     client_id = secrets.token_hex(16).upper()
     password_field, sesame = _encrypt_password(password)
     resp = _request("uhome-sea.haieriot.net", LOGIN_PATH,
                     {"username": username.strip(), "password": password_field, "sesame": sesame},
-                    "", client_id, "0")
+                    "", client_id, zone)
     _check(resp, "login")
     tokens = _tokens(resp)
     if not (tokens["access"] or tokens["refresh"]):
         raise CloudLoginError("login: no token returned (check email/phone and password)")
+    tokens["zone"] = _zone(tokens["zone"]) if tokens["zone"] not in ("", "0") else zone
     if not tokens["access"]:
         tokens["access"] = _refresh(tokens["refresh"], client_id, tokens["zone"])
     return {**tokens, "client_id": client_id}
@@ -402,16 +424,18 @@ def renew(username: str = "", password: str = "", remember: bool = True,
     import haier_control
 
     session = _load_session()
+    zone = _zone(zone)
     if username or password:
-        credential = _login(username, password)
+        credential = _login(username, password, zone)
         access, client_id = credential["access"], credential["client_id"]
         refresh = credential["refresh"]
-        zone = zone or credential["zone"]
+        zone = _zone(zone if zone != "0" else credential["zone"])
     else:
+        saved_zone = _zone(session.get("zone", "0"))
         access = _refresh(session.get("refresh_token", ""),
-                          session.get("client_id", ""), session.get("zone", "0"))
+                          session.get("client_id", ""), zone if zone != "0" else saved_zone)
         client_id, refresh = session.get("client_id", ""), session.get("refresh_token", "")
-        zone = zone or session.get("zone", "0")
+        zone = zone if zone != "0" else saved_zone
 
     if remember and refresh and client_id:
         _save_session({"refresh_token": refresh, "client_id": client_id,

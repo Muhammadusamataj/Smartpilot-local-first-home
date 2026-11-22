@@ -204,6 +204,10 @@ let cloudMessage = '';
 function cloudCardHtml() {
   const logged = !!(cloudStatus && cloudStatus.logged_in);
   const slots = (cloudStatus && cloudStatus.slots) || [];
+  // Haier looks the account up by its registration dialling code. Sending "0"
+  // returns error 30032, which reads like a wrong password.
+  const zoneDefault = (cloudStatus && cloudStatus.zone && cloudStatus.zone !== '0')
+    ? cloudStatus.zone : '92';
   const saved = logged
     ? `<div class="haier-cloud-saved">
         ${cloudStatus.last_renew ? `<p class="note">Last renewed: ${esc(cloudStatus.last_renew)}</p>` : ''}
@@ -214,7 +218,14 @@ function cloudCardHtml() {
     : `<form data-haier-cloud-form autocomplete="off">
         <label>Haier account (email / phone)<input name="username" required autocomplete="username" placeholder="you@example.com"></label>
         <label>Password<input name="password" required type="password" autocomplete="current-password"></label>
-        <label>Region<select name="zone"><option value="">Auto detect</option><option value="91">India (+91)</option><option value="0">Singapore / other</option></select></label>
+        <label>Country code<input name="zone" inputmode="numeric" list="haier-zones" value="${esc(zoneDefault)}" placeholder="92" required></label>
+        <datalist id="haier-zones">
+          <option value="92">Pakistan (+92)</option><option value="91">India (+91)</option>
+          <option value="65">Singapore (+65)</option><option value="66">Thailand (+66)</option>
+          <option value="60">Malaysia (+60)</option><option value="971">UAE (+971)</option>
+          <option value="44">UK (+44)</option><option value="1">US / Canada (+1)</option>
+        </datalist>
+        <p class="note">Dialling code your Haier account was registered with. Wrong code → error 30032 (looks like a bad password).</p>
         <label class="haier-cloud-remember"><input type="checkbox" name="remember" checked> Remember login on this phone</label>
         <button class="haier-action important" type="submit">Login &amp; renew keys</button>
       </form>`;

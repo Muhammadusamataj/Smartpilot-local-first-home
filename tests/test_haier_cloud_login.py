@@ -48,6 +48,24 @@ def test_renew_updates_encrypted_config_without_returning_key(monkeypatch, isola
     assert cloud.LOGIN_PATH in calls and cloud.DEVICE_PATH in calls
 
 
+def test_login_sends_account_dialling_code_and_explains_30032(monkeypatch, isolated):
+    zones = []
+
+    def fake_request(host, path, payload, access, client_id, zone, method="POST"):
+        zones.append((path, zone))
+        if path == cloud.LOGIN_PATH:
+            return {"retCode": "30032", "retInfo": "account not registered"}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(cloud, "_request", fake_request)
+    with pytest.raises(cloud.CloudLoginError) as err:
+        cloud.renew("user@example.com", "secret", zone="+92")
+
+    assert zones[0] == (cloud.LOGIN_PATH, "92")
+    assert "region" in str(err.value) and "92" in str(err.value)
+    assert "30032" in str(err.value)
+
+
 def test_status_and_sign_out_never_expose_secrets(monkeypatch, isolated):
     monkeypatch.setattr(cloud, "_request", lambda *a, **k: {
         "retCode": "00000", "data": {"tokenInfo": {
