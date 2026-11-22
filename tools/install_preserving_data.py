@@ -114,6 +114,7 @@ def main() -> None:
     if backup.returncode != 0 or len(backup.stdout or b"") < 1024:
         raise SystemExit("Could not back up app data; nothing was uninstalled.")
     temp = tempfile.NamedTemporaryFile(prefix="smartpilot-data-", suffix=".tar", delete=False)
+    completed = False
     try:
         temp.write(backup.stdout)
         temp.close()
@@ -132,19 +133,40 @@ def main() -> None:
             )
 
         print("+ restoring app data")
-        restored = run(adb_cmd("exec-out", "run-as", PACKAGE, "tar", "xf", "-"),
-                       binary=True, stdin=backup.stdout)
-        if restored.returncode != 0:
-            raise SystemExit("Data restore failed; check the temporary backup before leaving the phone.")
+        # `adb exec-out ... tar xf -` does not forward stdin on all adb versions,
+        # which leaves the device-side tar blocked forever. Push the archive to
+        # a world-readable temp path and extract it from there instead.
+        remote_tar = "/data/local/tmp/smartpilot-restore.tar"
+        pushed = run(adb_cmd("push", temp.name, remote_tar))
+        if pushed.returncode != 0:
+            raise SystemExit(
+                "Could not push the backup to the device. The new APK is installed but "
+                f"data is NOT restored; the local backup is still at {temp.name}."
+            )
+        try:
+            restored = run(adb_cmd(
+                "shell", "run-as", PACKAGE, "tar", "xf", remote_tar,
+                "-C", f"/data/data/{PACKAGE}",
+            ))
+            if restored.returncode != 0:
+                raise SystemExit(
+                    "Data restore failed. The local backup is still at " + temp.name
+                )
+        finally:
+            run(adb_cmd("shell", "rm", "-f", remote_tar))
 
         run(adb_cmd("shell", "run-as", PACKAGE, "rm", "-rf", "cache/WebView"))
         run(adb_cmd("shell", "monkey", "-p", PACKAGE, "-c", "android.intent.category.LAUNCHER", "1"))
         print("+ launch requested; verify Settings and device endpoints before closing")
+        completed = True
     finally:
-        try:
-            os.unlink(temp.name)
-        except FileNotFoundError:
-            pass
+        if completed:
+            try:
+                os.unlink(temp.name)
+            except FileNotFoundError:
+                pass
+        else:
+            print(f"! backup KEPT at {temp.name} for manual recovery")
 
 
 if __name__ == "__main__":
