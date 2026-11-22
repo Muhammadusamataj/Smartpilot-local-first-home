@@ -31,6 +31,7 @@ PY_FILES = [
     "haier_control.py",
     "haier_hrdp_adapter.py",
     "haier_cloud_login.py",
+    "family_hub.py",
     "support_report.py",
     "tuya_devices.py",
     "updates.py",

@@ -70,6 +70,7 @@
       <button type="button" class="pilot-setting-tile" data-open-drawer="appearance"><b>◐ Appearance</b><small>Dark/Light theme and colour palette</small></button>
       <button type="button" class="pilot-setting-tile" data-open-drawer="add"><b>＋ Manage devices</b><small>Add devices, room names and local connection</small></button>
     </div>
+    <div data-family-hub></div>
     <div class="panel">
       <p class="note">LAN keys stay encrypted in the device cache. This page never sends them back to the browser. Live status here means a device answered on your local network — a saved IP alone is never shown as online.</p>
       <p class="note" style="margin-top:10px">Scenes and schedules run on the server. Closing this WebView or phone does not stop a server-side schedule, but schedules need an always-on PC, Home Assistant add-on, or trusted hub.</p>
@@ -262,6 +263,7 @@
 <script type="module" src="static/js/shared/palette.js"></script>
 <script type="module" src="static/js/features/local-control/main.js"></script>
 <script type="module" src="static/js/features/local-control/haier.js"></script>
+<script type="module" src="static/js/features/local-control/family.js"></script>
 <script type="module" src="static/js/features/local-control/extras.js"></script>
 </body>
 </html>

@@ -43,7 +43,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, Response, jsonify, render_template, request, send_file
 
 import device_cache
 import device_preferences
@@ -1424,6 +1424,27 @@ app.register_blueprint(local_control.bp)
 
 import haier_control  # noqa: E402
 app.register_blueprint(haier_control.bp)
+
+# Additive: an opt-in client mode forwards a small allowlist of API calls to a
+# family hub. Default is off, so every existing installation is unaffected.
+import family_hub  # noqa: E402
+app.register_blueprint(family_hub.bp)
+
+
+@app.before_request
+def _family_hub_proxy():
+    if not family_hub.should_proxy(request.method, request.path):
+        return None
+    path = request.path
+    if request.query_string:
+        path += "?" + request.query_string.decode("utf-8", "replace")
+    try:
+        code, raw, ctype = family_hub.proxy_request(
+            request.method, path, request.get_data(), request.content_type or ""
+        )
+    except family_hub.FamilyError as exc:
+        return jsonify({"error": str(exc)}), 502
+    return Response(raw, status=code, content_type=ctype)
 
 
 def _auth_is_configured():

@@ -553,6 +553,12 @@ public class OfflineActivity extends Activity {
         public void openInstallPermission() {
             if (trusted()) UpdateManager.openInstallPermission(OfflineActivity.this);
         }
+
+        /** Family hub setup: reveal the existing opt-in Direct mode panel. */
+        @JavascriptInterface
+        public void openDirectSettings() {
+            if (trusted()) runOnUiThread(() -> setPanelOpen(true));
+        }
     }
 
     /** JavaScript bridge used by the QR screen to save the PNG to Gallery. */
