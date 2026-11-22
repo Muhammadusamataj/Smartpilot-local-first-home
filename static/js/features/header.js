@@ -41,10 +41,14 @@ function layoutActions() {
   const room = inner - title;
   const width = (ids) => ids.reduce((sum, id) => sum + $(id).offsetWidth, 0) +
     gap * Math.max(0, ids.length - 1);
-  if (width(ACTION_IDS) <= room) { restoreFocus(); return; }
+  // At phone widths the header must stay on one line. Hiding the decorative
+  // wordmark frees enough room for the last button to fit, but the compact
+  // layout deliberately keeps every action in the menu instead.
+  const compact = window.innerWidth <= 390;
+  if (width(ACTION_IDS) <= room && !compact) { restoreFocus(); return; }
   $("moreWrap").classList.remove("hidden");
   const more = $("moreWrap").offsetWidth;
-  let kept = [...ACTION_IDS];
+  let kept = compact ? [] : [...ACTION_IDS];
   for (const id of OVERFLOW_FIRST) {
     if (width(kept) + (kept.length ? gap : 0) + more <= room) break;
     kept = kept.filter(k => k !== id);

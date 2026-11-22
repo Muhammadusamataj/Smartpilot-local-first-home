@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 
 BOOL_TYPES = {"bool", "boolean"}
+# Sanitised failure codes only; never forward raw exceptions or SDK strings.
+_CODE = re.compile(r"^[a-z0-9][a-z0-9_.]{0,47}$")
 _EXACT_SWITCH = re.compile(
     r"^(switch|switch_\d+|power|power_switch|relay|relay_\d+|onoff|on_off|main_switch)$"
 )
@@ -95,6 +97,81 @@ def point_value(device: dict, point: dict):
     if dp in live:
         return live[dp]
     return point.get("cloud_value")
+
+
+def sanitize_diagnostics(body: dict) -> dict:
+    """Allowlist the add-on's read-only diagnostics for a HA sensor.
+
+    Only connection facts and failure codes survive. Keys, tokens, raw socket
+    errors, DP values, SSID/BSSID, DNS and URLs can never reach an entity.
+    """
+    if not isinstance(body, dict):
+        return {}
+
+    def section(name: str) -> dict:
+        value = body.get(name)
+        return value if isinstance(value, dict) else {}
+
+    def text(value, limit: int = 48) -> str:
+        result = str(value or "").strip()
+        return result[:limit] if result else ""
+
+    def code(value) -> str:
+        result = text(value, 48)
+        return result if _CODE.match(result) else ""
+
+    def number(value) -> float | None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def count(value) -> int:
+        try:
+            return max(0, int(value or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    network = section("network")
+    wifi = network.get("wifi") if isinstance(network.get("wifi"), dict) else {}
+    vpn = network.get("vpn") if isinstance(network.get("vpn"), dict) else {}
+    route = (network.get("default_route")
+             if isinstance(network.get("default_route"), dict) else {})
+    addresses = section("addresses")
+    tcp = section("tcp6668")
+    protocol = section("protocol")
+    handshake = (protocol.get("handshake")
+                 if isinstance(protocol.get("handshake"), dict) else {})
+    status = section("status")
+    history = section("history")
+    dp_ids = [str(dp) for dp in (status.get("dp_ids") or [])
+              if str(dp).isdigit()][:64]
+    return {
+        "confidence": code(addresses.get("reachable_confidence")),
+        "saved_ip": text(addresses.get("saved_ip")),
+        "reachable_ip": text(addresses.get("reachable_ip")),
+        "wifi_connected": bool(wifi.get("connected")),
+        "wifi_ipv4": text(wifi.get("ipv4")),
+        "vpn_connected": bool(vpn.get("connected")),
+        "default_route": code(route.get("transport")),
+        "tcp_state": code(tcp.get("state")),
+        "tcp_ms": number(tcp.get("elapsed_ms")),
+        "tcp_timeout_ms": number(tcp.get("timeout_ms")),
+        "protocol_configured": code(protocol.get("configured")),
+        "protocol_detected": code(protocol.get("detected")),
+        "handshake_attempted": bool(handshake.get("attempted")),
+        "handshake_match": bool(handshake.get("match")),
+        "handshake_session_key": bool(handshake.get("session_key_installed")),
+        "handshake_error": code(handshake.get("error_kind")),
+        "status_result": code(status.get("result")),
+        "status_read_at": number(status.get("read_at")),
+        "dp_count": len(dp_ids),
+        "dp_ids": dp_ids,
+        "last_ok": number(history.get("last_ok")),
+        "last_failed": number(history.get("last_failed")),
+        "fail_count": count(history.get("fail_count")),
+        "recovery_reason": code(history.get("recovery_reason")),
+    }
 
 
 def merge_live_points(points: list[dict], values: list[dict]) -> list[dict]:

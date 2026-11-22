@@ -13,6 +13,8 @@ import java.net.NetworkInterface;
 import java.security.SecureRandom;
 import java.util.Enumeration;
 
+import org.json.JSONObject;
+
 /** Network facts shared by the activity and the always-on local service. */
 final class NetworkUtils {
     private NetworkUtils() {
@@ -47,6 +49,76 @@ final class NetworkUtils {
             return "";
         }
         return "";
+    }
+
+    /** Allowlisted network facts for the read-only per-device diagnostic.
+     *  Never includes SSID, BSSID, DNS, URLs or any credential.
+     */
+    static String networkFacts(Context context) {
+        try {
+            JSONObject root = new JSONObject();
+            root.put("source", "android_service");
+            root.put("observed_at", System.currentTimeMillis() / 1000.0);
+            JSONObject wifi = new JSONObject();
+            JSONObject vpn = new JSONObject();
+            JSONObject route = new JSONObject();
+            wifi.put("connected", false);
+            wifi.put("ipv4", "");
+            vpn.put("connected", false);
+            vpn.put("tailscale_ip", tailscaleIp());
+            route.put("transport", "unknown");
+            route.put("is_default", false);
+
+            ConnectivityManager manager =
+                    (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (manager != null) {
+                Network[] networks = manager.getAllNetworks();
+                if (networks != null) {
+                    for (Network network : networks) {
+                        NetworkCapabilities caps = manager.getNetworkCapabilities(network);
+                        if (caps == null) continue;
+                        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                            vpn.put("connected", true);
+                        }
+                        if (!wifi.getBoolean("connected")
+                                && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                            LinkProperties links = manager.getLinkProperties(network);
+                            if (links != null) {
+                                for (LinkAddress address : links.getLinkAddresses()) {
+                                    if (!(address.getAddress() instanceof Inet4Address)) continue;
+                                    String ip = address.getAddress().getHostAddress();
+                                    if (ip == null || ip.equals("0.0.0.0")
+                                            || ip.startsWith("127.")) continue;
+                                    wifi.put("connected", true);
+                                    wifi.put("ipv4", ip + "/24");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                Network active = manager.getActiveNetwork();
+                NetworkCapabilities caps = active == null ? null : manager.getNetworkCapabilities(active);
+                if (caps != null) {
+                    route.put("is_default", true);
+                    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                        route.put("transport", "vpn");
+                    } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                        route.put("transport", "wifi");
+                    } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                        route.put("transport", "cellular");
+                    } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+                        route.put("transport", "ethernet");
+                    }
+                }
+            }
+            root.put("wifi", wifi);
+            root.put("vpn", vpn);
+            root.put("default_route", route);
+            return root.toString();
+        } catch (Exception ignored) {
+            return "{\"source\":\"unavailable\"}";
+        }
     }
 
     /** Tailscale's CGNAT range (100.64.0.0/10), only used in opt-in direct mode. */

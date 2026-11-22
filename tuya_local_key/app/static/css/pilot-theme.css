@@ -144,6 +144,6 @@ input[type="text"],input[type="search"],input[type="number"],select,textarea{acc
 /* At the narrowest Vivo widths the wordmark, update badge and actions cannot
    share one header line. Keep the accessible home logo and drop only the
    decorative wordmark; every action remains in the More menu. */
-@media(max-width:360px){
+@media(max-width:380px){
   body>header .pilot-root-wordmark{display:none!important}
 }

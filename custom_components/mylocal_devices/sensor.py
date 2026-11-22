@@ -28,6 +28,7 @@ async def async_setup_entry(
                 continue
             name = f"{device.get('name') or device.get('id') or 'Device'} {point.get('code') or point.get('dp')}"
             entities.append(MyLocalSensor(coordinator, device, point, name))
+        entities.append(MyLocalDiagnosticsSensor(coordinator, device))
     async_add_entities(entities)
 
 
@@ -80,3 +81,44 @@ class MyLocalSensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return {"dp": self._dp, "code": self._code, "device_id": self._device_id}
+
+
+class MyLocalDiagnosticsSensor(CoordinatorEntity, SensorEntity):
+    """Read-only LAN reachability facts for one device.
+
+    The add-on already sanitises these values; the coordinator applies a second
+    allowlist. No key, token, DP value or raw exception is ever exposed.
+    """
+
+    _attr_has_entity_name = False
+    _attr_icon = "mdi:lan-connect"
+
+    def __init__(self, coordinator, device: dict) -> None:
+        super().__init__(coordinator)
+        self._device_id = str(device.get("id") or "")
+        self._attr_name = f"{device.get('name') or self._device_id} LAN diagnostics"
+        self._attr_unique_id = f"mylocal_devices_{self._device_id}_diagnostics"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, self._device_id)},
+            name=str(device.get("name") or self._device_id),
+            manufacturer="Tuya (local key)",
+            model=str(device.get("product_name") or device.get("category") or ""),
+        )
+
+    def _device(self) -> dict | None:
+        for device in self.coordinator.data.get("devices", []):
+            if str(device.get("id")) == self._device_id:
+                return device
+        return None
+
+    def _facts(self) -> dict:
+        facts = (self._device() or {}).get("diagnostics")
+        return facts if isinstance(facts, dict) else {}
+
+    @property
+    def native_value(self):
+        return self._facts().get("confidence") or "not_collected"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return dict(self._facts())

@@ -12,6 +12,7 @@ import datetime
 import ipaddress
 import json
 import os
+import random
 import re
 import sys
 import threading
@@ -61,6 +62,8 @@ MAX_VALUE_BYTES = 4096
 # 2min to 30min, and never scan when the saved address still answers on 6668.
 RECONNECT_MIN_SECONDS = 120
 RECONNECT_MAX_SECONDS = 1800
+RECONNECT_MIN_FAILURES = 3
+RECONNECT_JITTER = (0.5, 1.0)
 TCP_PROBE_SECONDS = 0.4
 # A saved address is not proof that the device is alive right now. Only a
 # successful local read within this window earns the "Online" label.
@@ -313,8 +316,10 @@ def _profile_failed(profile: dict) -> bool:
 def _merged_results() -> dict:
     """LAN scan results plus the last addresses that answered.
 
-    A saved address stays usable for retries, but a fresh failure/gateway result
-    or an old profile is never promoted to "ok": an address is not live status.
+    A saved address stays usable for retries. A failure result must not erase
+    the last-known-good address: transient packet loss used to make the next
+    read fail with "missing_ip" and the reconnect worker return "all_saved".
+    Only a fresh successful/gateway/unverified result wins over a profile.
     """
     results = dict(_results())
     for device_id, profile in _profiles().items():
@@ -325,15 +330,15 @@ def _merged_results() -> dict:
         current = dict(results.get(device_id) or {})
         current_ts = float(current.get("checked_at") or current.get("last_ok") or 0)
         saved_ts = float(profile.get("last_ok") or profile.get("checked_at") or 0)
-        if current and current_ts >= saved_ts:
-            # A newer scan result wins, including VIA_GATEWAY / unreachable results
-            # that carry no IP of their own.
+        current_status = str(current.get("status") or "")
+        authoritative = current_status in {
+            lan_scan.OK, lan_scan.VIA_GATEWAY, "unverified",
+        }
+        if current and authoritative and current_ts >= saved_ts:
             results[device_id] = current
             continue
         failed = _profile_failed(profile)
-        current.setdefault("status", "stale" if failed else lan_scan.OK)
-        if not failed or not current.get("status"):
-            current["status"] = "stale" if failed else lan_scan.OK
+        current["status"] = "stale" if failed else lan_scan.OK
         current.update({
             "ip": ip,
             "version": version,
@@ -343,6 +348,32 @@ def _merged_results() -> dict:
             current["device22"] = bool(profile["device22"])
         results[device_id] = current
     return results
+
+
+def _last_known_good_address(device_id: str, results: dict | None = None,
+                             profiles: dict | None = None) -> tuple[str, str]:
+    """Return the saved IP/protocol to retry, never a failed scan address.
+
+    Results are used only when there is no saved address, and a gateway child
+    never gets its own direct address from a stale profile.
+    """
+    results = results if results is not None else _results()
+    profiles = profiles if profiles is not None else _profiles()
+    result = dict(results.get(device_id) or {})
+    if str(result.get("status") or "") == lan_scan.VIA_GATEWAY:
+        return "", ""
+    profile = dict(profiles.get(device_id) or {})
+    ip = str(profile.get("ip") or "").strip()
+    version = str(profile.get("version") or "").strip()
+    if ip and tuya_versions.is_supported(version) and float(profile.get("last_ok") or 0) > 0:
+        # Even an old address is the last-known-good one; expiry only affects
+        # the Online label, not which address we try to recover.
+        return ip, version
+    ip = str(result.get("ip") or "").strip()
+    version = str(result.get("version") or "").strip()
+    if ip and tuya_versions.is_supported(version):
+        return ip, version
+    return "", ""
 
 
 def _remember_success(device_id: str, context: dict) -> None:
@@ -359,26 +390,39 @@ def _remember_success(device_id: str, context: dict) -> None:
             "checked_at": now,
             "last_failed": 0,
             "fail_count": 0,
+            "next_attempt_at": 0,
+            "recovery_reason": "read_ok",
         })
         profiles[device_id] = entry
         _save_profiles(profiles)
 
 
 def _remember_failure(device_id: str, context: dict, status: str) -> None:
+    """Record a live-read failure and schedule bounded, jittered recovery.
+
+    The failure context is never copied into the saved address: an unverified
+    context must not become the new last-known-good IP/protocol.
+    """
     with _profile_lock:
         profiles = _profiles()
         entry = dict(profiles.get(device_id) or {})
-        if context.get("ip"):
-            entry.setdefault("ip", context["ip"])
-            entry.setdefault("version", str(context["version"]))
-        entry["fail_count"] = int(entry.get("fail_count") or 0) + 1
-        entry["checked_at"] = time.time()
-        entry["last_failed"] = entry["checked_at"]
+        now = time.time()
+        previous_due = float(entry.get("next_attempt_at") or 0)
+        fails = int(entry.get("fail_count") or 0) + 1
+        wait = min(
+            RECONNECT_MAX_SECONDS,
+            RECONNECT_MIN_SECONDS * (2 ** min(max(fails - 1, 0), 5)),
+        ) * random.uniform(*RECONNECT_JITTER)
+        entry["fail_count"] = fails
+        entry["checked_at"] = now
+        entry["last_failed"] = now
+        entry["next_attempt_at"] = now + wait
+        entry["recovery_reason"] = str(status)
         profiles[device_id] = entry
         _save_profiles(profiles)
-        failed = entry["fail_count"] >= 3 and status in READBACK_STATUSES
-    if failed:
-        _ensure_async()
+    if (fails >= RECONNECT_MIN_FAILURES and status in READBACK_STATUSES
+            and now >= previous_due):
+        _ensure_async("read_failures")
 
 
 def repair_state() -> dict:
@@ -475,15 +519,23 @@ def _verified(device_id: str, context: dict | None, results: dict, profiles: dic
         return False
     result = results.get(device_id) or {}
     profile = profiles.get(device_id) or {}
-    if context["node_id"] and result.get("sub_online") is not True:
+    profile_ok = float(profile.get("last_ok") or 0)
+    profile_failed = float(profile.get("last_failed") or 0)
+    fresh_read = (profile_ok > 0 and profile_failed <= profile_ok
+                  and time.time() - profile_ok <= REACHABLE_FRESH_SECONDS)
+    status = str(result.get("status") or "")
+    # A sub-device's own successful read is proof even when a stale gateway
+    # scan did not set sub_online. Without a fresh read, the old scan rule wins.
+    if context["node_id"] and result.get("sub_online") is not True and not fresh_read:
         return False
-    if str(result.get("status") or "") != lan_scan.OK:
+    if status != lan_scan.OK and not (context["node_id"] and status == lan_scan.VIA_GATEWAY
+                                      and fresh_read):
         return False
     if _profile_failed(profile):
         return False
     checked = max(
         float(result.get("checked_at") or result.get("last_ok") or 0),
-        float(profile.get("last_ok") or 0),
+        profile_ok,
     )
     return checked > 0 and time.time() - checked <= REACHABLE_FRESH_SECONDS
 
@@ -555,9 +607,11 @@ def _store_detected_version(device_id: str, context: dict, version: str, device2
     lan_body = _body(LAN_CACHE_FILE)
     results = dict(lan_body.get("results") or {})
     entry = dict(results.get(host_id) or {})
+    # A protocol probe is not a status read. Cache the address for future
+    # attempts, but never claim a live read or clear a real failure history.
     entry.update({
-        "status": lan_scan.OK, "ip": context["ip"], "version": version,
-        "device22": bool(device22), "checked_at": now,
+        "status": "unverified", "ip": context["ip"], "version": version,
+        "device22": bool(device22), "checked_at": now, "probe_at": now,
     })
     results[host_id] = entry
     lan_body["results"] = results
@@ -567,7 +621,7 @@ def _store_detected_version(device_id: str, context: dict, version: str, device2
         profile = dict(profiles.get(device_id) or {})
         profile.update({
             "ip": context["ip"], "version": version, "device22": bool(device22),
-            "checked_at": now, "last_ok": now, "last_failed": 0, "fail_count": 0,
+            "checked_at": now, "probe_at": now,
         })
         profiles[device_id] = profile
         _save_profiles(profiles)
@@ -1174,162 +1228,123 @@ def _start_scheduler() -> None:
 
 
 # --- Silent LAN reconnect -------------------------------------------------
-# Once a device has answered, its address is remembered. A later launch uses
-# that address first and only does a short, throttled scan if the device no
-# longer answers (for example after the phone joined a different Wi-Fi).
+# A saved IP/protocol is only a hint. Recovery always proves it with a TCP
+# connect and a read-only DP read before calling the device healthy again.
+# It never scans whole subnets: a wrong subnet was turning brief Wi-Fi/VPN
+# transitions into sticky "Unreachable" cards with no automatic recovery.
 
-def _ensure_async() -> None:
-    if _ensure_state["running"]:
-        return
-    threading.Thread(target=_ensure_connections, name="local-reconnect", daemon=True).start()
-
-
-def _saved_address(device_id: str, results: dict, profiles: dict) -> tuple[str, str]:
-    result = results.get(device_id) or {}
-    profile = profiles.get(device_id) or {}
-    ip = str(result.get("ip") or profile.get("ip") or "").strip()
-    version = str(result.get("version") or profile.get("version") or "").strip()
-    return ip, version
-
-
-def _candidate_subnets(devices: list[dict], profiles: dict) -> list[str]:
-    subnets = []
-    detected = _detected_subnet()
-    if detected:
-        subnets.append(detected)
-    for device in devices:
-        hints = [profiles.get(str(device.get("id")) or {}, {}).get("subnet"), _ip_hint(device)]
-        for hint in hints:
-            normalised = _normalise_hint(hint)
-            if normalised and normalised not in subnets:
-                subnets.append(normalised)
-        if len(subnets) >= 2:
-            break
-    return subnets[:2]
-
-
-def _ensure_connections() -> None:
+def _ensure_async(reason: str = "checking") -> None:
+    """Start at most one recovery worker, with truthful state from the start."""
     with _ensure_lock:
         if _ensure_state["running"]:
             return
         _ensure_state.update({
             "running": True, "started_at": time.time(), "finished_at": 0.0,
-            "swept": 0, "addresses": 0, "matched": 0, "reason": "checking",
+            "swept": 0, "addresses": 0, "matched": 0, "reason": reason,
         })
+    threading.Thread(target=_ensure_connections, name="local-reconnect", daemon=True).start()
+
+
+def _saved_address(device_id: str, results: dict | None = None,
+                   profiles: dict | None = None) -> tuple[str, str]:
+    """The last-known-good address, never one from a failed scan result."""
+    return _last_known_good_address(device_id, results, profiles)
+
+
+def _ensure_connections() -> None:
+    """Recover failed devices at their saved address, with bounded backoff."""
+    reason = "all_verified"
     try:
         devices = [d for d in _devices() if d.get("local_key") and d.get("id")]
         if not devices:
             _ensure_state["reason"] = "no_devices"
             return
-        profiles = _profiles()
-        results = _merged_results()
-        if _network_warning(results):
-            # Scanning a subnet we cannot reach only overwrites good addresses
-            # with "unreachable" and wastes the reconnect budget.
-            _ensure_state["reason"] = "subnet_mismatch"
-            return
-        missing = []
+        initial = _profiles()
+        candidates = []
         for device in devices:
-            try:
-                device_values.connection(devices, results, str(device["id"]))
-            except device_values.ReadUnavailable:
-                missing.append(device)
-        if not missing:
-            _ensure_state["reason"] = "all_saved"
-            return
-
-        # A device that still answers on 6668 does not need a subnet scan: the
-        # problem is its key/protocol, which scanning cannot fix.
-        need_scan = []
-        for device in missing:
             device_id = str(device["id"])
-            ip, _ = _saved_address(device_id, results, profiles)
-            if ip and lan_scan.tcp_state(ip, TCP_PROBE_SECONDS) == lan_scan.OPEN:
-                continue
-            need_scan.append(device)
-        if not need_scan:
-            _ensure_state["reason"] = "device_silent"
+            entry = dict(initial.get(device_id) or {})
+            last_ok = float(entry.get("last_ok") or 0)
+            last_failed = float(entry.get("last_failed") or 0)
+            if (not last_ok or last_failed > last_ok
+                    or int(entry.get("fail_count") or 0) >= RECONNECT_MIN_FAILURES):
+                candidates.append(device)
+        _ensure_state["addresses"] = len(candidates)
+        if not candidates:
+            _ensure_state["reason"] = "all_verified"
             return
 
-        last_attempt = max(
-            float((profiles.get(str(d["id"])) or {}).get("last_scan_at") or 0)
-            for d in need_scan
-        )
-        worst_fails = max(
-            int((profiles.get(str(d["id"])) or {}).get("fail_count") or 0)
-            for d in need_scan
-        )
-        wait = min(RECONNECT_MAX_SECONDS, RECONNECT_MIN_SECONDS * (2 ** min(worst_fails, 5)))
-        if time.time() - last_attempt < wait:
-            _ensure_state["reason"] = "waiting"
-            return
-
-        subnets = _candidate_subnets(need_scan, profiles)
-        if not subnets:
-            _ensure_state["reason"] = "no_network"
-            return
-
-        targets = ",".join(subnets)
-        try:
-            addresses = lan_scan.parse_targets(targets)
-        except lan_scan.TargetError:
-            _ensure_state["reason"] = "bad_network"
-            return
-
+        matched = 0
         now = time.time()
-        for device in need_scan:
+        for device in candidates:
             device_id = str(device["id"])
-            entry = dict(profiles.get(device_id) or {})
-            entry["last_scan_at"] = now
-            profiles[device_id] = entry
-        _save_profiles(profiles)
+            entry = dict(_profiles().get(device_id) or {})
+            if now < float(entry.get("next_attempt_at") or 0):
+                reason = "waiting"
+                continue
 
-        _ensure_state.update({"addresses": len(addresses), "swept": 0, "reason": "scanning"})
-        observed = lan_scan.sweep(
-            addresses, progress=lambda done: _ensure_state.__setitem__("swept", done))
-        open_ips = [ip for ip, state in observed.items() if state == lan_scan.OPEN]
+            ip, version = _saved_address(device_id)
+            if not ip or not version:
+                reason = "missing_connection"
+                continue
 
-        for device in need_scan:
-            device_id = str(device["id"])
-            key = str(device.get("local_key") or "")
-            saved_ip, saved_version = _saved_address(device_id, results, profiles)
-            candidates = []
-            for ip in [saved_ip] + open_ips:
-                if ip and ip not in candidates:
-                    candidates.append(ip)
-            versions = []
-            for version in (saved_version, device.get("version"), "3.4", "3.3", "3.2", "3.5"):
-                version = str(version or "").strip()
-                if tuya_versions.is_supported(version) and version not in versions:
-                    versions.append(version)
-            for ip in candidates:
-                for version in versions:
-                    try:
-                        outcome = lan_scan.probe(device_id, ip, key, version)
-                    except lan_scan.ScannerUnavailable:
-                        _ensure_state["reason"] = "scanner_unavailable"
-                        return
-                    if not outcome.get("match"):
-                        continue
-                    results[device_id] = {
-                        "status": lan_scan.OK, "ip": ip, "version": version,
-                        "device22": bool(outcome.get("device22")), "checked_at": time.time(),
-                    }
-                    _remember_success(device_id, {
-                        "ip": ip, "version": version, "device22": bool(outcome.get("device22")),
-                    })
-                    _ensure_state["matched"] += 1
+            # Prove the address before touching the protocol. A silent device
+            # is a network problem; probing protocols cannot repair it.
+            if lan_scan.tcp_state(ip, TCP_PROBE_SECONDS) != lan_scan.OPEN:
+                _remember_failure(device_id, {"ip": ip, "version": version},
+                                  "connection_failed")
+                reason = "device_silent"
+                continue
+
+            trial_results = {device_id: {
+                "status": lan_scan.OK, "ip": ip, "version": version,
+                "device22": bool(entry.get("device22")),
+            }}
+            try:
+                context = device_values.connection(devices, trial_results, device_id)
+            except device_values.ReadUnavailable as error:
+                reason = str(error)
+                continue
+            outcome = device_values.read(context)
+            if outcome.get("status") == "ok":
+                _remember_success(device_id, context)
+                matched += 1
+                continue
+
+            # TCP was open a moment ago. Re-check before rediscovery so a
+            # device that dropped during the read is not probed needlessly.
+            if lan_scan.tcp_state(ip, TCP_PROBE_SECONDS) != lan_scan.OPEN:
+                _remember_failure(device_id, context, "connection_failed")
+                reason = "device_silent"
+                continue
+
+            repaired = False
+            for candidate_version in tuya_versions.AUTO_DETECT_VERSIONS:
+                candidate_version = str(candidate_version)
+                if not tuya_versions.is_supported(candidate_version) or candidate_version == version:
+                    continue
+                try:
+                    probe = lan_scan.probe(context["host_id"], ip, context["key"],
+                                           candidate_version, gateway=context["gateway"])
+                except lan_scan.ScannerUnavailable:
+                    reason = "scanner_unavailable"
+                    return
+                if not probe.get("match"):
+                    continue
+                trial = dict(context, version=candidate_version,
+                             device22=bool(probe.get("device22")))
+                # A handshake is not proof of a working DP read.
+                if device_values.read(trial).get("status") == "ok":
+                    _remember_success(device_id, trial)
+                    matched += 1
+                    repaired = True
                     break
-                if results.get(device_id, {}).get("ip") == ip:
-                    break
-        _write_cache(LAN_CACHE_FILE, {
-            "results": results,
-            "summary": {"matched": len(results)},
-            "targets": targets,
-            "changes": None,
-            "changes_at": None,
-        })
-        _ensure_state["reason"] = "done"
+            if not repaired:
+                _remember_failure(device_id, context,
+                                  str(outcome.get("status") or "read_failed"))
+                reason = "protocol_or_key_failed"
+        _ensure_state["matched"] = matched
+        _ensure_state["reason"] = "done" if matched else reason
     except Exception:
         _ensure_state["reason"] = "failed"
     finally:
@@ -1492,20 +1507,200 @@ def local_scenes_delete():
 
 @bp.post("/api/local/ensure")
 def local_ensure():
-    """Silently use saved LAN addresses; scan only if they stopped answering."""
+    """Recover only devices with real read failures, at their saved address."""
     if _ensure_state["running"]:
         return jsonify({"ok": True, **repair_state()})
     devices = [d for d in _devices() if d.get("local_key") and d.get("id")]
-    results = _merged_results()
-    missing = []
+    if not devices:
+        return jsonify({"ok": True, **repair_state()})
+    profiles = _profiles()
+    failing = []
     for device in devices:
-        try:
-            device_values.connection(devices, results, str(device["id"]))
-        except device_values.ReadUnavailable:
-            missing.append(device)
-    if missing and _detected_subnet():
-        _ensure_async()
+        entry = dict(profiles.get(str(device["id"])) or {})
+        last_ok = float(entry.get("last_ok") or 0)
+        last_failed = float(entry.get("last_failed") or 0)
+        if (not last_ok or last_failed > last_ok
+                or int(entry.get("fail_count") or 0) >= RECONNECT_MIN_FAILURES):
+            failing.append(device)
+    if failing:
+        _ensure_async("read_failures")
     return jsonify({"ok": True, **repair_state()})
+
+
+def _diagnostic_network() -> dict:
+    """Allowlisted Android Wi-Fi/VPN facts, with an env-hint fallback.
+
+    Never returns SSID, BSSID, DNS, tokens, URLs or raw exceptions.
+    """
+    facts = {}
+    try:
+        import android_entry
+        facts = android_entry.network_facts()
+    except Exception:
+        pass
+    if not isinstance(facts, dict) or not facts:
+        hint = _detected_subnet()
+        tailscale = str(os.environ.get("TAILSCALE_IP") or "").strip()
+        try:
+            ipaddress.ip_address(tailscale)
+        except ValueError:
+            tailscale = ""
+        return {
+            "source": "env_hint", "observed_at": 0, "hint_only": True,
+            "wifi": {"connected": bool(hint), "ipv4": hint or ""},
+            "vpn": {"connected": bool(tailscale), "tailscale_ip": tailscale},
+            "default_route": {"transport": "unknown", "is_default": False},
+        }
+    wifi = facts.get("wifi") if isinstance(facts.get("wifi"), dict) else {}
+    vpn = facts.get("vpn") if isinstance(facts.get("vpn"), dict) else {}
+    route = facts.get("default_route") if isinstance(facts.get("default_route"), dict) else {}
+    return {
+        "source": str(facts.get("source") or "unavailable"),
+        "observed_at": float(facts.get("observed_at") or 0),
+        "hint_only": False,
+        "wifi": {
+            "connected": bool(wifi.get("connected")),
+            "ipv4": str(wifi.get("ipv4") or "")[:64],
+        },
+        "vpn": {
+            "connected": bool(vpn.get("connected")),
+            "tailscale_ip": str(vpn.get("tailscale_ip") or "")[:64],
+        },
+        "default_route": {
+            "transport": str(route.get("transport") or "unknown")[:16],
+            "is_default": bool(route.get("is_default")),
+        },
+    }
+
+
+def _tcp_diagnostic(ip: str) -> dict:
+    """One bounded TCP probe with latency; no raw socket errors are exposed."""
+    started = time.monotonic()
+    state = lan_scan.tcp_state(ip, TCP_PROBE_SECONDS)
+    return {
+        "port": int(lan_scan.PORT),
+        "state": str(state),
+        "elapsed_ms": round((time.monotonic() - started) * 1000, 1),
+        "timeout_ms": int(TCP_PROBE_SECONDS * 1000),
+        "bind_network": "default",
+    }
+
+
+@bp.get("/api/local/diagnostics")
+def local_diagnostics():
+    """Read-only per-device reachability facts; never mutates device state."""
+    device_id = str(request.args.get("id") or "").strip()
+    if not device_id:
+        return jsonify({"error": "invalid_request"}), 400
+    with _busy_guard(device_id, wait_seconds=0.5) as acquired:
+        if not acquired:
+            return jsonify({"error": "busy", "code": "busy"}), 409
+        devices = _devices()
+        device = _by_id(devices).get(device_id)
+        if not device:
+            return jsonify({"error": "unknown_device"}), 404
+
+        profiles = _profiles()
+        merged = _merged_results()
+        profile = dict(profiles.get(device_id) or {})
+        saved_ip, saved_version = _saved_address(device_id, merged, profiles)
+        tcp = _tcp_diagnostic(saved_ip) if saved_ip else {
+            "port": int(lan_scan.PORT), "state": "no_address",
+            "elapsed_ms": 0, "timeout_ms": int(TCP_PROBE_SECONDS * 1000),
+            "bind_network": "default",
+        }
+        handshake = {
+            "attempted": False, "version": "", "match": False,
+            "session_key_installed": False, "error_kind": None, "scope": "device",
+        }
+        status = {
+            "result": "not_attempted", "read_at": None,
+            "dp_count": 0, "dp_ids": [],
+        }
+        confidence = "none"
+
+        if tcp["state"] == lan_scan.OPEN:
+            confidence = "tcp_open"
+            trial_results = {device_id: {
+                "status": lan_scan.OK, "ip": saved_ip, "version": saved_version,
+                "device22": bool(profile.get("device22")
+                                 or merged.get(device_id, {}).get("device22")),
+            }}
+            try:
+                context = device_values.connection(
+                    devices, trial_results, device_id, allow_auto=False)
+            except device_values.ReadUnavailable as error:
+                handshake["error_kind"] = str(error)
+            else:
+                if context.get("gateway_id"):
+                    handshake["scope"] = "gateway"
+                versions = [saved_version] if tuya_versions.is_supported(saved_version) else []
+                for version in ("3.4", "3.5"):
+                    if version not in versions:
+                        versions.append(version)
+                for version in versions:
+                    try:
+                        probe = lan_scan.probe(context["host_id"], saved_ip,
+                                               context["key"], version,
+                                               gateway=context["gateway"])
+                    except lan_scan.ScannerUnavailable:
+                        handshake["error_kind"] = "scanner_unavailable"
+                        break
+                    handshake.update({
+                        "attempted": True, "version": version,
+                        "match": bool(probe.get("match")),
+                        "session_key_installed": bool(probe.get("session_key_installed")),
+                        "error_kind": str(probe.get("error") or "") or None,
+                    })
+                    if version == saved_version and not probe.get("match"):
+                        continue
+                    if probe.get("match"):
+                        confidence = "handshake"
+                        break
+                try:
+                    outcome = device_values.read(context)
+                except lan_scan.ScannerUnavailable:
+                    outcome = {"status": "scanner_unavailable"}
+                    handshake["error_kind"] = "scanner_unavailable"
+                dp_ids = sorted(
+                    str(dp) for dp in (outcome.get("dps") or {}) if str(dp).isdigit()
+                )
+                status.update({
+                    "result": str(outcome.get("status") or "read_failed"),
+                    "read_at": outcome.get("read_at"),
+                    "dp_count": len(dp_ids), "dp_ids": dp_ids,
+                })
+                if status["result"] == "ok":
+                    confidence = "dp_response"
+
+        last_failed = float(profile.get("last_failed") or 0)
+        return jsonify({
+            "device_id": device_id,
+            "generated_at": time.time(),
+            "network": _diagnostic_network(),
+            "addresses": {
+                "saved_ip": saved_ip, "saved_version": saved_version,
+                "attempted_ip": saved_ip,
+                "reachable_ip": saved_ip if tcp["state"] == lan_scan.OPEN else None,
+                "reachable_confidence": confidence,
+            },
+            "tcp6668": tcp,
+            "protocol": {
+                "configured": str(device.get("version") or ""),
+                "detected": saved_version,
+                "supported": bool(tuya_versions.is_supported(saved_version)),
+                "handshake": handshake,
+            },
+            "status": status,
+            "history": {
+                "last_ok": float(profile.get("last_ok") or 0) or None,
+                "last_failed": last_failed or None,
+                "fail_count": int(profile.get("fail_count") or 0),
+                "last_scan_at": float(profile.get("last_scan_at") or 0) or None,
+                "recovery_reason": str(profile.get("recovery_reason")
+                                       or repair_state().get("reason") or "unknown"),
+            },
+        })
 
 
 @bp.get("/api/local/status")

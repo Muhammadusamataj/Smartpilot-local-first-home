@@ -12,14 +12,20 @@ with Basic Auth credentials; loopback stays the default and needs no auth.
 
 from __future__ import annotations
 
+import ipaddress
+import json
 import os
 import sys
 import threading
+import time
 
 _LOCK = threading.Lock()
 _STARTED = False
 _SERVER = None
 _SERVER_DONE = None
+# Allowlisted, non-secret Wi-Fi/VPN facts pushed by the Android service.
+_NETWORK_FACTS: dict = {}
+NETWORK_FACTS_MAX_AGE_SECONDS = 120
 
 
 def _configure(data_dir: str, host: str, port: int, network_hint: str,
@@ -108,6 +114,73 @@ def update_network_hint(hint: str) -> None:
     if value:
         os.environ["TUYA_NETWORK_HINT"] = value
         os.environ["TUYA_NETWORK_HINT_EXPLICIT"] = "1"
+    else:
+        # Wi-Fi lost: an old hint must not look like current proof.
+        os.environ.pop("TUYA_NETWORK_HINT_EXPLICIT", None)
+
+
+def _safe_network_text(value, *, ipv4: bool = False) -> str:
+    text = str(value or "").strip()[:64]
+    if not text:
+        return ""
+    try:
+        if ipv4:
+            ipaddress.IPv4Network(text, strict=False)
+        else:
+            ipaddress.ip_address(text)
+        return text
+    except ValueError:
+        return ""
+
+
+def update_network_facts(payload) -> None:
+    """Store only allowlisted Android network facts for read-only diagnostics.
+
+    No SSID, BSSID, DNS, token, URL or raw exception can reach this record.
+    """
+    global _NETWORK_FACTS
+    try:
+        data = json.loads(payload) if isinstance(payload, (str, bytes, bytearray)) else payload
+    except (TypeError, ValueError):
+        data = None
+    if not isinstance(data, dict):
+        data = {}
+    wifi = data.get("wifi") if isinstance(data.get("wifi"), dict) else {}
+    vpn = data.get("vpn") if isinstance(data.get("vpn"), dict) else {}
+    route = data.get("default_route") if isinstance(data.get("default_route"), dict) else {}
+    transport = str(route.get("transport") or "unknown").strip().lower()
+    facts = {
+        "source": "android_service" if data.get("source") == "android_service" else "unavailable",
+        "observed_at": float(data.get("observed_at") or time.time()),
+        "wifi": {
+            "connected": bool(wifi.get("connected")),
+            "ipv4": _safe_network_text(wifi.get("ipv4"), ipv4=True),
+        },
+        "vpn": {
+            "connected": bool(vpn.get("connected")),
+            "tailscale_ip": _safe_network_text(vpn.get("tailscale_ip")),
+        },
+        "default_route": {
+            "transport": transport if transport in {
+                "wifi", "vpn", "cellular", "ethernet", "unknown",
+            } else "unknown",
+            "is_default": bool(route.get("is_default")),
+        },
+    }
+    with _LOCK:
+        _NETWORK_FACTS = facts
+
+
+def network_facts() -> dict:
+    """A copy of the last Android facts, labelled stale when too old."""
+    with _LOCK:
+        facts = dict(_NETWORK_FACTS)
+    if not facts:
+        return {"source": "unavailable", "observed_at": 0}
+    if time.time() - float(facts.get("observed_at") or 0) > NETWORK_FACTS_MAX_AGE_SECONDS:
+        facts = dict(facts)
+        facts["source"] = "stale"
+    return facts
 
 
 def stop() -> None:

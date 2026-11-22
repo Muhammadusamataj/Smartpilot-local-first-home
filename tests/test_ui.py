@@ -73,6 +73,12 @@ def server(tmp_path_factory):
         mp.setenv("CHECK_FOR_UPDATES", "true")
         mp.delenv("AUTH_USERNAME", raising=False)
         mp.delenv("AUTH_PASSWORD", raising=False)
+        # local_control captures file paths at import time. Earlier tests reload
+        # it with their own temp session, so reload it here too before app
+        # registers the blueprint; otherwise the UI server keeps serving the
+        # previous test's empty device/scene cache.
+        import local_control
+        local_control = importlib.reload(local_control)
         import app
 
         app = importlib.reload(app)

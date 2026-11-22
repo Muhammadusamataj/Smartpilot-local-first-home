@@ -279,7 +279,8 @@ def probe(dev_id, ip, key, version, gateway=False):
     Raises ScannerUnavailable if tinytuya can't be loaded or built.
     """
     outcome = {"match": False, "device22": False, "error": None,
-               "dev_id": None, "plaintext": False}
+               "dev_id": None, "plaintext": False,
+               "session_key_installed": False}
     # tinytuya broadcasts to find a device with no address, and reads
     # devices.json from the working directory for one with no key. Neither.
     if not ip or ip in ("Auto", "0.0.0.0") or not key:
@@ -326,9 +327,13 @@ def _classify(device, result, version, gateway, outcome):
             outcome["error"] = _error_kind(err)
         return outcome
 
+    if version in ("3.4", "3.5"):
+        # Report the HMAC/session-key result separately from the status reply.
+        # A status error can still have completed a valid handshake.
+        outcome["session_key_installed"] = bool(_session_key_installed(device))
     if isinstance(result, dict) and err is None:
         outcome["match"] = True
-    elif version in ("3.4", "3.5") and _session_key_installed(device):
+    elif version in ("3.4", "3.5") and outcome["session_key_installed"]:
         # The session key negotiation finished, which proves the key even if
         # the status reply itself was an error.
         outcome["match"] = True

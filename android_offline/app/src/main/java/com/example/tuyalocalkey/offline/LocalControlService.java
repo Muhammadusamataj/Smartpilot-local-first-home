@@ -111,6 +111,7 @@ public class LocalControlService extends Service {
         } else {
             updateHintInPython(config.hint);
         }
+        updateNetworkFactsInPython();
         // Recreate with the persisted settings if Funtouch OS restarts us.
         return START_STICKY;
     }
@@ -185,6 +186,19 @@ public class LocalControlService extends Service {
         }, "tuya-network-hint").start();
     }
 
+    private void updateNetworkFactsInPython() {
+        if (!Python.isStarted()) return;
+        final String facts = NetworkUtils.networkFacts(getApplicationContext());
+        new Thread(() -> {
+            try {
+                Python.getInstance().getModule("android_entry")
+                        .callAttr("update_network_facts", facts);
+            } catch (Throwable e) {
+                Log.w(TAG, "Could not refresh network facts", e);
+            }
+        }, "tuya-network-facts").start();
+    }
+
     private void stopPython() {
         if (!Python.isStarted()) return;
         new Thread(() -> {
@@ -229,6 +243,7 @@ public class LocalControlService extends Service {
         String hint = NetworkUtils.wifiSubnet(getApplicationContext());
         lastHint = hint;
         updateHintInPython(hint);
+        updateNetworkFactsInPython();
     }
 
     private void unregisterNetworkCallback() {
