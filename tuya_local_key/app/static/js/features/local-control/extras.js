@@ -173,17 +173,34 @@ function init() {
   });
 
   $("backupDownload")?.addEventListener("click", async () => {
+    const button = $("backupDownload");
     try {
+      if (button) button.disabled = true;
       const response = await fetch("api/local/backup", { cache: "no-store" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = "smart-pilot-backup.zip";
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(link.href), 5000);
-      toast("Backup downloaded", "ok");
+      const name = "smart-pilot-backup-" + new Date().toISOString().slice(0, 10) + ".zip";
+
+      // Android WebView cannot save a blob: URL through <a download>. The native
+      // bridge writes the bytes into Downloads/SmartPilot and shows the path.
+      if (window.PilotNative && typeof window.PilotNative.saveDownload === "function") {
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        let binary = "";
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+        }
+        window.PilotNative.saveDownload(name, btoa(binary), "application/zip");
+      } else {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = name;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+        toast("Backup downloaded", "ok");
+      }
     } catch (error) { toast(`Backup failed: ${error.message}`, "error"); }
+    finally { if (button) button.disabled = false; }
   });
 
   $("restoreFile")?.addEventListener("change", async (event) => {

@@ -46,17 +46,23 @@ async function downloadReport(d) {
   };
   let message = errors[body.error] || "Could not download the report. Try again.", failed = true;
   if (ok && body.account_id === operation.account && body.report && body.report.schema_version === 1) {
-    let url;
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const name = `tuya-local-key-support-${stamp}.json`;
+    const text = JSON.stringify(body.report, null, 2) + "\n";
     try {
-      const blob = new Blob([JSON.stringify(body.report, null, 2) + "\n"], { type: "application/json" });
-      url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-      link.href = url; link.download = `tuya-local-key-support-${stamp}.json`;
-      document.body.append(link); link.click(); link.remove();
-      message = "Support report downloaded."; failed = false;
+      if (window.PilotNative && typeof window.PilotNative.saveDownload === "function") {
+        // Android WebView cannot save a blob: URL; let the app write to Downloads.
+        window.PilotNative.saveDownload(name, btoa(unescape(encodeURIComponent(text))), "application/json");
+      } else {
+        const blob = new Blob([text], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url; link.download = name;
+        document.body.append(link); link.click(); link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      message = "Support report saved to Downloads/SmartPilot."; failed = false;
     } catch (error) { /* Keep a recoverable message if the browser cannot save. */ }
-    finally { if (url) setTimeout(() => URL.revokeObjectURL(url), 1000); }
   }
   notice = { ...operation, message, failed };
   repaint(d.id);

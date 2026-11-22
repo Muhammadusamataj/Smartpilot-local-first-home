@@ -559,6 +559,66 @@ public class OfflineActivity extends Activity {
         public void openDirectSettings() {
             if (trusted()) runOnUiThread(() -> setPanelOpen(true));
         }
+
+        /** Save a generated file to Downloads. WebView cannot save blob: URLs. */
+        @JavascriptInterface
+        public void saveDownload(String name, String base64, String mime) {
+            if (!trusted()) {
+                Log.w(TAG, "Blocked download save from untrusted origin");
+                return;
+            }
+            try {
+                String data = base64 == null ? "" : base64;
+                int comma = data.indexOf(',');
+                if (comma >= 0) data = data.substring(comma + 1);
+                byte[] bytes = Base64.decode(data, Base64.DEFAULT);
+                if (bytes.length == 0) throw new IllegalStateException("empty download");
+
+                String safe = (name == null || !name.matches("[A-Za-z0-9._-]+"))
+                        ? "smart-pilot-download.bin" : name;
+                final String fileName = safe;
+                String type = (mime == null || mime.isEmpty())
+                        ? "application/octet-stream" : mime;
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
+                    values.put(MediaStore.Downloads.MIME_TYPE, type);
+                    values.put(MediaStore.Downloads.RELATIVE_PATH,
+                            Environment.DIRECTORY_DOWNLOADS + "/SmartPilot");
+                    values.put(MediaStore.Downloads.IS_PENDING, 1);
+                    Uri uri = getContentResolver().insert(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                    if (uri == null) throw new IllegalStateException("Downloads insert failed");
+                    try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                        out.write(bytes);
+                    }
+                    values.clear();
+                    values.put(MediaStore.Downloads.IS_PENDING, 0);
+                    getContentResolver().update(uri, values, null, null);
+                } else {
+                    java.io.File dir = new java.io.File(
+                            Environment.getExternalStoragePublicDirectory(
+                                    Environment.DIRECTORY_DOWNLOADS), "SmartPilot");
+                    if (!dir.exists() && !dir.mkdirs()) {
+                        throw new IllegalStateException("could not create Downloads/SmartPilot");
+                    }
+                    try (java.io.FileOutputStream out =
+                                 new java.io.FileOutputStream(new java.io.File(dir, fileName))) {
+                        out.write(bytes);
+                    }
+                }
+
+                final long size = bytes.length;
+                handler.post(() -> Toast.makeText(OfflineActivity.this,
+                        "Saved to Downloads/SmartPilot/" + fileName + " (" + size + " bytes)",
+                        Toast.LENGTH_LONG).show());
+            } catch (Exception e) {
+                Log.e(TAG, "Could not save download", e);
+                handler.post(() -> Toast.makeText(OfflineActivity.this,
+                        "Save failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        }
     }
 
     /** JavaScript bridge used by the QR screen to save the PNG to Gallery. */
