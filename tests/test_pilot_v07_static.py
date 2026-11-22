@@ -36,12 +36,17 @@ def test_protocol_version_offers_auto_in_add_and_edit_forms():
 
 
 def test_bulk_status_refreshes_are_queued_not_dropped():
-    """Mobile concurrency is 2; run() silently drops the rest, so bulk reads must queue."""
+    """Mobile concurrency stays 2; extra reads wait in one bounded FIFO."""
     source = (ROOT / 'static/js/features/local-control/main.js').read_text(encoding='utf-8')
     assert 'limiter.run(' not in source
-    assert source.count('limiter.queue(') == 4
+    assert 'new LimitedConcurrency(mobile ? 2 : 3)' in source
+    assert source.count('limiter.queue(') == 1
+    assert 'function queueRefresh(' in source
+    assert 'function refreshAllDevices(' in source
+    assert 'refreshAllDevices(true)' in source  # cold start + foreground resume
     api = (ROOT / 'static/js/features/local-control/api.js').read_text(encoding='utf-8')
     assert 'queue(task)' in api and 'this.waiting.push(task)' in api
+    assert 'maxWaiting' in api  # bounded, not unbounded
     assert 'drain()' in api
 
 

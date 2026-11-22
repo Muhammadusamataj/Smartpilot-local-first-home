@@ -240,7 +240,8 @@ def test_app_icon_uses_ingress_relative_urls(webapp):
 
     assert response.status_code == 200
     assert 'href="icon.png"' in response.text
-    assert 'src="icon.png"' in response.text
+    # The icon is referenced by <link rel=icon> / apple-touch-icon, not an
+    # <img>. What matters is that every icon URL stays ingress-relative.
     assert 'href="/icon.png"' not in response.text
     assert 'src="/icon.png"' not in response.text
 

@@ -284,6 +284,10 @@ def wait_scan_idle(page):
 def test_modular_frontend_starts_and_navigates_at_root_and_ingress(browser, server, tmp_path, ingress, width, theme):
     target = server + (INGRESS_PREFIX.lstrip("/") + "/" if ingress else "")
     context = browser.new_context(viewport={"width": width, "height": 1000}, color_scheme=theme)
+    # The app stores an explicit theme preference; OS color_scheme alone does
+    # not set data-theme. Seed the same preference the test expects to verify.
+    context.add_init_script(
+        f"localStorage.setItem('tuya-local-key-theme', '{theme}');")
     loaded = context.new_page()
     errors, failed_assets, requests = [], [], []
     loaded.on("pageerror", lambda error: errors.append(str(error)))
@@ -298,7 +302,7 @@ def test_modular_frontend_starts_and_navigates_at_root_and_ingress(browser, serv
     try:
         loaded.goto(target, wait_until="networkidle")
         loaded.wait_for_selector("#rows tr")
-        expected_background = "rgb(246, 247, 249)" if theme == "light" else "rgb(18, 22, 28)"
+        expected_background = "rgb(237, 245, 252)" if theme == "light" else "rgb(8, 16, 35)"
         assert loaded.evaluate("getComputedStyle(document.body).backgroundColor") == expected_background
         # Reinitialization must not bind duplicate actions or restart boot requests.
         loaded.evaluate("""async () => {
@@ -1644,15 +1648,11 @@ def in_menu(page):
 
 
 def click_brand_target(page, target, width):
-    """The wordmark is hidden on narrow screens; the icon stays the home link."""
-    if width == 390 and target == "h1":
-        expect(page.locator("#homeLink h1")).to_be_hidden()
-        expect(page.locator("#homeLink .app-icon")).to_be_visible()
-        target = ".app-icon"
+    """Both the pilot logo and wordmark stay visible home-link targets."""
     page.locator(f"#homeLink {target}").click()
 
 
-@pytest.mark.parametrize("target", [".app-icon", "h1"])
+@pytest.mark.parametrize("target", [".pilot-root-logo", ".pilot-root-wordmark"])
 @pytest.mark.parametrize("width", [1440, 390])
 @pytest.mark.parametrize("selected", [False, True])
 def test_brand_exits_selection_without_changing_home_search_or_exclusions(page, target, width, selected):
@@ -1682,7 +1682,7 @@ def test_brand_exits_selection_without_changing_home_search_or_exclusions(page, 
     assert page.request.get(page.url + "api/device-exclusions").json() == saved
 
 
-@pytest.mark.parametrize("target", [".app-icon", "h1"])
+@pytest.mark.parametrize("target", [".pilot-root-logo", ".pilot-root-wordmark"])
 def test_brand_closes_each_device_panel_page_on_home(page, target):
     page.fill("#filter", "plug")
     cached_at, url = frontend_state(page, "devicesCachedAt"), page.url
@@ -1703,7 +1703,7 @@ def test_brand_closes_each_device_panel_page_on_home(page, target):
         assert frontend_state(page, "panelHistory") == []
 
 
-@pytest.mark.parametrize("target", [".app-icon", "h1"])
+@pytest.mark.parametrize("target", [".pilot-root-logo", ".pilot-root-wordmark"])
 @pytest.mark.parametrize("width", [1440, 390])
 def test_brand_returns_from_excluded_without_restoring_devices(page, target, width):
     page.set_viewport_size({"width": width, "height": 1000})
@@ -1761,8 +1761,8 @@ def test_a_narrow_header_moves_actions_into_the_menu_on_one_line(page):
     page.wait_for_function("!!document.querySelector('#moreMenu #logoutBtn')")
 
     assert page.locator("header").bounding_box()["height"] == one_line
-    assert "refreshBtn" not in in_menu(page), "Refresh is the last to go"
-    assert "logoutBtn" in in_menu(page) and "csvBtn" in in_menu(page)
+    # The compact header keeps one line by moving every action into the menu.
+    assert set(in_menu(page)) == set(ACTIONS)
     assert page.evaluate("document.documentElement.scrollWidth") <= 375
     assert page.locator("#moreMenu").is_hidden()
 
@@ -1804,14 +1804,16 @@ def test_opening_the_panel_moves_actions_out_of_its_way(page):
     assert "logoutBtn" in in_menu(page)
 
 
-def test_the_menu_button_is_as_tall_as_the_buttons_beside_it(page):
+def test_the_menu_button_is_square_and_aligned_in_the_narrow_header(page):
     page.set_viewport_size({"width": 375, "height": 800})
     page.wait_for_function("!!document.querySelector('#moreMenu #logoutBtn')")
 
     more = page.locator("#moreBtn").bounding_box()
-    refresh = page.locator("#refreshBtn").bounding_box()
-    assert more["height"] == refresh["height"]
-    assert more["y"] == refresh["y"]
+    header = page.locator("header").bounding_box()
+    assert more is not None
+    assert abs(more["height"] - more["width"]) <= 1
+    assert header["y"] <= more["y"]
+    assert more["y"] + more["height"] <= header["y"] + header["height"] + 1
 
 
 def test_ui_text_uses_no_semicolons_or_em_dashes(page, running_app, monkeypatch):
@@ -3323,6 +3325,9 @@ def test_exclusions_failed_background_read_preserves_the_last_saved_view(page):
     page.locator("#retryExclusions").click()
     expect(page.locator("#exclusionError")).to_be_hidden()
     assert listed_ids(page) == [LAMP.id, SENSOR.id, BARE.id]
+    # Let the background read finish before teardown removes its temp directory;
+    # Windows refuses to delete a file still held by a request thread.
+    page.wait_for_load_state("networkidle")
 
 
 def test_exclusions_late_older_read_cannot_undo_a_successful_save(page):
@@ -3339,6 +3344,8 @@ def test_exclusions_late_older_read_cannot_undo_a_successful_save(page):
     with page.expect_request(lambda request: request.url.endswith("/api/device-exclusions") and
                              request.method == "GET"):
         page.evaluate("window.dispatchEvent(new Event('focus'))")
+    # Focus also triggers a device refresh; wait for the row before selecting it.
+    expect(row(page, PLUG)).to_be_visible()
     select_devices(page, PLUG)
     saved = save_selection(page)
     assert saved["revision"] > previous["revision"]
@@ -4321,7 +4328,12 @@ def test_filters_stay_anchored_after_first_metadata_refresh(page, running_app, m
     expect(page.locator("#filtersPopover")).to_be_visible()
     anchor = page.locator("#filtersBtn").bounding_box()
     popover = page.locator("#filtersPopover").bounding_box()
-    assert popover["y"] == pytest.approx(anchor["y"] + anchor["height"] + 8, abs=1)
+    # The popover is clamped to stay inside the viewport when it is taller than
+    # the space below the anchor; assert the same anchored-and-clamped result.
+    viewport_height = page.evaluate("innerHeight")
+    desired_top = anchor["y"] + anchor["height"] + 8
+    expected_top = max(16, min(desired_top, viewport_height - popover["height"] - 16))
+    assert popover["y"] == pytest.approx(expected_top, abs=1)
     expected_left = max(16, min(anchor["x"] + anchor["width"] - popover["width"], width - popover["width"] - 16))
     assert popover["x"] == pytest.approx(expected_left, abs=1)
     select_room(page, "kitchen")
@@ -5428,7 +5440,7 @@ def test_support_report_downloads_private_diagnostics_directly_from_the_menu(pag
     for secret in (PLUG.id, PLUG.name, PLUG.local_key, PLUG.uid, PLUG.ip):
         assert secret not in text
     assert "account_id" not in report
-    expect(page.locator("#menuBody [role='status']")).to_have_text("Support report downloaded.")
+    expect(page.locator("#menuBody [role='status']")).to_have_text("Support report saved to Downloads/SmartPilot.")
     expect(control).to_be_focused()
     assert page.locator("#menuBody").evaluate("el => el.scrollWidth <= el.clientWidth")
     posts = [request for request in requests if request.method == "POST"]
@@ -5459,7 +5471,7 @@ def test_support_report_failures_offer_a_retry_without_downloading_a_file(page, 
     page.unroute("**/api/support-report", fail)
     with page.expect_download():
         control.click()
-    expect(page.locator("#menuBody [role='status']")).to_have_text("Support report downloaded.")
+    expect(page.locator("#menuBody [role='status']")).to_have_text("Support report saved to Downloads/SmartPilot.")
 
 
 @pytest.mark.parametrize("transition", ["close", "refresh", "another_device"])
@@ -5532,7 +5544,7 @@ def test_support_report_feedback_clears_when_the_device_visit_ends(page, running
         page.unroute("**/api/support-report", fail)
     with page.expect_download():
         control.click()
-    expect(page.locator("#menuBody [role='status']")).to_have_text("Support report downloaded.")
+    expect(page.locator("#menuBody [role='status']")).to_have_text("Support report saved to Downloads/SmartPilot.")
 
 
 @pytest.mark.parametrize("transition", ["close", "switch"])
@@ -6022,20 +6034,23 @@ def test_premium_local_shell_shows_home_by_default_and_loads_the_module(page, se
     page.goto(f"{server}local", wait_until="networkidle")
 
     expect(page.locator('[data-view-panel="home"]')).to_be_visible()
-    for view in ("devices", "scenes", "advanced"):
+    for view in ("devices", "autopilot", "scenes", "settings"):
         expect(page.locator(f'[data-view-panel="{view}"]')).to_be_hidden()
     assert page.locator("[data-view]").evaluate_all(
-        "els => els.map(el => el.dataset.view)") == ["home", "devices", "scenes", "advanced"]
+        "els => els.map(el => el.dataset.view)") == [
+        "home", "devices", "autopilot", "scenes", "settings",
+    ]
     expect(page.locator('[data-view="home"]')).to_have_attribute("aria-selected", "true")
 
-    expect(page.locator("#statTotal")).to_have_text("3")
-    expect(page.locator("#heroTitle")).to_be_visible()
+    expect(page.locator(".pilot-home-top h1")).to_have_text("Home")
     expect(page.locator("#summary")).to_contain_text("3 device(s) · 1 online · 1 saved")
-    expect(page.locator("#quickScenes .scene-chip")).to_contain_text("Movie time")
+    page.locator('[data-view="scenes"]').click()
+    expect(page.locator("#sceneList .scene-card")).to_contain_text("Movie time")
+    page.locator('[data-view="home"]').click()
 
     expect(page.locator("#devices")).to_have_count(1)
     expect(page.locator("#devices .tile")).to_have_count(3)
-    expect(page.locator("#homeGrid .tile")).to_have_count(3)
+    expect(page.locator("#homeQuickDevices .pilot-home-tile")).to_have_count(3)
 
     # Presentation lives in external files, not in the template.
     assert page.evaluate("document.querySelectorAll('style').length") == 0
@@ -6048,10 +6063,12 @@ def test_local_card_tap_opens_device_details_sheet(page, server):
     points = [
         {"dp": "1", "code": "switch", "type": "bool", "value": False, "cloud_value": False},
         {"dp": "19", "code": "energy", "type": "int", "value": 12, "cloud_value": 12},
+        {"dp": "101", "code": "diagnostics", "type": "string", "value": "ok", "cloud_value": "ok"},
     ]
     status = {"status": "ok", "values": [
         {"dp": "1", "code": "switch", "type": "bool", "value": False},
         {"dp": "19", "code": "energy", "type": "int", "value": 12},
+        {"dp": "101", "code": "diagnostics", "type": "string", "value": "ok"},
     ]}
     commands = []
 
@@ -6066,16 +6083,16 @@ def test_local_card_tap_opens_device_details_sheet(page, server):
     page.goto(f"{server}local", wait_until="networkidle")
     expect(page.locator('[data-view-panel="home"]')).to_be_visible()
 
-    card = page.locator('#homeGrid .tile[data-id="sheet-plug"]')
-    expect(card.locator(".switch-control input[type=checkbox]")).to_have_count(1)
-    card.locator(".tile-title h2").click()
+    card = page.locator('#homeQuickDevices .pilot-home-tile[data-home-key="tuya:sheet-plug"]')
+    expect(card.locator(".pilot-home-inline-power button.switch[role='switch']")).to_have_count(1)
+    card.locator(".pilot-device-mini").click()
 
     sheet = page.locator("#deviceSheet")
     expect(sheet).to_have_attribute("aria-hidden", "false")
     expect(sheet).to_have_class(re.compile(r"(?:^|\s)open(?:\s|$)"))
     expect(page.locator("#deviceSheetTitle")).to_have_text("Desk Lamp")
     expect(page.locator("#deviceSheetSubtitle")).to_contain_text("Study")
-    expect(page.locator("#deviceSheetBody .detail-card .switch-control input[type=checkbox]")).to_have_count(1)
+    expect(page.locator("#deviceSheetBody .detail-card .switch-control button.switch[role='switch']").first).to_be_visible()
     expect(page.locator("#deviceSheetBody .detail-card details.more")).to_be_visible()
     expect(page.locator("#deviceSheetBody .chip[data-dp='19']")).to_contain_text("kWh")
     # Opening details must not navigate away from Home.
@@ -6089,7 +6106,7 @@ def test_local_card_tap_opens_device_details_sheet(page, server):
     # The visible card toggle still commands directly and never opens the sheet.
     with page.expect_response(lambda r: r.url.endswith("/api/local/command") and
                               r.request.method == "POST"):
-        card.locator("label.switch").click()
+        card.locator("button.switch[role='switch']").click()
     assert commands[0]["device_id"] == "sheet-plug"
     assert commands[0]["dp"] == "1" and commands[0]["value"] is True
     expect(sheet).to_have_attribute("aria-hidden", "true")
@@ -6140,18 +6157,9 @@ def test_local_favorite_posts_preferences_and_filters_the_devices(page, server):
     body = saved.value.request.post_data_json
     assert "plug-a" in body["favorites"] and "plug-b" not in body["favorites"]
 
-    # The filter lives on the home panel, so check it while Home is visible.
-    page.locator('[data-view="home"]').click()
-    page.locator("#favoriteFilter").check()
-    expect(page.locator("#homeGrid .tile")).to_have_count(1)
-    expect(page.locator('#homeGrid .tile[data-id="plug-a"]')).to_be_visible()
-    expect(page.locator('#homeGrid .tile[data-id="plug-b"]')).to_have_count(0)
-
-    # Switching back to Devices keeps the filter and shows only the favourite.
-    page.locator('[data-view="devices"]').click()
-    expect(page.locator("#devices .tile")).to_have_count(1)
-    expect(page.locator('#devices .tile[data-id="plug-a"]')).to_be_visible()
-    expect(page.locator('#devices .tile[data-id="plug-b"]')).to_have_count(0)
+    # The compact dashboard no longer exposes a separate favorites-only toggle;
+    # verify the persisted preference payload instead of a removed control.
+    assert posts and "plug-a" in posts[-1]["favorites"] and "plug-b" not in posts[-1]["favorites"]
 
 
 def test_local_capability_control_and_reading_command_is_confirmed(page, server):
@@ -6175,22 +6183,21 @@ def test_local_capability_control_and_reading_command_is_confirmed(page, server)
     page.locator('[data-view="devices"]').click()
 
     card = page.locator('#devices .tile[data-id="plug-live"]')
-    switch = card.locator(".switch-control input[type=checkbox]")
-    expect(switch).to_have_count(1)
-    expect(switch).not_to_be_checked()
+    switch = card.locator(".switch-control button.switch[role='switch']").last
+    expect(switch).to_have_attribute("aria-checked", "false")
     expect(card.locator(".reading .chip[data-dp='19']")).to_contain_text("kWh")
-    expect(page.locator("#readingStrip .reading-pill")).to_contain_text("kWh")
+    # The compact dashboard keeps the reading on the device card itself.
 
     with page.expect_response(lambda r: r.url.endswith("/api/local/command") and
                               r.request.method == "POST") as sent:
-        card.locator(".switch-control label.switch").click()
+        switch.click()
 
     assert sent.value.json() == {"ok": True, "confirmed": True, "dp": "1", "value": True}
     assert commands[0]["device_id"] == "plug-live"
     assert commands[0]["dp"] == "1" and commands[0]["value"] is True
-    expect(switch).to_be_checked()
+    expect(switch).to_have_attribute("aria-checked", "true")
     expect(page.locator("#toast")).to_have_attribute("data-kind", "ok")
-    expect(page.locator("#toast")).to_contain_text("switch ✓")
+    expect(page.locator("#toast")).to_contain_text("ON confirmed")
 
 
 def test_local_critical_switch_requires_two_deliberate_taps(page, server):
@@ -6215,22 +6222,21 @@ def test_local_critical_switch_requires_two_deliberate_taps(page, server):
     page.locator('[data-view="devices"]').click()
 
     card = page.locator('#devices .tile[data-id="bfccb1925a4b0b269dfph5"]')
-    control = card.locator(".switch-control")
-    switch = control.locator("input[type=checkbox]")
-    label = control.locator("label.switch")
+    control = card.locator(".switch-control").last  # visible point-level control
+    toggle = control.locator("button.switch[role='switch']")
 
-    label.click()
+    toggle.click()
     assert "armed" in (control.get_attribute("class") or "")
     assert commands == []
-    expect(switch).not_to_be_checked()
+    expect(toggle).to_have_attribute("aria-checked", "false")
 
     with page.expect_response(lambda r: r.url.endswith("/api/local/command") and
                               r.request.method == "POST"):
-        label.click()
+        toggle.click()
 
     assert commands[0]["device_id"] == "bfccb1925a4b0b269dfph5"
     assert commands[0]["dp"] == "1" and commands[0]["value"] is True
-    expect(switch).to_be_checked()
+    expect(toggle).to_have_attribute("aria-checked", "true")
     assert "armed" not in (control.get_attribute("class") or "")
 
 
@@ -6262,8 +6268,6 @@ def test_local_scaled_and_packed_readings_render_with_real_units(page, server):
     expect(card.locator(".reading .chip[data-dp='6:w']")).to_contain_text("0.0 W")
     # Raw packed DP is expanded, never dumped into the generic values list.
     expect(card.locator(".more .chip[data-dp='6']")).to_have_count(0)
-    expect(page.locator("#readingStrip")).to_contain_text("121.50 kWh")
-    expect(page.locator("#readingStrip")).to_contain_text("247.5 V")
 
 
 def test_local_line_current_is_shown_in_amps_but_leakage_stays_in_ma(page, server):
@@ -6329,7 +6333,8 @@ def test_local_small_screen_tabs_and_device_search_are_reachable(page, server):
 
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     tabs = page.locator(".view-tabs [data-view]")
-    expect(tabs).to_have_count(4)
+    # Home, Devices, Auto-Pilot, Scenes, Settings all stay reachable on mobile.
+    expect(tabs).to_have_count(5)
     for tab in tabs.all():
         expect(tab).to_be_visible()
         expect(tab).to_be_enabled()
@@ -6345,3 +6350,74 @@ def test_local_small_screen_tabs_and_device_search_are_reachable(page, server):
     expect(search).to_have_value("Living")
     expect(page.locator("#devices .tile:visible")).to_have_count(1)
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+
+
+@pytest.mark.parametrize("width", [320, 360, 390, 412, 768, 1280])
+def test_local_layout_is_reachable_at_target_widths(page, server, width):
+    """No horizontal scrolling and all five panels stay usable on Vivo/tablet/desktop."""
+    _mock_local_routes(page, devices=[_local_device("plug-a", "Living Room Plug")])
+    page.set_viewport_size({"width": width, "height": 844})
+    page.goto(f"{server}local", wait_until="networkidle")
+
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    tabs = page.locator(".view-tabs [data-view]")
+    expect(tabs).to_have_count(5)
+    for tab in tabs.all():
+        expect(tab).to_be_visible()
+        expect(tab).to_be_enabled()
+
+    tabs.nth(1).click()
+    expect(page.locator('[data-view-panel="devices"]')).to_be_visible()
+    search = page.locator("#deviceSearch")
+    expect(search).to_be_visible()
+    search.fill("Living")
+    expect(search).to_have_value("Living")
+    expect(page.locator("#devices .tile:visible")).to_have_count(1)
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+
+
+def test_local_cold_start_and_resume_refresh_all_five_critical_devices(page, server):
+    """The 2-read Android limit must queue, not drop, fresh reads for five devices."""
+    critical_ids = [
+        "bf069004945cef348chgdf",  # Bore Motor
+        "bfe87f1e05abf9d1acdanb",  # Ground Floor Breaker
+        "bf8363e8618b64aa00nclo",  # First Floor Breaker
+        "bfccb1925a4b0b269dfph5",  # Water Tank
+        "bf04a442f57b19789dfflz",  # Geyser
+    ]
+    devices = [
+        _local_device(device_id, name, points=[
+            {"dp": "1", "code": "switch", "type": "bool", "value": False,
+             "cloud_value": False},
+        ])
+        for device_id, name in zip(critical_ids, [
+            "Bore Motor", "Ground Floor Breaker", "First Floor Breaker",
+            "Water Tank", "Geyser",
+        ])
+    ]
+    status = {"status": "ok", "verified": True, "values": [
+        {"dp": "1", "code": "switch", "type": "bool", "value": False},
+    ]}
+    _mock_local_routes(page, devices=devices, status=status)
+    status_ids = []
+
+    def record_status(request):
+        match = re.search(r"/api/local/status(?:\?|&|$)", request.url)
+        if match:
+            found = re.search(r"[?&]id=([^&]+)", request.url)
+            if found:
+                status_ids.append(found.group(1))
+
+    page.on("request", record_status)
+    page.goto(f"{server}local", wait_until="networkidle")
+    page.wait_for_timeout(1500)
+    assert set(status_ids) == set(critical_ids)
+
+    # Reopening from the Android back stack can bypass visibilitychange.
+    page.evaluate("""() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    }""")
+    page.wait_for_timeout(1500)
+    assert all(status_ids.count(device_id) >= 2 for device_id in critical_ids)

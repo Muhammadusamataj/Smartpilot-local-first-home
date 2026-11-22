@@ -98,10 +98,10 @@ def _device_lock(device_id: str) -> threading.RLock:
 
 @contextlib.contextmanager
 def _busy_guard(device_id: str, wait_seconds: float = 0):
-    """Serialize local sessions. Commands may briefly wait for an ongoing read.
-
-    Status polling remains non-blocking, so background polling never queues up
-    behind an interactive write. This is a wait for a lock, NOT a retry of a write.
+    """Serialize local sessions. Status polls and commands wait briefly for an
+    in-flight session instead of being silently dropped. The wait is bounded by
+    the caller (1.5s for read-only status, 2.5s for an interactive command) and
+    is a wait for a lock, NOT a retry of a write.
     """
     lock = _device_lock(device_id)
     acquired = lock.acquire(timeout=wait_seconds) if wait_seconds > 0 else lock.acquire(blocking=False)
@@ -132,7 +132,46 @@ _ISSUE_MESSAGES = {
     "busy": "Ye device abhi busy hai. Thoda wait karke dobara karein.",
     "readback_mismatch": "Command bheja gaya, par device ne nayi value confirm nahi ki.",
     "readback_failed": "Command bheja gaya, par readback nahi ho paya.",
+    "critical_unknown_dp": "Is device par sirf saved, known controls chal sakte hain.",
+    "critical_unverified": "Pehle live status verify karein, phir control istemal karein.",
+    "critical_automation_blocked": "Safety device Scenes/schedules se automatically nahi chal sakta.",
 }
+
+# Backend-enforced safety for devices whose accidental ON/OFF can flood a home
+# or run a heater unattended. The two-tap UI confirmation is NOT the only gate:
+# these checks live in the write path and in every unattended automation path.
+CRITICAL_DEVICE_IDS = frozenset({
+    "bf069004945cef348chgdf",  # Bore Motor
+    "bf8363e8618b64aa00nclo",  # First Floor Breaker
+    "bfe87f1e05abf9d1acdanb",  # Ground Floor Breaker
+    "bfccb1925a4b0b269dfph5",  # Water Tank
+    "bf04a442f57b19789dfflz",  # Geyser
+})
+# A verified LAN read older than this cannot authorise a critical write.
+CRITICAL_READ_TTL_SECONDS = 300
+
+
+def _is_critical(device_id: str) -> bool:
+    return str(device_id) in CRITICAL_DEVICE_IDS
+
+
+def _critical_write_refusal(device_id: str, dp: str, device: dict | None) -> str | None:
+    """Return a refusal code for an unsafe critical write, else None.
+
+    Only saved, known DPs are writable and only after a recent successful live
+    read. Raw DP numbers and stale/unknown states are rejected server-side.
+    """
+    if not _is_critical(device_id):
+        return None
+    if not any(str(point.get("dp")) == str(dp) for point in _points(device or {})):
+        return "critical_unknown_dp"
+    with _profile_lock:
+        entry = dict(_profiles().get(str(device_id)) or {})
+    last_ok = float(entry.get("last_ok") or 0)
+    last_failed = float(entry.get("last_failed") or 0)
+    if not last_ok or time.time() - last_ok > CRITICAL_READ_TTL_SECONDS or last_failed > last_ok:
+        return "critical_unverified"
+    return None
 
 
 def _message(code: str) -> str:
@@ -1008,6 +1047,12 @@ def _execute_scene(scene: dict, *, update_last_run: bool = True) -> dict:
     devices_by_id = _by_id(_devices())
     for action in scene["actions"]:
         device_id, dp = action["device_id"], action["dp"]
+        # Scenes and scheduler ticks are unattended: a critical safety device
+        # must never be operated by them, even with a perfectly valid DP.
+        if _is_critical(device_id):
+            results.append(_scene_result(device_id, dp, False, "critical_automation_blocked"))
+            failed += 1
+            continue
         with _busy_guard(device_id) as acquired:
             if not acquired:
                 results.append(_scene_result(device_id, dp, False, "busy"))
@@ -1466,7 +1511,10 @@ def local_ensure():
 @bp.get("/api/local/status")
 def local_status():
     device_id = str(request.args.get("id") or "").strip()
-    with _busy_guard(device_id) as acquired:
+    # A status read is read-only: briefly wait in a bounded queue for an
+    # in-flight command instead of dropping the refresh. Interactive commands
+    # still get a longer priority wait, and a write is never re-issued.
+    with _busy_guard(device_id, wait_seconds=1.5) as acquired:
         if not acquired:
             return jsonify({"error": "busy", "code": "busy"}), 409
         try:
@@ -1520,7 +1568,11 @@ def local_command():
         except device_values.ReadUnavailable as error:
             code = str(error)
             return jsonify({"error": _message(code), "code": code}), 404
-        points = {item["dp"]: item for item in _points(_by_id(_devices())[device_id])}
+        device = _by_id(_devices())[device_id]
+        refusal = _critical_write_refusal(device_id, dp, device)
+        if refusal:
+            return jsonify({"error": _message(refusal), "code": refusal}), 403
+        points = {item["dp"]: item for item in _points(device)}
         point = points.get(dp)
         if not point or "value" not in data:
             return jsonify({"error": "unknown_dp"}), 400

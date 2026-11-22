@@ -34,6 +34,16 @@ MAX_MEMBER_BYTES = 8 * 1024 * 1024
 MAX_EVENTS = 200
 ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
 
+# Mirrored from local_control. A safety device must never be driven by an
+# unattended duration rule; kept local so this module stays standalone.
+CRITICAL_DEVICE_IDS = frozenset({
+    "bf069004945cef348chgdf",  # Bore Motor
+    "bf8363e8618b64aa00nclo",  # First Floor Breaker
+    "bfe87f1e05abf9d1acdanb",  # Ground Floor Breaker
+    "bfccb1925a4b0b269dfph5",  # Water Tank
+    "bf04a442f57b19789dfflz",  # Geyser
+})
+
 # Files that may be written into a backup archive and restored from one.
 BACKUP_NAMES = (
     "session.json", "devices.cache", "cache.key", "lan.cache",
@@ -168,6 +178,8 @@ def _valid_rule(data: dict) -> tuple[dict | None, str | None]:
     device_id = str(data.get("device_id") or "").strip()
     if not ID_RE.fullmatch(device_id):
         return None, "invalid_device"
+    if device_id in CRITICAL_DEVICE_IDS:
+        return None, "critical_device_blocked"
     dp = str(data.get("dp") or "").strip()
     if not dp.isdigit():
         return None, "invalid_dp"
@@ -235,6 +247,9 @@ def evaluate_rules() -> list[dict]:
     with _lock:
         rules = [dict(item) for item in _rules if item.get("enabled")]
     for rule in rules:
+        # Defence in depth for rules saved before this guard existed.
+        if rule.get("device_id") in CRITICAL_DEVICE_IDS:
+            continue
         key = rule["id"]
         try:
             value = reader(rule["device_id"], rule["dp"])

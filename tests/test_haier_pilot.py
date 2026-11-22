@@ -1,6 +1,8 @@
 """Pure protocol tests; synthetic AC only — never exercise real hardware."""
+import contextlib
 import importlib.util
 import json
+import os
 import socket
 import struct
 import sys
@@ -88,7 +90,10 @@ def test_local_key_is_encrypted_on_disk(tmp_path,monkeypatch):
     assert KEY.encode() not in h.LOCAL_FILE.read_bytes()
     assert h._load()["pro"]["local_key"] == KEY
     assert h._summary("pro", config["pro"]).get("local_key") is None
-    assert h.KEY_FILE.stat().st_mode & 0o077 == 0
+    # POSIX mode bits are meaningless on Windows (chmod is a no-op there).
+    # The encryption assertion above is the real safety check on every OS.
+    if os.name == "posix":
+        assert h.KEY_FILE.stat().st_mode & 0o077 == 0
 
 
 def test_socket_handshake_with_synthetic_device(monkeypatch):
@@ -156,8 +161,18 @@ def test_failed_refresh_revokes_cached_verification(monkeypatch):
     monkeypatch.setattr(h, "_read_device", lambda entry: (_ for _ in ()).throw(h.HaierError("offline")))
     monkeypatch.setitem(h._cache, "pro", {"verified": True, "read_at": 3000.0,
                                          "data": {"writable": True, "power_on": True}})
-    result, code = h.haier_read()
-    assert code == 503 and "offline" in result["error"]
+    # A Flask view needs an application context for jsonify. In production the
+    # framework always provides one; the direct unit call must do the same.
+    try:
+        import flask
+    except ImportError:
+        context = contextlib.nullcontext()
+    else:
+        context = flask.Flask("test").app_context()
+    with context:
+        result, code = h.haier_read()
+    payload = result.get_json() if hasattr(result, "get_json") else result
+    assert code == 503 and "offline" in payload["error"]
     assert h._cache["pro"]["verified"] is False
     assert h._cache["pro"]["data"] is None
     h._cache.pop("pro", None)

@@ -1,3 +1,13 @@
+## v1.18 (2026-11-22) — final audit build
+
+- Recreated from the exact final audited commit; earlier `v1.16`/`v1.17` tags untouched.
+- Cherry-picked the audited non-loopback bind guard from PR #2 while leaving PR #2 open/unmerged. PR #1 was intentionally not applied because it removed Family Hub, backup/update and safety sections from the working branch.
+- Added backend-enforced critical-device safety for Bore Motor, Water Tank, both floor breakers and Geyser: scenes/schedules/rules cannot operate them, raw/unknown DPs are rejected, and manual writes require a recent verified live read. Two-tap UI confirmation remains an additional layer only.
+- Kept Android at 2 concurrent status reads; extra cold-start/reopen/resume reads now wait in a bounded FIFO instead of being dropped. All five saved devices get a fresh read; failed reads retry, commands never auto-retry, and stale/unknown controls stay disabled.
+- Kept all five panels/tabs and device search reachable from 320 px to 1280 px without horizontal scrolling.
+- Fixed stale test assertions and added regression coverage for critical-device blocks, bounded reads, cold/resume refresh and responsive layouts.
+- See `dist/CHANGELOG-v1.18.md` for build hashes and verification counts.
+
 ## v0.6 (2026-11-21) — Tuya usability and reliability hotfix
 
 - Single-click switch control with clearly visible double-tap confirmation for risky loads

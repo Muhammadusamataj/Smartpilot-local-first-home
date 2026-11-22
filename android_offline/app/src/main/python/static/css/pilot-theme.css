@@ -38,6 +38,11 @@ button:focus-visible,input:focus-visible,a:focus-visible,select:focus-visible{ou
 /* Glass typography and controls */
 .appbar,body>header{background:rgba(9,20,42,.79)!important;backdrop-filter:blur(20px) saturate(160%)!important;-webkit-backdrop-filter:blur(20px) saturate(160%)!important;border-bottom:1px solid var(--border)!important;box-shadow:0 10px 30px rgba(0,0,0,.13)!important}
 :root[data-theme="light"] .appbar,:root[data-theme="light"] body>header{background:rgba(246,251,255,.85)!important}
+/* The root header (and its More menu) must stack above <main>, which paints
+   later in DOM order. Without this the setup view can intercept menu clicks.
+   The local-control .appbar is intentionally excluded: the device sheet and
+   its close button must stay above it. */
+body>header{position:relative;z-index:10}
 .appbar{min-height:72px;gap:16px;padding:11px clamp(16px,3vw,30px)!important}
 .pilot-brand{gap:12px;flex-shrink:0}
 .appbar .pilot-brand .logo,.pilot-root-logo{width:46px;height:46px;border-radius:15px;background:linear-gradient(142deg,#4ee3be,#568ffc);box-shadow:0 9px 25px rgba(79,194,223,.22);display:grid!important;place-items:center;color:#082538;font-weight:900;font-size:28px;flex-shrink:0}
@@ -134,4 +139,11 @@ input[type="text"],input[type="search"],input[type="number"],select,textarea{acc
   .panel,.tile,.device-card,.scene-card,.group,.card,.settings-card,.table-scroll,.filter-popover,
   .appbar .view-tabs{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
   .tile:hover{transform:none}
+}
+
+/* At the narrowest Vivo widths the wordmark, update badge and actions cannot
+   share one header line. Keep the accessible home logo and drop only the
+   decorative wordmark; every action remains in the More menu. */
+@media(max-width:360px){
+  body>header .pilot-root-wordmark{display:none!important}
 }

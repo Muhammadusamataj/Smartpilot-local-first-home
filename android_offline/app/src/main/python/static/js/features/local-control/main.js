@@ -28,9 +28,12 @@ const state = {
   editorMounted: false,
   detailDeviceId: "",
   failedReads: new Map(),
+  queuedReads: new Set(),
 };
 
 const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+// 2 concurrent LAN reads on Android is deliberate: more sockets make the Vivo
+// device reads slow and unreliable. Extra reads wait in the bounded queue.
 const limiter = new LimitedConcurrency(mobile ? 2 : 3);
 
 // Presentation-only classification. These IDs are never sent to the server or
@@ -603,6 +606,30 @@ function uniqueCards() {
   });
 }
 
+// One queued read per device. `inFlight` alone is not enough because queued
+// tasks have not started yet; without this a cold start can enqueue the same
+// device twice (once from load() and once from the explicit refresh sweep).
+function queueRefresh(card, silent = false) {
+  const id = card?.dataset.id;
+  if (!id || state.queuedReads.has(id) || state.inFlight.has(id)
+      || commandsInFlight.has(String(id))) return;
+  state.queuedReads.add(id);
+  limiter.queue(async () => {
+    try {
+      await refresh(id, card, silent);
+    } finally {
+      state.queuedReads.delete(id);
+    }
+  });
+}
+
+// Cold start, reopen and foreground resume must ask every saved device for a
+// fresh live status — including ones not yet verified — without dropping the
+// extras when the 2-read Android limit is busy.
+function refreshAllDevices(silent = false) {
+  for (const card of uniqueCards()) queueRefresh(card, silent);
+}
+
 function renderAll({ poll = false } = {}) {
   state.renderGeneration += 1;
   const filtered = state.devices.filter(matches);
@@ -624,9 +651,7 @@ function renderAll({ poll = false } = {}) {
     $(id)?.setAttribute("aria-busy", "false");
   }
   if (poll) {
-    for (const card of pollableCards()) {
-      limiter.queue(() => refresh(card.dataset.id, card));
-    }
+    for (const card of pollableCards()) queueRefresh(card);
   }
 }
 
@@ -1025,7 +1050,7 @@ function schedulePoll() {
       for (const card of pollableCards()) {
         const next = Number(state.retries.get(card.dataset.id) || 0);
         if (Date.now() < next) continue;
-        limiter.queue(() => refresh(card.dataset.id, card, true));
+        queueRefresh(card, true);
       }
     }
     schedulePoll();
@@ -1103,15 +1128,18 @@ function initEvents() {
     renderAll();
   });
   $("refreshAll")?.addEventListener("click", () => {
-    for (const card of pollableCards()) limiter.queue(() => refresh(card.dataset.id, card));
+    for (const card of uniqueCards()) queueRefresh(card);
   });
   $("saveOrganize")?.addEventListener("click", saveOrganize);
   $("autoRefresh")?.addEventListener("change", schedulePoll);
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) {
-      for (const card of pollableCards().slice(0, 8)) limiter.queue(() => refresh(card.dataset.id, card, true));
-    }
+    if (!document.hidden) refreshAllDevices(true);
     schedulePoll();
+  });
+  // Reopening from the Android back stack can restore a cached page without a
+  // fresh visibilitychange; pageshow covers that path too.
+  window.addEventListener("pageshow", event => {
+    if (event.persisted) refreshAllDevices(true);
   });
   window.addEventListener("online", () => { toast("Network changed — checking local devices", "ok"); load(true); schedulePoll(); });
   window.addEventListener("offline", () => { toast("Internet offline — local Wi-Fi checks continue", "warn"); schedulePoll(); });
@@ -1152,6 +1180,9 @@ async function boot() {
   initEvents();
   setView("home");
   await load();
+  // load() already refreshes verified cards; this sweep also covers saved
+  // devices that have never answered, so all five get one fresh read.
+  refreshAllDevices(true);
   schedulePoll();
 }
 

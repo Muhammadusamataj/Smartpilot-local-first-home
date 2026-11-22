@@ -126,12 +126,14 @@ export function debounce(fn, delay = 180) {
   };
 }
 
-// A tiny bounded queue: with dozens of devices a silent tick must not open
-// dozens of sockets at once. Waiting tasks are dropped rather than queued
-// forever when the page is hidden or a device drops off Wi-Fi.
+// Bounded FIFO for silent status reads. Only `limit` LAN sessions run at once
+// (2 on Android), but extra reads from a cold start / resume are processed in
+// order instead of being silently dropped. The waiting list itself is capped
+// so a hidden page or a dead device can never accumulate unbounded work.
 export class LimitedConcurrency {
-  constructor(limit = 3) {
+  constructor(limit = 3, maxWaiting = 8) {
     this.limit = Math.max(1, limit);
+    this.maxWaiting = Math.max(0, maxWaiting);
     this.active = 0;
     this.waiting = [];
   }
@@ -139,7 +141,7 @@ export class LimitedConcurrency {
   run(task) {
     if (this.active >= this.limit) return false;
     this.active += 1;
-    Promise.resolve(task()).finally(() => {
+    Promise.resolve().then(task).catch(() => {}).finally(() => {
       this.active -= 1;
       this.drain();
     });
@@ -148,8 +150,11 @@ export class LimitedConcurrency {
 
   queue(task) {
     if (this.run(task)) return true;
+    // Keep the newest requested states: shed the oldest pending read only
+    // when even the bounded queue is full.
+    if (this.waiting.length >= this.maxWaiting) this.waiting.shift();
     this.waiting.push(task);
-    return false;
+    return true;
   }
 
   drain() {

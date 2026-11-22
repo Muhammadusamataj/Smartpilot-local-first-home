@@ -114,7 +114,9 @@ def test_auto_refresh_does_not_rebuild_device_cards():
     # looked like the whole page was refreshing and could swallow a switch tap.
     assert "export function updatePoints(" in controls_js
     assert "updatePoints(item, data.values || [])" in main_js
-    assert "refresh(card.dataset.id, card, true)" in main_js
+    # Silent polling now goes through the deduplicating bounded queue, but it
+    # must still call refresh with silent=true so cards are never rebuilt.
+    assert "queueRefresh(card, true)" in main_js
 
 
 def test_home_assistant_addon_has_its_own_build_context():

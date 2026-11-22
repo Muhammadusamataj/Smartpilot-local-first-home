@@ -394,7 +394,7 @@ def _require_auth():
                 return ("Cross-origin request blocked.", 403)
         return
 
-    # No app-level credentials. Ingress-only deployments HA has already
+    # No app-level credentials. In ingress-only deployments HA has already
     # authenticated the user, but only the Supervisor proxy may reach us.
     # This closes a published direct port without breaking sidebar access.
     if INGRESS_ONLY:

@@ -315,6 +315,12 @@ main { max-width:100%; overflow-x:hidden }
     transform:none!important; filter:none!important; contain:none!important;
     box-shadow:0 -12px 26px rgba(0,0,0,.27)!important;
   }
+  /* Keep device search reachable on phones. The wordmark yields the space;
+     navigation tabs are already a fixed bottom bar at this width. */
+  .appbar .search { display:block!important; flex:1 1 auto!important; min-width:0!important; max-width:none!important; order:2!important }
+  .appbar .pilot-wordmark { display:none!important }
+  .appbar .pilot-brand { flex:0 0 auto!important }
+  .appbar .spacer { display:none!important }
   main { padding-bottom:110px!important }
 }
 
