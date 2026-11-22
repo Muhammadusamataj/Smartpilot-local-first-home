@@ -1,0 +1,397 @@
+/* Smart Pilot — Home-inspired visual refresh.
+   Original design, influenced by the clarity of modern smart-home dashboards.
+   Presentation only. No device IDs, commands, protocols or safety policy changes.
+   Keep this as the last CSS layer; older v0.x rules remain for compatibility. */
+:root:not([data-theme="light"]) {
+  color-scheme:dark;
+  --bg:#0b111b;--card:#192333;--fg:#f4f7fe;--muted:#a4b2c5;
+  --border:rgba(190,211,242,.13);--accent:#8cc5ff;--accent-fg:#111c2a;
+  --ok:#7fdfbd;--off:#ff9da6;--warn:#ffd38d;
+  --pilot-surface:#192332;--pilot-surface-2:#202d40;
+  --pilot-well:#111a27;--pilot-dock:#141d2b;
+  --pilot-line:rgba(185,206,238,.13);
+  --pilot-shadow:0 12px 30px rgba(0,0,0,.17);
+}
+:root[data-theme="light"] {
+  color-scheme:light;
+  --bg:#f3f5f9;--card:#ffffff;--fg:#172438;--muted:#607084;
+  --border:rgba(53,80,116,.12);--accent:#276ea9;--accent-fg:#fff;
+  --ok:#17815f;--off:#ba4b58;--warn:#936125;
+  --pilot-surface:#fff;--pilot-surface-2:#f0f4fa;
+  --pilot-well:#edf1f6;--pilot-dock:#fff;
+  --pilot-line:rgba(40,72,117,.12);
+  --pilot-shadow:0 8px 28px rgba(48,73,108,.09);
+}
+html,body{max-width:100%;overflow-x:clip!important}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  background-color:var(--bg)!important;
+  background-image:radial-gradient(ellipse 82% 36% at 95% -12%,rgba(101,139,212,.11),transparent 88%),linear-gradient(var(--bg),var(--bg))!important;
+  background-attachment:scroll!important;color:var(--fg)!important;
+}
+:root[data-theme="light"] body{
+  background-image:radial-gradient(ellipse 75% 30% at 100% 0,rgba(139,185,225,.14),transparent 87%),linear-gradient(#f3f5f9,#f3f5f9)!important;
+}
+main{max-width:1040px!important;margin-inline:auto!important;padding-top:18px!important}
+h1,h2,h3,strong{letter-spacing:-.025em}
+.pilot-eyebrow{color:var(--muted)!important;font-size:10px!important;font-weight:720!important;letter-spacing:.12em!important}
+button,a,input,select{touch-action:manipulation}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{
+  outline:3px solid var(--accent)!important;outline-offset:3px!important;
+}
+.appbar{
+  min-height:68px!important;background:var(--pilot-dock)!important;
+  border-bottom:1px solid var(--pilot-line)!important;
+  box-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+}
+.appbar .pilot-brand .logo{
+  width:40px!important;height:40px!important;border-radius:13px!important;
+  background:linear-gradient(140deg,#91d9f2,#93aaff)!important;
+  box-shadow:none!important;color:#182637!important;
+}
+.appbar .pilot-wordmark{font-size:17px!important;letter-spacing:-.5px!important}
+.appbar .pilot-wordmark small{font-size:8px!important;letter-spacing:1.2px!important}
+.appbar .icon-btn{
+  background:var(--pilot-surface-2)!important;color:var(--fg)!important;
+  border:1px solid var(--pilot-line)!important;border-radius:14px!important;
+  box-shadow:none!important;
+}
+.appbar .icon-btn.primary{background:var(--accent)!important;color:var(--accent-fg)!important}
+.appbar .search input{
+  background:var(--pilot-well)!important;border:1px solid var(--pilot-line)!important;
+  color:var(--fg)!important;border-radius:15px!important;min-height:43px!important;
+}
+.appbar .view-tabs{
+  background:var(--pilot-well)!important;border:1px solid var(--pilot-line)!important;
+  border-radius:16px!important;box-shadow:none!important;gap:2px!important;
+}
+.appbar .view-tabs button{
+  color:var(--muted)!important;border-radius:12px!important;
+  font-size:12px!important;font-weight:670!important;box-shadow:none!important;
+}
+.appbar .view-tabs button.active{
+  color:var(--fg)!important;background:var(--pilot-surface-2)!important;
+  box-shadow:0 1px 4px rgba(0,0,0,.07)!important;
+}
+/* Home: deliberate hierarchy, not multiple giant banners. */
+.pilot-home{max-width:100%!important}
+.pilot-home-top{margin:9px 0 15px!important;align-items:end!important}
+.pilot-home-top h1{
+  font-size:clamp(29px,4.4vw,37px)!important;font-weight:790!important;
+  letter-spacing:-1.35px!important;line-height:1.08!important;margin:2px 0 7px!important;
+}
+.pilot-home-top #summary{font-size:12px!important;line-height:1.55!important;color:var(--muted)!important}
+.pilot-home .pilot-local-pill{
+  border:1px solid var(--pilot-line)!important;background:var(--pilot-well)!important;
+  color:var(--muted)!important;
+}
+.pilot-overview-banner{
+  display:flex;align-items:center;gap:16px;
+  padding:16px 19px;border-radius:22px;
+  background:linear-gradient(125deg,rgba(116,161,216,.16),rgba(116,161,216,.045)),var(--pilot-surface)!important;
+  border:1px solid var(--pilot-line);box-shadow:var(--pilot-shadow);min-width:0;
+}
+.pilot-overview-mark{
+  width:49px;height:49px;border-radius:16px;flex:0 0 49px;
+  display:grid;place-items:center;font-size:23px;
+  background:rgba(137,185,243,.18);color:var(--accent);
+}
+.pilot-overview-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}
+.pilot-overview-copy .eyebrow{font-size:9px;font-weight:750;letter-spacing:1.5px;color:var(--muted)}
+.pilot-overview-copy strong{font-size:19px;font-weight:770;line-height:1.2;color:var(--fg)}
+.pilot-overview-copy small{font-size:11px;line-height:1.4;color:var(--muted)}
+.pilot-overview-actions{display:flex;flex:0 0 auto;align-items:center;gap:8px}
+.pilot-overview-actions button{
+  min-height:42px;padding:10px 13px;border-radius:14px;
+  border:1px solid var(--pilot-line);background:var(--pilot-surface-2);
+  color:var(--fg);font-size:12px;font-weight:700;cursor:pointer;
+}
+.pilot-overview-actions button:first-child{background:var(--accent);color:var(--accent-fg);border-color:transparent}
+.pilot-home-section-head{margin:24px 0 11px!important;gap:12px!important}
+.pilot-home-section-head h2{
+  font-size:19px!important;letter-spacing:-.55px!important;font-weight:760!important;
+}
+.pilot-home-section-head h2 small{font-size:11px!important;color:var(--muted)!important}
+.pilot-section-link{
+  border:1px solid var(--pilot-line)!important;border-radius:13px!important;
+  background:var(--pilot-surface)!important;color:var(--fg)!important;
+  font-size:11px!important;font-weight:690!important;padding:8px 11px!important;
+}
+.pilot-home-tools{gap:7px!important}
+/* AC summaries: the setpoint is the visual anchor, but labels stay readable. */
+.pilot-ac-summary-grid,.pilot-device-summary-grid{gap:12px!important}
+.pilot-home-tile{min-width:0}
+.pilot-home .pilot-home-tile>.pilot-ac-mini{
+  min-height:183px!important;height:100%!important;padding:16px!important;gap:10px!important;
+  border:1px solid var(--pilot-line)!important;border-radius:23px!important;
+  background:linear-gradient(145deg,rgba(111,158,219,.12),rgba(111,158,219,0)),var(--pilot-surface)!important;
+  box-shadow:var(--pilot-shadow)!important;color:var(--fg)!important;
+  overflow:hidden!important;
+}
+.pilot-ac-mini-top{align-items:center!important;gap:6px!important}
+.pilot-ac-mini-icon{
+  background:rgba(134,187,242,.16)!important;color:var(--accent)!important;
+  width:35px!important;height:35px!important;flex:0 0 35px!important;border-radius:12px!important;
+}
+.pilot-ac-mini strong{font-size:14px!important;line-height:1.25!important;white-space:normal!important;font-weight:740!important}
+.pilot-ac-mini-temps{gap:8px!important;flex-wrap:wrap!important;align-items:baseline!important}
+.pilot-ac-mini-temps b{font-size:32px!important;font-weight:750!important;letter-spacing:-1.5px!important;color:var(--fg)!important}
+.pilot-ac-mini-temps span{font-size:11px!important;color:var(--muted)!important;white-space:normal!important}
+.pilot-ac-mini-state{
+  color:var(--muted)!important;border-radius:100px;font-size:9px!important;
+  background:var(--pilot-well);padding:5px 8px;font-weight:730!important;
+  overflow:visible!important;white-space:nowrap!important;
+}
+.pilot-ac-mini-state.online{color:var(--ok)!important}
+.pilot-home .pilot-home-tile .pilot-ac-mini-bottom{
+  min-height:30px!important;font-size:10px!important;color:var(--muted)!important;
+  border-top:1px solid var(--pilot-line)!important;padding-top:10px!important;
+}
+/* Device cards: familiar smart-home tiles, real current status and real guarded switches. */
+.pilot-home .pilot-device-summary-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+.pilot-home .pilot-home-device-card{
+  min-height:157px;display:flex;flex-direction:column;gap:10px;
+  padding:15px;border-radius:22px;
+  background:var(--pilot-surface)!important;border:1px solid var(--pilot-line)!important;
+  box-shadow:var(--pilot-shadow)!important;
+}
+.pilot-home .pilot-home-device-card .pilot-device-mini{
+  min-width:0;min-height:0!important;height:auto!important;
+  display:flex!important;flex:1 1 auto!important;align-items:stretch!important;
+  flex-direction:column!important;justify-content:flex-start!important;
+  gap:9px!important;padding:0!important;
+  background:transparent!important;box-shadow:none!important;border:0!important;color:var(--fg)!important;
+}
+.pilot-home .pilot-home-device-card .pilot-device-mini-head{
+  display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:9px!important;
+}
+.pilot-home .pilot-home-device-card .pilot-mini-icon{
+  width:36px!important;height:36px!important;flex:0 0 36px!important;
+  border-radius:12px!important;background:var(--pilot-surface-2)!important;
+  color:var(--accent)!important;
+}
+.pilot-home .pilot-home-device-card .pilot-mini-icon svg{width:19px!important;height:19px!important}
+.pilot-home .pilot-home-device-card .pilot-mini-copy strong{
+  font-size:13px!important;line-height:1.28!important;font-weight:720!important;
+  white-space:normal!important;overflow-wrap:break-word!important;
+}
+.pilot-home .pilot-home-device-card .pilot-mini-copy small{
+  font-size:10px!important;line-height:1.3!important;color:var(--muted)!important;
+}
+.pilot-home .pilot-home-device-card .pilot-mini-signal{
+  align-self:flex-start!important;margin:0!important;
+  font-size:10px!important;padding:5px 9px!important;letter-spacing:0!important;
+  color:var(--muted)!important;background:var(--pilot-well)!important;
+}
+.pilot-home .pilot-home-device-card .pilot-mini-signal.online{
+  color:var(--ok)!important;background:rgba(93,192,147,.12)!important;
+}
+.pilot-home .pilot-home-device-card .pilot-mini-signal.stale{
+  color:var(--warn)!important;background:rgba(221,167,81,.12)!important;
+}
+.pilot-home .pilot-home-inline-power{
+  display:flex!important;align-items:center!important;justify-content:space-between!important;
+  gap:6px!important;min-height:42px!important;padding:10px 0 0!important;
+  margin-top:auto!important;border-top:1px solid var(--pilot-line)!important;
+}
+.pilot-home .pilot-home-inline-power .pilot-inline-state{
+  font-size:11px!important;color:var(--muted)!important;font-weight:680!important;
+}
+.pilot-home .pilot-home-inline-power .switch-control{
+  display:flex!important;align-items:flex-end!important;flex-direction:column!important;gap:3px!important;
+}
+.pilot-home .pilot-home-inline-power .pilot-command-note{
+  text-align:right!important;font-size:9px!important;max-width:126px!important;
+}
+/* Visually explicit switch state; never guess ON from a cached address. */
+.pilot-switch-button .track{
+  background:#526176!important;box-shadow:none!important;border:1px solid rgba(255,255,255,.12)!important;
+}
+.pilot-switch-button[aria-checked="true"] .track{
+  background:linear-gradient(120deg,#7ad6ac,#75c7b3)!important;border-color:transparent!important;
+}
+.pilot-switch-button .thumb{box-shadow:0 1px 4px rgba(0,0,0,.25)!important}
+.pilot-switch-button:disabled{opacity:.42!important;filter:saturate(.5)}
+/* The full Devices screen remains a glanceable list; detail sheet owns advanced DPs. */
+#devices.grid{gap:12px!important}
+#devices .tile{
+  border:1px solid var(--pilot-line)!important;border-radius:21px!important;
+  background:var(--pilot-surface)!important;box-shadow:var(--pilot-shadow)!important;
+  overflow:hidden!important;
+}
+#devices .tile:before{width:0!important}
+#devices .tile-head{gap:8px!important}
+#devices .tile-icon{
+  background:var(--pilot-surface-2)!important;border-radius:12px!important;
+  width:36px!important;height:36px!important;flex-basis:36px!important;
+}
+#devices .tile-title h2{font-size:14px!important;line-height:1.32!important;color:var(--fg)}
+#devices .tile .status{
+  border:0!important;background:var(--pilot-well)!important;color:var(--muted)!important;
+  font-weight:680!important;border-radius:100px!important;
+}
+#devices .tile:not(.offline):not(.stale) .status{color:var(--ok)!important}
+#devices .tile.offline .status,#devices .tile.stale .status{color:var(--warn)!important}
+#devices .pilot-inline-power{min-width:0}
+#devices .tile .fav{color:var(--muted)!important}
+#devices .tile .status-note{color:var(--muted)!important}
+#devices .tile:focus-visible{outline:3px solid var(--accent)!important;outline-offset:3px!important}
+/* Full climate controls are calm and readable, with independent Manual/Auto. */
+.haier-card{
+  background:var(--pilot-surface)!important;border:1px solid var(--pilot-line)!important;
+  border-radius:24px!important;box-shadow:var(--pilot-shadow)!important;color:var(--fg)!important;
+}
+.haier-card:before{background:radial-gradient(circle,rgba(120,172,231,.12),transparent 70%)!important}
+.haier-device-mark{border-radius:15px!important;background:var(--pilot-surface-2)!important;color:var(--accent)!important}
+.haier-card-title h3{font-size:17px!important;color:var(--fg)!important}
+.haier-room{font-size:43px!important;font-weight:730!important;color:var(--fg)!important}
+.haier-target strong{color:var(--fg)!important}
+.haier-status{color:var(--muted)!important}
+.haier-status.ok{color:var(--ok)!important}
+.haier-mode-tabs{background:var(--pilot-well)!important;border:1px solid var(--pilot-line)!important;border-radius:14px!important}
+.haier-mode-tabs button{min-height:44px!important;color:var(--muted)!important}
+.haier-mode-tabs button.current{
+  background:var(--pilot-surface-2)!important;color:var(--fg)!important;
+  box-shadow:0 2px 5px rgba(0,0,0,.09)!important;
+}
+.haier-action,.haier-iconbtn{
+  min-height:42px!important;border:1px solid var(--pilot-line)!important;
+  border-radius:13px!important;background:var(--pilot-surface-2)!important;
+  color:var(--fg)!important;
+}
+.haier-action.important{color:var(--accent-fg)!important;background:var(--accent)!important;border-color:transparent!important}
+.haier-auto-note,.haier-alert{border-radius:13px!important}
+.haier-footer{color:var(--muted)!important;border-top:1px solid var(--pilot-line)!important}
+/* Sheets, settings and scenes share one material system. */
+#deviceSheet,.drawer{
+  background:var(--pilot-surface)!important;border-color:var(--pilot-line)!important;
+  color:var(--fg)!important;
+}
+#deviceSheet .drawer-head,.drawer-head{border-bottom:1px solid var(--pilot-line)!important}
+#deviceSheet .drawer-head h2{font-size:20px!important}
+#deviceSheet .drawer-body{background:var(--pilot-surface)!important}
+.panel,.group,.scene-card,.pilot-setting-tile,.pilot-extra-card{
+  border:1px solid var(--pilot-line)!important;border-radius:19px!important;
+  background:var(--pilot-surface)!important;box-shadow:none!important;
+  color:var(--fg)!important;
+}
+.pilot-setting-tile{min-height:92px}
+.pilot-setting-tile b{font-size:14px!important;color:var(--fg)!important}
+.pilot-setting-tile small,.pilot-extra-body{color:var(--muted)!important}
+.pilot-scenes-nav h1,[data-view-panel="autopilot"] h1{font-size:clamp(25px,4vw,32px)!important;letter-spacing:-1px!important}
+#toast{border-radius:15px!important;max-width:min(420px,calc(100vw - 28px))!important}
+/* Tablet and phone: large tap targets, easy scan, no sideways scrolling. */
+@media(max-width:850px){
+  .pilot-home .pilot-device-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:720px){
+  main{padding:10px 14px calc(102px + env(safe-area-inset-bottom))!important}
+  .appbar{
+    min-height:57px!important;padding:7px 13px!important;
+    background:var(--pilot-dock)!important;border-bottom:1px solid var(--pilot-line)!important;
+  }
+  .appbar .pilot-brand .logo{
+    width:37px!important;height:37px!important;border-radius:12px!important;
+  }
+  .appbar .search{max-width:none!important;flex:1 1 auto!important;min-width:0!important}
+  .appbar .search input{min-height:39px!important;font-size:12px!important;padding-left:35px!important}
+  .appbar .icon-btn{width:38px!important;height:38px!important}
+  .appbar .view-tabs{
+    position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;
+    z-index:9999!important;width:100%!important;max-width:100%!important;
+    background:var(--pilot-dock)!important;border:0!important;border-top:1px solid var(--pilot-line)!important;
+    border-radius:0!important;box-shadow:0 -5px 20px rgba(0,0,0,.12)!important;
+    padding:7px 8px max(9px,env(safe-area-inset-bottom))!important;gap:3px!important;
+  }
+  :root[data-theme="light"] .appbar .view-tabs{background:var(--pilot-dock)!important}
+  .appbar .view-tabs button{
+    flex:1 1 0!important;min-width:0!important;min-height:52px!important;
+    padding:5px 1px!important;gap:3px!important;border-radius:13px!important;
+    font-size:10px!important;font-weight:680!important;line-height:1.2!important;
+  }
+  .appbar .view-tabs button[data-glyph]::before{font-size:20px!important;line-height:1.15!important}
+  .appbar .view-tabs button.active{background:var(--pilot-surface-2)!important;color:var(--fg)!important}
+  .pilot-home-top{margin:9px 1px 13px!important}
+  .pilot-home-top h1{font-size:31px!important;line-height:1.1!important;margin:0 0 5px!important}
+  .pilot-home-top p{font-size:11px!important}
+  .pilot-overview-banner{padding:13px;gap:11px;border-radius:20px;flex-wrap:wrap}
+  .pilot-overview-mark{width:41px;height:41px;flex-basis:41px;font-size:20px;border-radius:13px}
+  .pilot-overview-copy strong{font-size:17px}
+  .pilot-overview-copy small{font-size:10px}
+  .pilot-overview-actions{width:100%;gap:8px}
+  .pilot-overview-actions button{flex:1 1 0;min-width:0;min-height:40px;text-align:center}
+  .pilot-home-section-head{margin:21px 0 10px!important}
+  .pilot-home-section-head h2{font-size:18px!important}
+  .pilot-home .pilot-local-pill{display:none!important}
+  .pilot-home .pilot-home-tile>.pilot-ac-mini{
+    min-height:168px!important;padding:13px!important;gap:8px!important;border-radius:20px!important;
+  }
+  .pilot-ac-mini-temps b{font-size:28px!important}
+  .pilot-ac-mini-temps span{font-size:10px!important}
+  .pilot-ac-mini strong{font-size:12px!important}
+  .pilot-ac-mini-state{font-size:8px!important;padding:4px 6px!important}
+  .pilot-ac-mini-icon{width:30px!important;height:30px!important;flex-basis:30px!important}
+  .pilot-home .pilot-device-summary-grid{
+    display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;
+  }
+  .pilot-home .pilot-home-device-card{
+    display:flex!important;flex-direction:column!important;grid-template-columns:none!important;
+    align-items:stretch!important;min-height:166px!important;gap:8px!important;
+    padding:12px!important;border-radius:20px!important;
+  }
+  .pilot-home .pilot-home-device-card .pilot-device-mini{
+    min-height:0!important;height:auto!important;flex:1 1 auto!important;
+    display:flex!important;flex-direction:column!important;align-items:stretch!important;
+    padding:0!important;justify-content:flex-start!important;gap:7px!important;
+  }
+  .pilot-home .pilot-home-device-card .pilot-mini-icon{
+    width:29px!important;height:29px!important;flex-basis:29px!important;border-radius:10px!important;
+  }
+  .pilot-home .pilot-home-device-card .pilot-mini-icon svg{width:17px!important;height:17px!important}
+  .pilot-home .pilot-home-device-card .pilot-mini-copy strong{font-size:12px!important}
+  .pilot-home .pilot-home-device-card .pilot-mini-copy small{font-size:9px!important}
+  .pilot-home .pilot-home-device-card .pilot-mini-signal{margin-left:0!important;font-size:9px!important;padding:4px 7px!important}
+  .pilot-home .pilot-home-inline-power{
+    display:flex!important;flex-direction:row!important;align-items:center!important;
+    justify-content:space-between!important;gap:3px!important;
+    margin-top:auto!important;min-height:44px!important;padding-top:8px!important;
+    border-top:1px solid var(--pilot-line)!important;
+  }
+  .pilot-home .pilot-home-inline-power .switch-control{
+    display:flex!important;flex-direction:column!important;align-items:flex-end!important;
+    justify-content:center!important;gap:2px!important;
+  }
+  .pilot-home .pilot-home-inline-power .pilot-command-note{
+    font-size:8px!important;line-height:1.2!important;max-width:99px!important;text-align:right!important;
+  }
+  .pilot-home .pilot-home-inline-power .pilot-inline-state{font-size:10px!important;max-width:66px!important}
+  .pilot-home .pilot-home-inline-power .pilot-switch-button{min-height:35px!important}
+  #devices.grid{grid-template-columns:1fr!important;gap:9px!important}
+  #devices .tile{
+    min-height:100px!important;padding:13px!important;border-radius:18px!important;
+    background:var(--pilot-surface)!important;
+  }
+  #devices .tile .tile-head{min-width:0}
+  #devices .tile .tile-title h2{font-size:13px!important}
+  #devices .pilot-inline-power{min-width:0}
+  [data-view-panel="autopilot"] .haier-card{padding:16px!important;border-radius:21px!important}
+  .haier-card .haier-mode-tabs button{min-height:45px!important}
+  .pilot-settings-grid{gap:9px!important}
+  .pilot-setting-tile{min-height:66px!important}
+  #deviceSheet .drawer-body{padding-bottom:calc(92px + env(safe-area-inset-bottom))!important}
+}
+@media(max-width:350px){
+  .pilot-home .pilot-device-summary-grid{grid-template-columns:1fr!important}
+  .pilot-home .pilot-home-device-card{min-height:116px!important;gap:6px!important}
+  .pilot-home .pilot-home-device-card .pilot-device-mini-head{gap:8px!important}
+  .pilot-home .pilot-home-inline-power .pilot-inline-state{max-width:none!important}
+  .pilot-home .pilot-home-tile>.pilot-ac-mini{padding:10px!important;min-height:171px!important}
+  .pilot-ac-mini-temps b{font-size:25px!important}
+  .pilot-overview-actions button{font-size:11px!important;padding-inline:7px!important}
+  .pilot-home-section-head h2{font-size:16px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .pilot-home-tile,.pilot-home-tile *,.haier-card,#devices .tile{
+    animation:none!important;transition:none!important;
+  }
+}
