@@ -196,7 +196,122 @@ function useDiscovered(button) {
   set('uplus_id', button.dataset.uplusId || '');
   toast('Haier device details filled', 'ok');
 }
+// Optional HaiSmart login. It exists ONLY to renew a rotated local key;
+// direct-LAN control never needs it. No password or key is kept in the page.
+let cloudStatus = null;
+let cloudMessage = '';
+
+function cloudCardHtml() {
+  const logged = !!(cloudStatus && cloudStatus.logged_in);
+  const slots = (cloudStatus && cloudStatus.slots) || [];
+  const saved = logged
+    ? `<div class="haier-cloud-saved">
+        ${cloudStatus.last_renew ? `<p class="note">Last renewed: ${esc(cloudStatus.last_renew)}</p>` : ''}
+        <button class="haier-action important" type="button" data-haier-cloud-renew>Renew keys now</button>
+        <button class="haier-action" type="button" data-haier-cloud-switch>Use another account</button>
+        <button class="haier-action" type="button" data-haier-cloud-logout>Sign out</button>
+      </div>`
+    : `<form data-haier-cloud-form autocomplete="off">
+        <label>Haier account (email / phone)<input name="username" required autocomplete="username" placeholder="you@example.com"></label>
+        <label>Password<input name="password" required type="password" autocomplete="current-password"></label>
+        <label>Region<select name="zone"><option value="">Auto detect</option><option value="91">India (+91)</option><option value="0">Singapore / other</option></select></label>
+        <label class="haier-cloud-remember"><input type="checkbox" name="remember" checked> Remember login on this phone</label>
+        <button class="haier-action important" type="submit">Login &amp; renew keys</button>
+      </form>`;
+  return `<section class="panel haier-cloud" data-haier-cloud-card>
+    <div class="haier-intro"><div><h3>Renew local key (optional)</h3><p>Only needed if Haier rotates a key · ACs still run offline</p></div><span class="haier-tag">CLOUD LOGIN</span></div>
+    ${slots.length ? `<p class="note">${slots.map(s => esc(s.id.toUpperCase()) + ' · key v' + esc(String(s.key_version))).join(' &nbsp;·&nbsp; ')}</p>` : ''}
+    <p class="haier-warning" data-cloud-msg role="status">${esc(cloudMessage)}</p>
+    ${saved}
+    <p class="note">A fresh key is written encrypted on the phone and never shown here. Direct LAN control still works with the internet off.</p>
+  </section>`;
+}
+
+function drawCloud() {
+  const mount = document.querySelector('[data-haier-cloud-login]');
+  if (mount) mount.innerHTML = cloudCardHtml();
+}
+
+async function getCloudStatus() {
+  try {
+    cloudStatus = await api('/api/haier/cloud/status');
+  } catch (err) {
+    cloudStatus = {logged_in: false, slots: []};
+  }
+  drawCloud();
+}
+
+function cloudResultMessage(result) {
+  const parts = [];
+  const renewed = Object.entries(result.renewed || {});
+  if (renewed.length) parts.push('Key renewed: ' + renewed.map(([s, v]) => s.toUpperCase() + ' v' + v).join(', '));
+  if (result.error) parts.push(result.error);
+  for (const [slot, message] of Object.entries(result.errors || {})) parts.push(slot.toUpperCase() + ': ' + message);
+  return parts.join(' · ') || 'Renewal finished';
+}
+
+async function submitCloudRenew(payload) {
+  cloudMessage = 'Signing in and renewing keys…';
+  const live = document.querySelector('[data-cloud-msg]');
+  if (live) live.textContent = cloudMessage;
+  try {
+    const result = await api('/api/haier/cloud/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload), timeout: 40000
+    });
+    cloudMessage = cloudResultMessage(result);
+    if (result.ok) toast('Haier local key renewed ✓', 'ok');
+    else toast(cloudMessage, 'warn');
+  } catch (err) {
+    cloudMessage = err.message;
+    toast(err.message, 'error');
+  } finally {
+    await getCloudStatus();
+  }
+}
+
+function cloudFormHandler(event) {
+  const form = event.target.closest('[data-haier-cloud-form]');
+  if (!form) return false;
+  event.preventDefault();
+  const fields = new FormData(form);
+  const payload = {
+    username: String(fields.get('username') || '').trim(),
+    password: String(fields.get('password') || ''),
+    zone: String(fields.get('zone') || ''),
+    remember: !!fields.get('remember')
+  };
+  const submit = form.querySelector('button[type=submit]');
+  if (submit) submit.disabled = true;
+  submitCloudRenew(payload);
+  return true;
+}
+
+async function cloudActionHandler(button) {
+  if (button.hasAttribute('data-haier-cloud-switch')) {
+    cloudMessage = '';
+    cloudStatus = {...(cloudStatus || {}), logged_in: false};
+    drawCloud();
+    return;
+  }
+  if (button.hasAttribute('data-haier-cloud-logout')) {
+    try {
+      await api('/api/haier/cloud/logout', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+      cloudMessage = 'Signed out. Direct LAN control is unchanged.';
+    } catch (err) {
+      cloudMessage = err.message;
+    }
+    await getCloudStatus();
+    return;
+  }
+  if (button.hasAttribute('data-haier-cloud-renew')) {
+    await submitCloudRenew({});
+  }
+}
+
 async function handler(event) {
+  const cloudAction = event.target.closest('[data-haier-cloud-renew],[data-haier-cloud-switch],[data-haier-cloud-logout]');
+  if (cloudAction) { await cloudActionHandler(cloudAction); return; }
   const button = event.target.closest('button');
   // A Home summary navigates to the *correct* AC, not the top of a long page.
   const focusedSlot = button?.dataset?.haierFocus;
@@ -228,6 +343,7 @@ async function handler(event) {
   }
 }
 async function formHandler(event) {
+  if (cloudFormHandler(event)) return;
   const form=event.target.closest('[data-haier-form]');
   if(!form) return;
   event.preventDefault();
@@ -240,6 +356,7 @@ async function formHandler(event) {
 export function mountHaier() {
   document.addEventListener('click',handler);
   document.addEventListener('submit',formHandler);
+  getCloudStatus();
   getDevices();
   // First fresh read soon after open, then every minute while visible. A
   // background daemon handles Auto when enabled, even with the phone closed.

@@ -766,6 +766,51 @@ def haier_command():
         return jsonify({"error": str(exc)}), 503
 
 
+@bp.get("/api/haier/cloud/status")
+def haier_cloud_status():
+    """Additive: is an optional cloud login saved, and when were keys last renewed?"""
+    try:
+        import haier_cloud_login
+        return jsonify(haier_cloud_login.status())
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 503
+
+
+@bp.post("/api/haier/cloud/login")
+def haier_cloud_login_endpoint():
+    """Optional account login to renew rotated local keys. LAN control stays cloudless.
+
+    Credentials are used once (or a refresh token is kept encrypted on the phone)
+    and never returned. Key values are written straight to the encrypted config.
+    """
+    try:
+        import haier_cloud_login
+        data = _body()
+        username = str(data.get("username") or "").strip()
+        password = str(data.get("password") or "")
+        result = haier_cloud_login.renew(
+            username, password,
+            remember=bool(data.get("remember", True)),
+            zone=str(data.get("zone") or ""),
+        )
+        if not result.get("ok"):
+            return jsonify(result), 502
+        return jsonify(result)
+    except haier_cloud_login.CloudLoginError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except (HaierError, OSError, ValueError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
+
+
+@bp.post("/api/haier/cloud/logout")
+def haier_cloud_logout():
+    try:
+        import haier_cloud_login
+        return jsonify(haier_cloud_login.sign_out())
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 503
+
+
 def pilot_extras_status() -> list[dict]:
     """Read-only snapshot for per-device last-verified ON/OFF timestamps."""
     try:
