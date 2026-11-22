@@ -73,6 +73,11 @@ def server(tmp_path_factory):
         mp.setenv("CHECK_FOR_UPDATES", "true")
         mp.delenv("AUTH_USERNAME", raising=False)
         mp.delenv("AUTH_PASSWORD", raising=False)
+        # Launcher tests write these directly on os.environ. Clear them before
+        # reloading the app so a prior remote-mode test cannot make this server
+        # think it is on a different subnet and add a misleading warning line.
+        mp.delenv("TUYA_NETWORK_HINT", raising=False)
+        mp.delenv("TUYA_NETWORK_HINT_EXPLICIT", raising=False)
         # local_control captures file paths at import time. Earlier tests reload
         # it with their own temp session, so reload it here too before app
         # registers the blueprint; otherwise the UI server keeps serving the
