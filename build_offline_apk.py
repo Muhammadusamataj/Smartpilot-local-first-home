@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -24,6 +25,14 @@ ROOT = Path(__file__).resolve().parent
 PROJECT = ROOT / "android_offline"
 PY_DIR = PROJECT / "app" / "src" / "main" / "python"
 DIST = ROOT / "dist"
+
+# Public certificate fingerprint of the APK currently published on GitHub
+# Releases. A mismatch means Android will refuse to upgrade an installed copy
+# with INSTALL_FAILED_UPDATE_INCOMPATIBLE, so never publish such a build.
+EXPECTED_SIGNER_SHA256 = os.environ.get(
+    "EXPECTED_SIGNER_SHA256",
+    "bbe14afd137fa6617ade862ea53d6ab0c34ddbf23e1f582bd602651dd7adf00f",
+)
 
 PY_MODULES = [
     "android_entry.py", "app.py", "device_cache.py", "device_preferences.py",
@@ -41,6 +50,34 @@ def _sdk_root(explicit: str | None) -> Path:
     if not path.is_dir():
         raise SystemExit(f"Android SDK folder does not exist: {path}")
     return path
+
+
+def _verify_signer(sdk: Path, apk: Path) -> None:
+    """Fail the build if the APK is not signed like the published release."""
+    tools = sdk / "build-tools"
+    exe_name = "apksigner.bat" if os.name == "nt" else "apksigner"
+    candidates = sorted(tools.glob(f"*/{exe_name}")) if tools.is_dir() else []
+    if not candidates:
+        raise SystemExit(f"{exe_name} not found under {tools}; cannot verify signing key")
+    command = [str(candidates[-1]), "verify", "--print-certs", str(apk)]
+    if candidates[-1].suffix.lower() == ".bat":
+        command = ["cmd", "/c", *command]
+    result = subprocess.run(command, capture_output=True, text=True)
+    match = re.search(
+        r"certificate SHA-256 digest:\s*([0-9A-Fa-f:]+)",
+        result.stdout or "",
+    )
+    if not match:
+        raise SystemExit("Could not read the APK signing certificate")
+    actual = match.group(1).replace(":", "").lower()
+    expected = EXPECTED_SIGNER_SHA256.replace(":", "").lower()
+    if actual != expected:
+        raise SystemExit(
+            "Signing certificate changed: built " + actual + ", expected " + expected
+            + ". Android will refuse to upgrade an installed copy. Restore the "
+              "previous keystore or update EXPECTED_SIGNER_SHA256 deliberately."
+        )
+    print(f"+ verified signer SHA-256 {actual}")
 
 
 def _adb(sdk: Path) -> str:
@@ -135,6 +172,7 @@ def main() -> None:
     shutil.copy2(src, apk)
     # Keep the historical filename as an alias for existing update scripts/docs.
     shutil.copy2(src, DIST / "TuyaLocalKey-Offline.apk")
+    _verify_signer(sdk, apk)
 
     print(f"\nBuilt: {apk}")
     if args.install:

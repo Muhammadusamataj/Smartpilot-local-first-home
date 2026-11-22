@@ -48,6 +48,12 @@ python tools/screenshots.py setup-tuya-local setup-localtuya setup-tinytuya loca
 
 Device panel previews are cropped to the panel so their contents remain readable. Their height adapts to the content; Raw JSON keeps a scrollable viewport. Local network and the wizard result run a demo check. Current values uses a simulated local reply, and the support report preview exercises the real download with the fake account.
 
+## Android signing and safe upgrades
+
+Debug builds must keep the **same signing certificate** across releases, or Android refuses to upgrade an installed APK with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. The build script copies `tools/keys/debug.keystore` when present and verifies the finished APK against `EXPECTED_SIGNER_SHA256`; it fails the build on a mismatch. That keystore is deliberately gitignored — keep a private copy outside the source ZIP.
+
+If a release was already signed with a different certificate, `python tools/install_preserving_data.py --yes` copies the debuggable app's private data off the phone, reinstalls the new APK, and restores the data. It requires a connected adb device and explicit confirmation.
+
 ## Dependency Updates
 
 `update_dependencies.py` looks for new releases of the two libraries the app is built on, tinytuya and tuya-device-sharing-sdk, and moves `requirements.txt` and `pyproject.toml` to them. Each keeps its operator: `>=` stays a minimum, and `==` stays a pin.
