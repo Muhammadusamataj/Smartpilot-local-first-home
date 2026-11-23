@@ -6,8 +6,10 @@ server. The tests only assert the order of the startup calls and the arguments
 passed through to waitress.
 """
 
+import math
 import os
 import sys
+import threading
 from types import ModuleType
 
 import pytest
@@ -219,6 +221,7 @@ def test_android_reconfigure_disables_remote_mode_in_process(calls, monkeypatch,
     monkeypatch.setenv("AUTH_USERNAME", "tuya")
     monkeypatch.setenv("AUTH_PASSWORD", "s3cret")
     android_entry.start(str(tmp_path), host="0.0.0.0",
+                        network_hint="192.168.1.0/24", tailscale_ip="100.1.2.3",
                         auth_user="tuya", auth_password="s3cret")
     first_server = android_entry._SERVER
     calls.clear()
@@ -226,8 +229,9 @@ def test_android_reconfigure_disables_remote_mode_in_process(calls, monkeypatch,
     android_entry.reconfigure(str(tmp_path), host="127.0.0.1", port=8000)
 
     assert first_server.closed is True
-    assert "AUTH_USERNAME" not in os.environ
-    assert "AUTH_PASSWORD" not in os.environ
+    for key in ("AUTH_USERNAME", "AUTH_PASSWORD", "TUYA_NETWORK_HINT",
+                "TUYA_NETWORK_HINT_EXPLICIT", "TAILSCALE_IP"):
+        assert key not in os.environ
     assert calls[0] == ("check_no_auth_binding", "127.0.0.1")
     assert calls[-1][2] == {"host": "127.0.0.1", "port": 8000, "threads": 8}
 
@@ -242,3 +246,54 @@ def test_android_second_start_does_not_start_twice(calls, monkeypatch, tmp_path)
     android_entry.start(str(tmp_path), host="127.0.0.1", port=8123)
 
     assert calls == []
+
+
+def test_android_stop_waits_for_socket_release(calls, monkeypatch, tmp_path):
+    """A stop must not clear state while waitress still owns the port."""
+    monkeypatch.setattr(android_entry, "_start_runner", lambda server, done: None)
+    android_entry.start(str(tmp_path), host="127.0.0.1")
+    old_server = android_entry._SERVER
+    old_done = android_entry._SERVER_DONE
+
+    assert android_entry.stop() is False
+    assert old_server.closed is True
+    assert android_entry.is_running() is True
+    assert android_entry._SERVER is old_server
+
+    old_done.set()
+    assert android_entry.stop() is True
+    assert android_entry.is_running() is False
+
+
+def test_android_reconfigure_failure_does_not_leave_stale_running_state(
+        calls, monkeypatch, tmp_path):
+    android_entry.start(str(tmp_path), host="127.0.0.1")
+    monkeypatch.setattr(android_entry, "_build_server",
+                        lambda host, port: (_ for _ in ()).throw(RuntimeError("bind failed")))
+
+    with pytest.raises(RuntimeError, match="bind failed"):
+        android_entry.reconfigure(str(tmp_path), host="0.0.0.0", port=8000,
+                                  network_hint="192.168.1.0/24",
+                                  auth_user="tuya", auth_password="s3cret")
+
+    assert android_entry.is_running() is False
+    assert android_entry._SERVER is None
+    assert "TUYA_NETWORK_HINT" not in os.environ
+    assert "AUTH_USERNAME" not in os.environ
+
+
+def test_android_network_facts_sanitise_bad_numbers_and_addresses(monkeypatch):
+    android_entry.update_network_facts({
+        "source": "android_service", "observed_at": "not-a-number",
+        "wifi": {"connected": "false", "ipv4": "not-an-ip"},
+        "vpn": {"connected": True, "tailscale_ip": "100.64.0.1"},
+        "default_route": {"transport": "../../traceback", "is_default": "yes"},
+    })
+    facts = android_entry.network_facts()
+
+    assert facts["source"] == "android_service"
+    assert math.isfinite(facts["observed_at"])
+    assert facts["wifi"]["connected"] is False
+    assert facts["wifi"]["ipv4"] == ""
+    assert facts["vpn"]["tailscale_ip"] == "100.64.0.1"
+    assert facts["default_route"]["transport"] == "unknown"

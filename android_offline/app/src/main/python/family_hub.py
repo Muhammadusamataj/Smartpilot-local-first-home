@@ -11,6 +11,7 @@ hub, and no new cloud service is involved.
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
 import os
 import socket
@@ -116,10 +117,26 @@ def _normalise_url(value: str) -> str:
         raise FamilyError("Use the hub phone's Wi-Fi address, not this phone")
     if parts.path not in ("", "/") or parts.query or parts.fragment:
         raise FamilyError("Use the hub address without a path")
+    try:
+        address = ipaddress.IPv4Address(parts.hostname)
+    except ipaddress.AddressValueError:
+        raise FamilyError("Use the hub phone's numeric Wi-Fi address") from None
+    if not any(address in ipaddress.ip_network(network) for network in (
+            "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")):
+        raise FamilyError("Only private LAN hub addresses are allowed")
     netloc = parts.netloc
     if parts.port is None and ":" not in netloc:
         netloc += ":8000"
     return f"{parts.scheme}://{netloc}"
+
+
+def _auth_setting(name: str) -> str:
+    """Match app.py's options.json precedence without importing at module load."""
+    try:
+        import app
+        return str(app._setting(name) or "")
+    except Exception:
+        return str(os.environ.get(name) or "")
 
 
 def status() -> dict:
@@ -127,7 +144,7 @@ def status() -> dict:
     mode = cfg.get("mode", OFF)
     return {
         "mode": mode,
-        "direct_mode": bool(os.environ.get("AUTH_USERNAME") and os.environ.get("AUTH_PASSWORD")),
+        "direct_mode": bool(_auth_setting("AUTH_USERNAME") and _auth_setting("AUTH_PASSWORD")),
         "lan_ip": _lan_ip(),
         "hub_url": str(cfg.get("hub_url") or "") if mode == CLIENT else "",
         "connected": bool(cfg.get("last_ok")) if mode == CLIENT else False,

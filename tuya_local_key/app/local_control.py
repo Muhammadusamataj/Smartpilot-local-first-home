@@ -11,6 +11,7 @@ import contextlib
 import datetime
 import ipaddress
 import json
+import math
 import os
 import random
 import re
@@ -158,11 +159,13 @@ def _is_critical(device_id: str) -> bool:
     return str(device_id) in CRITICAL_DEVICE_IDS
 
 
-def _critical_write_refusal(device_id: str, dp: str, device: dict | None) -> str | None:
+def _critical_write_refusal(device_id: str, dp: str, device: dict | None,
+                            results: dict | None = None) -> str | None:
     """Return a refusal code for an unsafe critical write, else None.
 
     Only saved, known DPs are writable and only after a recent successful live
-    read. Raw DP numbers and stale/unknown states are rejected server-side.
+    read. Raw DP numbers and stale/unknown states are rejected server-side. A
+    newer failed scan must not be overwritten by an older profile success.
     """
     if not _is_critical(device_id):
         return None
@@ -172,13 +175,26 @@ def _critical_write_refusal(device_id: str, dp: str, device: dict | None) -> str
         entry = dict(_profiles().get(str(device_id)) or {})
     last_ok = float(entry.get("last_ok") or 0)
     last_failed = float(entry.get("last_failed") or 0)
-    if not last_ok or time.time() - last_ok > CRITICAL_READ_TTL_SECONDS or last_failed > last_ok:
+    result = dict((results if results is not None else _merged_results()).get(device_id) or {})
+    status = str(result.get("status") or "")
+    checked = max(
+        float(result.get("checked_at") or result.get("last_ok") or 0), last_ok,
+    )
+    if (not last_ok or last_failed > last_ok
+            or time.time() - checked > CRITICAL_READ_TTL_SECONDS
+            or (status and status != lan_scan.OK)):
         return "critical_unverified"
     return None
 
 
 def _message(code: str) -> str:
     return _ISSUE_MESSAGES.get(code, code)
+
+
+def _diagnostic_code(value) -> str:
+    """Normalise a diagnostic value to the lowercase codes HA can display."""
+    text = re.sub(r"[^a-z0-9_.]+", "_", str(value or "").strip().lower())
+    return text.strip("._")[:48] or "unknown"
 
 
 def _ip_hint(device: dict) -> str:
@@ -319,7 +335,9 @@ def _merged_results() -> dict:
     A saved address stays usable for retries. A failure result must not erase
     the last-known-good address: transient packet loss used to make the next
     read fail with "missing_ip" and the reconnect worker return "all_saved".
-    Only a fresh successful/gateway/unverified result wins over a profile.
+    Only a fresh successful/gateway/unverified result wins over a profile. A
+    newer failure keeps its real status while borrowing the saved address, so
+    it cannot be displayed as "Online" or authorise a critical write.
     """
     results = dict(_results())
     for device_id, profile in _profiles().items():
@@ -338,11 +356,16 @@ def _merged_results() -> dict:
             results[device_id] = current
             continue
         failed = _profile_failed(profile)
-        current["status"] = "stale" if failed else lan_scan.OK
+        if current and current_status and current_ts > saved_ts and not authoritative:
+            # Keep the fresh failure reason and timestamp; only borrow the
+            # address. Never turn "unreachable" into a success label.
+            current["checked_at"] = current_ts
+        else:
+            current["status"] = "stale" if failed else lan_scan.OK
+            current["checked_at"] = saved_ts or time.time()
         current.update({
             "ip": ip,
             "version": version,
-            "checked_at": saved_ts or time.time(),
         })
         if "device22" in profile:
             current["device22"] = bool(profile["device22"])
@@ -596,6 +619,12 @@ def _auto_detect_version(devices: list[dict], results: dict, device_id: str):
         except lan_scan.ScannerUnavailable:
             return None
         if outcome.get("match"):
+            if version == tuya_versions.V31_VERSION:
+                # 3.1 replies are plaintext; any local device can answer. Only
+                # cache this version when the reply names the same host.
+                replied_id = str(outcome.get("dev_id") or "")
+                if replied_id != str(context["host_id"]):
+                    continue
             return version, bool(outcome.get("device22"))
     return None
 
@@ -764,7 +793,14 @@ def _send(context: dict, dp: str, value) -> dict:
                     device.close()
                 except Exception:
                     pass
-    return _readback(context, dp, value)
+    try:
+        return _readback(context, dp, value)
+    except lan_scan.ScannerUnavailable:
+        # The write already happened; report uncertainty instead of a 500 and
+        # never resend it.
+        return {"ok": False, "error": "scanner_unavailable"}
+    except Exception:
+        return {"ok": False, "error": "readback_failed"}
 
 
 # --- Preferences, rooms and scenes ---------------------------------------
@@ -1199,6 +1235,42 @@ def _due_scenes(scenes, now=None) -> list[dict]:
     return due
 
 
+_SCENE_INFLIGHT: set[str] = set()
+_SCENE_INFLIGHT_LOCK = threading.Lock()
+
+
+def _claim_scene_tick(scene_id: str, today: str) -> bool:
+    """Claim a due scene only for this tick, never for the whole day."""
+    with _SCENE_INFLIGHT_LOCK:
+        if scene_id in _SCENE_INFLIGHT:
+            return False
+        if any(str(item.get("id")) == scene_id and item.get("last_run") == today
+               for item in _load_scenes() if isinstance(item, dict)):
+            return False
+        _SCENE_INFLIGHT.add(scene_id)
+        return True
+
+
+def _release_scene_tick(scene_id: str) -> None:
+    with _SCENE_INFLIGHT_LOCK:
+        _SCENE_INFLIGHT.discard(scene_id)
+
+
+def _run_scheduled_scene(scene: dict, today: str) -> bool:
+    """Run one scheduled scene; record today only after a real success."""
+    scene_id = str(scene.get("id") or "")
+    if not scene_id or not _claim_scene_tick(scene_id, today):
+        return False
+    try:
+        outcome = _execute_scene(scene, update_last_run=False)
+        ran = bool(outcome.get("ok") or outcome.get("succeeded"))
+        if ran:
+            _set_scene_last_run(scene_id, today)
+        return ran
+    finally:
+        _release_scene_tick(scene_id)
+
+
 def _scheduler_loop() -> None:
     while True:
         time.sleep(SCHEDULER_INTERVAL_SECONDS)
@@ -1207,10 +1279,7 @@ def _scheduler_loop() -> None:
                 continue
             today = datetime.datetime.now().strftime("%Y-%m-%d")
             for scene in _due_scenes(_load_scenes()):
-                # Claim before running so a slow action cannot overlap a tick.
-                if not _set_scene_last_run(scene["id"], today):
-                    continue
-                _execute_scene(scene, update_last_run=False)
+                _run_scheduled_scene(scene, today)
         except Exception:
             # Never log scene values, local keys or tokens.
             continue
@@ -1303,9 +1372,18 @@ def _ensure_connections() -> None:
             try:
                 context = device_values.connection(devices, trial_results, device_id)
             except device_values.ReadUnavailable as error:
-                reason = str(error)
+                # A manually added "Auto" device with no detected version would
+                # otherwise be retried on every ensure call with no backoff.
+                code = _diagnostic_code(error)
+                _remember_failure(device_id, {"ip": ip, "version": version}, code)
+                reason = code
                 continue
-            outcome = device_values.read(context)
+            try:
+                outcome = device_values.read(context)
+            except lan_scan.ScannerUnavailable:
+                _remember_failure(device_id, context, "scanner_unavailable")
+                reason = "scanner_unavailable"
+                return
             if outcome.get("status") == "ok":
                 _remember_success(device_id, context)
                 matched += 1
@@ -1327,6 +1405,7 @@ def _ensure_connections() -> None:
                     probe = lan_scan.probe(context["host_id"], ip, context["key"],
                                            candidate_version, gateway=context["gateway"])
                 except lan_scan.ScannerUnavailable:
+                    _remember_failure(device_id, context, "scanner_unavailable")
                     reason = "scanner_unavailable"
                     return
                 if not probe.get("match"):
@@ -1334,14 +1413,20 @@ def _ensure_connections() -> None:
                 trial = dict(context, version=candidate_version,
                              device22=bool(probe.get("device22")))
                 # A handshake is not proof of a working DP read.
-                if device_values.read(trial).get("status") == "ok":
+                try:
+                    trial_outcome = device_values.read(trial)
+                except lan_scan.ScannerUnavailable:
+                    _remember_failure(device_id, context, "scanner_unavailable")
+                    reason = "scanner_unavailable"
+                    return
+                if trial_outcome.get("status") == "ok":
                     _remember_success(device_id, trial)
                     matched += 1
                     repaired = True
                     break
             if not repaired:
                 _remember_failure(device_id, context,
-                                  str(outcome.get("status") or "read_failed"))
+                                  _diagnostic_code(outcome.get("status") or "read_failed"))
                 reason = "protocol_or_key_failed"
         _ensure_state["matched"] = matched
         _ensure_state["reason"] = "done" if matched else reason
@@ -1515,15 +1600,24 @@ def local_ensure():
         return jsonify({"ok": True, **repair_state()})
     profiles = _profiles()
     failing = []
+    deferred = False
+    now = time.time()
     for device in devices:
         entry = dict(profiles.get(str(device["id"])) or {})
         last_ok = float(entry.get("last_ok") or 0)
         last_failed = float(entry.get("last_failed") or 0)
-        if (not last_ok or last_failed > last_ok
-                or int(entry.get("fail_count") or 0) >= RECONNECT_MIN_FAILURES):
-            failing.append(device)
+        needs_recovery = (not last_ok or last_failed > last_ok
+                          or int(entry.get("fail_count") or 0) >= RECONNECT_MIN_FAILURES)
+        if not needs_recovery:
+            continue
+        if now < float(entry.get("next_attempt_at") or 0):
+            deferred = True
+            continue
+        failing.append(device)
     if failing:
         _ensure_async("read_failures")
+    elif deferred and _ensure_state["reason"] not in {"waiting", "running"}:
+        _ensure_state["reason"] = "waiting"
     return jsonify({"ok": True, **repair_state()})
 
 
@@ -1538,7 +1632,8 @@ def _diagnostic_network() -> dict:
         facts = android_entry.network_facts()
     except Exception:
         pass
-    if not isinstance(facts, dict) or not facts:
+    if (not isinstance(facts, dict) or not facts
+            or str(facts.get("source") or "") == "unavailable"):
         hint = _detected_subnet()
         tailscale = str(os.environ.get("TAILSCALE_IP") or "").strip()
         try:
@@ -1554,9 +1649,15 @@ def _diagnostic_network() -> dict:
     wifi = facts.get("wifi") if isinstance(facts.get("wifi"), dict) else {}
     vpn = facts.get("vpn") if isinstance(facts.get("vpn"), dict) else {}
     route = facts.get("default_route") if isinstance(facts.get("default_route"), dict) else {}
+    try:
+        observed_at = float(facts.get("observed_at") or 0)
+    except (TypeError, ValueError, OverflowError):
+        observed_at = 0
+    if not math.isfinite(observed_at):
+        observed_at = 0
     return {
         "source": str(facts.get("source") or "unavailable"),
-        "observed_at": float(facts.get("observed_at") or 0),
+        "observed_at": observed_at,
         "hint_only": False,
         "wifi": {
             "connected": bool(wifi.get("connected")),
@@ -1630,7 +1731,7 @@ def local_diagnostics():
                 context = device_values.connection(
                     devices, trial_results, device_id, allow_auto=False)
             except device_values.ReadUnavailable as error:
-                handshake["error_kind"] = str(error)
+                handshake["error_kind"] = _diagnostic_code(error)
             else:
                 if context.get("gateway_id"):
                     handshake["scope"] = "gateway"
@@ -1650,7 +1751,8 @@ def local_diagnostics():
                         "attempted": True, "version": version,
                         "match": bool(probe.get("match")),
                         "session_key_installed": bool(probe.get("session_key_installed")),
-                        "error_kind": str(probe.get("error") or "") or None,
+                        "error_kind": _diagnostic_code(probe.get("error"))
+                        if probe.get("error") else None,
                     })
                     if version == saved_version and not probe.get("match"):
                         continue
@@ -1666,7 +1768,7 @@ def local_diagnostics():
                     str(dp) for dp in (outcome.get("dps") or {}) if str(dp).isdigit()
                 )
                 status.update({
-                    "result": str(outcome.get("status") or "read_failed"),
+                    "result": _diagnostic_code(outcome.get("status") or "read_failed"),
                     "read_at": outcome.get("read_at"),
                     "dp_count": len(dp_ids), "dp_ids": dp_ids,
                 })
@@ -1697,8 +1799,8 @@ def local_diagnostics():
                 "last_failed": last_failed or None,
                 "fail_count": int(profile.get("fail_count") or 0),
                 "last_scan_at": float(profile.get("last_scan_at") or 0) or None,
-                "recovery_reason": str(profile.get("recovery_reason")
-                                       or repair_state().get("reason") or "unknown"),
+                "recovery_reason": _diagnostic_code(profile.get("recovery_reason")
+                                                    or repair_state().get("reason") or "unknown"),
             },
         })
 
@@ -1764,7 +1866,7 @@ def local_command():
             code = str(error)
             return jsonify({"error": _message(code), "code": code}), 404
         device = _by_id(_devices())[device_id]
-        refusal = _critical_write_refusal(device_id, dp, device)
+        refusal = _critical_write_refusal(device_id, dp, device, _merged_results())
         if refusal:
             return jsonify({"error": _message(refusal), "code": refusal}), 403
         points = {item["dp"]: item for item in _points(device)}

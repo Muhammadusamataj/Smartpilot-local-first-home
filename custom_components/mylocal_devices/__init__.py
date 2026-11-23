@@ -27,6 +27,9 @@ PLATFORMS = ["switch", "sensor"]
 # Diagnostics do a TCP probe, a handshake and a DP read; only collect them for
 # devices that failed a normal read, and no more often than this.
 DIAGNOSTICS_INTERVAL = 300
+# Keep one last failure snapshot while the device is still failing, but never
+# present an old failure as current if HA can no longer reach the add-on.
+DIAGNOSTICS_MAX_AGE = 900
 
 
 class MyLocalCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -86,9 +89,15 @@ class MyLocalCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         device_id = str(device.get("id") or "")
         cached = self._diagnostics_cache.get(device_id)
         previous = cached[1] if cached else {}
-        if not device_id or not failed:
-            return previous
-        if cached and time.monotonic() - cached[0] < DIAGNOSTICS_INTERVAL:
+        if not device_id:
+            return {}
+        if not failed:
+            # A healthy read must clear the old failure immediately; otherwise
+            # the diagnostics sensor keeps reporting stale failure codes.
+            self._diagnostics_cache.pop(device_id, None)
+            return {}
+        now = time.monotonic()
+        if cached and now - cached[0] < DIAGNOSTICS_INTERVAL:
             return previous
         try:
             body = await api_request(
@@ -99,6 +108,9 @@ class MyLocalCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
         except ApiError as error:
             _LOGGER.debug("Diagnostics unavailable for %s: %s", device_id, error)
+            if cached and now - cached[0] >= DIAGNOSTICS_MAX_AGE:
+                self._diagnostics_cache.pop(device_id, None)
+                return {}
             return previous
         facts = sanitize_diagnostics(body)
         self._diagnostics_cache[device_id] = (time.monotonic(), facts)

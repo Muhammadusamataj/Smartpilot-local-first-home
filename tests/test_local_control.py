@@ -266,6 +266,29 @@ def test_command_requires_successful_readback(local_app, monkeypatch):
     assert response.get_json()["error"] == "readback_mismatch"
 
 
+def test_command_reports_scanner_failure_as_uncertainty_not_server_error(local_app, monkeypatch):
+    app, local, devices_cache, lan_cache, _ = local_app
+    _seed(local, devices_cache, lan_cache, results={
+        "plug1": {"status": "ok", "ip": "192.168.1.50", "version": "3.4",
+                  "checked_at": time.time()},
+    })
+
+    def unavailable(context):
+        raise local.lan_scan.ScannerUnavailable()
+
+    monkeypatch.setattr(local.device_values, "read", unavailable)
+    monkeypatch.setattr(local.lan_scan, "_new_device", lambda *args, **kwargs: _FakeDevice())
+
+    response = app.app.test_client().post("/api/local/command", json={
+        "device_id": "plug1", "dp": "1", "value": True,
+    })
+
+    assert response.status_code == 502
+    assert response.get_json() == {
+        "ok": False, "error": "scanner_unavailable",
+    }
+
+
 class _FakeDevice:
     disabledetect = False
     dev_type = ""
