@@ -1249,6 +1249,299 @@ button, input, select, textarea { font: inherit; }
 }
 
 /* -------------------------------------------------------------------------- */
+/* 7. Scenes                                                                  */
+/* -------------------------------------------------------------------------- */
+
+[data-view-panel="scenes"] .pilot-scenes-nav {
+  gap: var(--pm-space-3) !important;
+  margin: var(--pm-space-1) 0 var(--pm-space-5) !important;
+}
+
+[data-view-panel="scenes"] .pilot-scenes-nav h1 {
+  margin: 0 0 var(--pm-space-1) !important;
+  font-size: clamp(24px, 4vw, 32px) !important;
+  letter-spacing: -.6px !important;
+}
+
+[data-view-panel="scenes"] .pilot-scenes-nav p {
+  margin: 0 !important;
+  color: var(--pm-muted-strong) !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+
+[data-view-panel="scenes"] .section-head {
+  margin: var(--pm-space-5) 0 var(--pm-space-3) !important;
+}
+
+[data-view-panel="scenes"] .section-head h2 {
+  margin: 0 !important;
+  font-size: 20px !important;
+  letter-spacing: -.3px !important;
+}
+
+[data-view-panel="scenes"] .section-head p {
+  margin: 0 !important;
+  color: var(--pm-muted-strong) !important;
+  font-size: 12px !important;
+}
+
+.scene-note {
+  padding: var(--pm-space-3) !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-md) !important;
+  background: var(--pm-well) !important;
+  color: var(--pm-muted-strong) !important;
+  font-size: 12px !important;
+}
+
+.scene-empty {
+  padding: var(--pm-space-6) var(--pm-space-4) !important;
+  border: 1px dashed var(--pm-line-strong) !important;
+  border-radius: var(--pm-radius-lg) !important;
+  background: var(--pm-surface) !important;
+  color: var(--pm-muted-strong) !important;
+}
+
+.scene-empty h3 { font-size: 16px !important; }
+.scene-empty p { max-width: 420px; margin: 0 auto !important; line-height: 1.5 !important; }
+
+.scene-card {
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+  gap: var(--pm-space-3) !important;
+  padding: var(--pm-space-4) !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-lg) !important;
+  background: var(--pm-surface) !important;
+  box-shadow: var(--pm-shadow-1) !important;
+}
+
+.scene-icon {
+  width: 44px !important;
+  height: 44px !important;
+  flex: 0 0 44px !important;
+  border-radius: var(--pm-radius-md) !important;
+  background: var(--pm-accent-soft) !important;
+  color: var(--pm-accent) !important;
+}
+
+.scene-body h3 {
+  margin: 0 !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+  overflow-wrap: anywhere !important;
+}
+
+.scene-body p {
+  margin: var(--pm-space-1) 0 !important;
+  color: var(--pm-muted-strong) !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+}
+
+.scene-meta {
+  gap: var(--pm-space-2) !important;
+  color: var(--pm-muted-strong) !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+}
+
+.scene-card .btn.small,
+.scene-card .icon-btn.small {
+  min-width: 44px !important;
+  min-height: 44px !important;
+  padding: 8px 12px !important;
+}
+
+.scene-editor { gap: var(--pm-space-4) !important; }
+.scene-editor .field span { color: var(--pm-muted-strong) !important; font-size: 12px !important; }
+
+.scene-editor input:not([type="checkbox"]),
+.scene-editor select {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-height: 44px !important;
+  padding: 8px 12px !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-md) !important;
+  background: var(--pm-surface) !important;
+  color: var(--pm-fg) !important;
+  font-size: 12px !important;
+}
+
+.scene-editor .btn.small {
+  min-height: 44px !important;
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+}
+
+.action-builder {
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-lg) !important;
+  background: var(--pm-well) !important;
+  padding: var(--pm-space-4) !important;
+}
+
+.action-pill {
+  padding: var(--pm-space-2) var(--pm-space-3) !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-pill) !important;
+  background: var(--pm-surface) !important;
+  color: var(--pm-fg) !important;
+  font-size: 11px !important;
+}
+
+.action-pill button {
+  min-width: 32px !important;
+  min-height: 32px !important;
+  color: var(--pm-status-danger) !important;
+}
+
+.schedule-fields {
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-lg) !important;
+  background: var(--pm-well) !important;
+  padding: var(--pm-space-4) !important;
+}
+
+.schedule-fields legend {
+  color: var(--pm-muted-strong) !important;
+  font-size: 12px !important;
+}
+
+.schedule-grid { gap: var(--pm-space-2) !important; }
+
+.day {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: var(--pm-radius-md) !important;
+  background: var(--pm-surface) !important;
+  color: var(--pm-muted-strong) !important;
+  font-size: 12px !important;
+}
+
+.day input {
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+}
+
+.day input:checked + span { color: var(--pm-accent) !important; font-weight: 700 !important; }
+.day:focus-within { outline: 3px solid var(--pm-focus) !important; outline-offset: 2px !important; }
+
+/* -------------------------------------------------------------------------- */
+/* 8. Settings, Family Hub and shared overlays                                */
+/* -------------------------------------------------------------------------- */
+
+[data-view-panel="settings"] .section-head h2 {
+  margin: 0 !important;
+  font-size: 22px !important;
+  letter-spacing: -.4px !important;
+}
+
+[data-view-panel="settings"] .section-head p,
+[data-view-panel="settings"] .note,
+[data-view-panel="settings"] .pilot-extra-body,
+[data-family-hub] .note {
+  color: var(--pm-muted-strong) !important;
+  font-size: 12px !important;
+  line-height: 1.55 !important;
+}
+
+[data-view-panel="settings"] .panel {
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-lg) !important;
+  background: var(--pm-surface) !important;
+  box-shadow: var(--pm-shadow-1) !important;
+}
+
+.pilot-settings-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)) !important;
+  gap: var(--pm-space-3) !important;
+  margin: var(--pm-space-5) 0 !important;
+}
+
+.pilot-setting-tile {
+  box-sizing: border-box !important;
+  gap: var(--pm-space-1) !important;
+  min-height: 88px !important;
+  padding: var(--pm-space-4) !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-lg) !important;
+  background: var(--pm-surface) !important;
+  color: var(--pm-fg) !important;
+  text-align: left !important;
+  box-shadow: var(--pm-shadow-1) !important;
+}
+
+.pilot-setting-tile b { font-size: 14px !important; font-weight: 700 !important; }
+.pilot-setting-tile small { color: var(--pm-muted-strong) !important; font-size: 11px !important; line-height: 1.4 !important; }
+
+[data-family-hub] .panel.haier-config {
+  padding: var(--pm-space-5) !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-xl) !important;
+  background: var(--pm-surface) !important;
+  box-shadow: var(--pm-shadow-1) !important;
+}
+
+[data-family-hub] .haier-config .note {
+  margin: var(--pm-space-3) 0 0 !important;
+  padding: var(--pm-space-3) !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-md) !important;
+  background: var(--pm-well) !important;
+}
+
+[data-family-hub] .haier-config code { overflow-wrap: anywhere !important; }
+
+.pilot-extras-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)) !important;
+  gap: var(--pm-space-3) !important;
+}
+
+.pilot-extra-card {
+  gap: var(--pm-space-2) !important;
+  min-width: 0 !important;
+  padding: var(--pm-space-4) !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-lg) !important;
+  background: var(--pm-surface) !important;
+}
+
+.pilot-extra-card h3 { font-size: 14px !important; }
+.pilot-extra-body b { color: var(--pm-fg) !important; }
+.pilot-extra-row { padding: var(--pm-space-2) 0 !important; border-color: var(--pm-line) !important; }
+.pilot-extra-badge.ok { color: var(--pm-status-ok) !important; }
+.pilot-extra-badge.warn { color: var(--pm-status-warn) !important; }
+
+.pilot-rule-presets .btn,
+.pilot-inline-actions .btn {
+  min-height: 44px !important;
+  padding: 8px 12px !important;
+  font-size: 11px !important;
+}
+
+#toast {
+  max-width: min(420px, calc(100vw - 32px)) !important;
+  padding: var(--pm-space-3) var(--pm-space-4) !important;
+  border: 1px solid var(--pm-line-strong) !important;
+  border-radius: var(--pm-radius-md) !important;
+  box-shadow: var(--pm-shadow-2) !important;
+  font-size: 13px !important;
+  line-height: 1.35 !important;
+  bottom: 24px !important;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+@media (max-width: 720px) {
+  #toast { bottom: 92px !important; bottom: calc(92px + env(safe-area-inset-bottom, 0px)) !important; }
+}
+
+/* -------------------------------------------------------------------------- */
 /* 9. Motion and forced colours                                               */
 /* -------------------------------------------------------------------------- */
 

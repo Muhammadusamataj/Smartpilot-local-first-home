@@ -3,7 +3,7 @@
 **Last updated:** 2026-11-24  
 **Branch:** `feature/smartpilot-premium-ui`  
 **Base HEAD:** `3fc711f Reliability hardening for v1.19`  
-**Overall status:** CP0 verified and pushed; Android release-channel code changes paused pending approval; Batches 1–3 verified locally; Batch 4 in progress; push awaiting explicit approval
+**Overall status:** CP0 verified and pushed; Android release-channel code changes paused pending approval; Batches 1–4 verified locally; Batch 5 in progress; push awaiting explicit approval
 
 This file is updated after every implementation or testing milestone. Do not mark a milestone complete without evidence.
 
@@ -300,7 +300,7 @@ Decision:
 | CP1 | Design system, navigation, Home | verified locally with CP2; push awaiting explicit approval |
 | CP2 | Devices | verified locally; push awaiting explicit approval |
 | CP3 | Auto-Pilot | verified locally; push awaiting explicit approval |
-| CP4 | Scenes and Settings | not started |
+| CP4 | Scenes and Settings | verified locally; push awaiting explicit approval |
 | CP5 | Micro-polish and final acceptance | not started |
 
 ### CP0 push evidence
@@ -571,9 +571,83 @@ python -m pytest tests/test_ui.py -q -k "premium_local_shell or local_small_scre
 
 The Haier selection covers LAN IP validation, stale-cache verification revocation, failed-refresh handling, confirmed-fields-only writes, per-slot locks, compressor/manual-override safety and cloud-key secrecy. No Python, API, protocol, key, auth, polling or handler file was changed.
 
-## Batch 4 — Scenes and Settings `[NOT STARTED]`
+## Batch 4 — Scenes and Settings `[COMPLETE]`
 
-Evidence and checklist pending.
+### Checklist
+
+- [x] Refresh scene note, empty state, cards, editor fields, action builder and schedule controls.
+- [x] Refresh Settings shortcuts, Family Hub, Safety & Automation cards and shared toast styling.
+- [x] Keep scene ids, handlers, editor mounting, backup/restore, update, diagnostics, security and remote-access controls unchanged.
+- [x] Re-run source guards, Home layout guard, screenshots, metrics, Scenes/Settings UI tests and safety-contract tests.
+
+### Evidence
+
+The Scenes editor inputs and selects now meet the 44px touch minimum. Scene cards, empty state and editor use the same border-led card language as the rest of the app; all text remains text-labelled and wraps. Settings helper text uses the stronger light-mode token so notes and shortcut captions stay readable. Family Hub, Safety & Automation and toast surfaces were restyled without touching their ids, handlers or API calls.
+
+Commands and exact results:
+
+```powershell
+python -m pytest tests/test_pilot_v07_static.py -q
+```
+
+```text
+......                                                                   [100%]
+6 passed in 0.13s
+```
+
+```powershell
+node tests/test_pilot_home_layout.mjs
+```
+
+```text
+Home layout state, reorder, hide, restore and escaping: PASS
+```
+
+```powershell
+python -u UI_REVIEW_TEMP\capture_ui.py UI_REVIEW_TEMP\after_batch4 after_batch4
+```
+
+```text
+captured 60 shots to UI_REVIEW_TEMP\after_batch4
+overflow failures: 0
+page errors: 0
+```
+
+```powershell
+python -u UI_REVIEW_TEMP\metrics_ui.py UI_REVIEW_TEMP\metrics_after_batch4.json
+```
+
+Corrected objective totals, Batch 3 → Batch 4:
+
+```text
+combinations      20 -> 20
+overflow           0 -> 0
+small targets     10 -> 0
+visible overlaps   0 -> 0
+low-contrast rows 14 -> 0
+minimum contrast 1.53 -> 3.23
+```
+
+```powershell
+python -m pytest tests/test_ui.py -q -k "premium_local_shell or local_scene_run or local_palette or local_small_screen_tabs or local_layout_is_reachable or modular_frontend_starts"
+```
+
+```text
+..............                                                           [100%]
+14 passed, 389 deselected in 329.40s (0:05:29)
+```
+
+```powershell
+python -m pytest tests/test_pilot_extras.py -q -k "new_endpoints or safety_rules or backup_and_restore or restore_rejects_non_zip"
+python -m pytest tests/test_critical_safety.py -q -k "critical_rule or scene_never"
+```
+
+```text
+4 passed in 1.19s
+2 passed, 5 deselected in 1.00s
+```
+
+No Python, API, protocol, key, auth, safety, backup, update, diagnostics or handler file was changed.
 
 ## Batch 5 — Micro-polish and final acceptance `[NOT STARTED]`
 

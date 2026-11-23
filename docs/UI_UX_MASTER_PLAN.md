@@ -244,11 +244,11 @@ Each batch is implementation + tests + progress update before the next batch sta
 - [x] Preserve slot names, commands, polling and verification gating.
 - [x] Re-run all prior checks plus Haier-focused UI tests.
 
-### Batch 4 — Scenes and Settings `[NOT STARTED]`
+### Batch 4 — Scenes and Settings `[DONE]`
 
-- Refresh scene list/editor, Family Hub, shortcut tiles, Safety & Automation and advanced drawer.
-- Preserve all ids, handlers, backup/update/security/diagnostics/remote access.
-- Re-run full UI suite and source guards.
+- [x] Refresh scene list/editor, Family Hub, shortcut tiles, Safety & Automation and advanced drawer.
+- [x] Preserve all ids, handlers, backup/update/security/diagnostics/remote access.
+- [x] Re-run focused UI suite, safety-contract tests, source guards and source/mirror checks.
 
 ### Batch 5 — Micro-polish and final acceptance `[NOT STARTED]`
 
@@ -327,7 +327,7 @@ A batch or the full sprint is complete only when all applicable criteria pass wi
 | CP1 | Design system, navigation, Home | verified locally with CP2 | push awaiting explicit approval |
 | CP2 | Devices | verified locally | push awaiting explicit approval |
 | CP3 | Auto-Pilot | verified locally | push awaiting explicit approval |
-| CP4 | Scenes and Settings | pending | pending |
+| CP4 | Scenes and Settings | verified locally | push awaiting explicit approval |
 | CP5 | Micro-polish and final acceptance | pending | pending |
 
 ---
