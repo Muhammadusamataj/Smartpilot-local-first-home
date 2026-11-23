@@ -323,7 +323,7 @@ A batch or the full sprint is complete only when all applicable criteria pass wi
 
 | Checkpoint | Milestone | Commit | Push status |
 |---|---|---|---|
-| CP0 | Planning, isolation and audit | pending | pending |
+| CP0 | Planning, isolation and audit | `ed97a10418fa2c9ca4c7e1ee5d60d1d7555f37cc` | pushed to `origin/feature/smartpilot-premium-ui` |
 | CP1 | Design system, navigation, Home | pending | pending |
 | CP2 | Devices | pending | pending |
 | CP3 | Auto-Pilot | pending | pending |

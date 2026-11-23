@@ -252,12 +252,52 @@ Total: **15 focused checks passed**, 0 failed. No frontend source was changed in
 
 | Checkpoint | Milestone | Status |
 |---|---|---|
-| CP0 | Planning, isolation and audit | verified locally; commit/push pending |
+| CP0 | Planning, isolation and audit | verified, committed `ed97a10418fa2c9ca4c7e1ee5d60d1d7555f37cc`, pushed |
 | CP1 | Design system, navigation, Home | not started |
 | CP2 | Devices | not started |
 | CP3 | Auto-Pilot | not started |
 | CP4 | Scenes and Settings | not started |
 | CP5 | Micro-polish and final acceptance | not started |
+
+### CP0 push evidence
+
+Command:
+
+```powershell
+git push -u origin feature/smartpilot-premium-ui
+```
+
+Result:
+
+```text
+branch 'feature/smartpilot-premium-ui' set up to track 'origin/feature/smartpilot-premium-ui'.
+* [new branch] feature/smartpilot-premium-ui -> feature/smartpilot-premium-ui
+```
+
+Remote verification:
+
+```text
+ed97a10418fa2c9ca4c7e1ee5d60d1d7555f37cc  refs/heads/feature/smartpilot-premium-ui
+```
+
+GitHub commit status:
+
+```json
+{"state":"pending","statuses":[],"total":0}
+```
+
+Interpretation: the branch and commit are present on GitHub. No commit statuses/CI checks are attached, so none failed. No PR was created.
+
+### CP0 changed files
+
+```text
+AGENTS.md
+docs/UI_UX_MASTER_PLAN.md
+docs/UI_UX_PROGRESS.md
+docs/UI_UX_VISUAL_BASELINE.md
+```
+
+4 files changed, 878 insertions.
 
 ---
 
@@ -305,5 +345,6 @@ Evidence and checklist pending.
 - Physical device commands sent: **0**
 - Fake device data committed: **0**
 - Backend/security/API files modified: **0**
-- Push/merge/tag/release/deploy/PR/Azure actions: **0**
+- Pushes to `feature/smartpilot-premium-ui`: allowed CP0 documentation checkpoints only
+- Merge/tag/release/deploy/PR/Azure actions: **0**
 - Hardware verification claims: **0**
