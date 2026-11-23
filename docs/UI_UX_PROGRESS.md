@@ -3,7 +3,7 @@
 **Last updated:** 2026-11-24  
 **Branch:** `feature/smartpilot-premium-ui`  
 **Base HEAD:** `3fc711f Reliability hardening for v1.19`  
-**Overall status:** CP0 verified and pushed; Android release-channel code changes paused pending approval; Batches 1–4 verified locally; Batch 5 in progress; push awaiting explicit approval
+**Overall status:** CP0 verified and pushed; Android release-channel code changes paused pending approval; Batches 1–5 verified locally; final acceptance evidence recorded; push awaiting explicit approval
 
 This file is updated after every implementation or testing milestone. Do not mark a milestone complete without evidence.
 
@@ -301,7 +301,7 @@ Decision:
 | CP2 | Devices | verified locally; push awaiting explicit approval |
 | CP3 | Auto-Pilot | verified locally; push awaiting explicit approval |
 | CP4 | Scenes and Settings | verified locally; push awaiting explicit approval |
-| CP5 | Micro-polish and final acceptance | not started |
+| CP5 | Micro-polish and final acceptance | verified locally; push awaiting explicit approval |
 
 ### CP0 push evidence
 
@@ -649,9 +649,110 @@ python -m pytest tests/test_critical_safety.py -q -k "critical_rule or scene_nev
 
 No Python, API, protocol, key, auth, safety, backup, update, diagnostics or handler file was changed.
 
-## Batch 5 — Micro-polish and final acceptance `[NOT STARTED]`
+## Batch 5 — Micro-polish and final acceptance `[COMPLETE]`
 
-Evidence and checklist pending.
+### Checklist
+
+- [x] Shared toast/sheet surfaces, reduced motion, focus rings, high-contrast and non-colour-only status verified.
+- [x] Five-view contract, deep links, `data-jump-view`, drawers, sheets, Escape/back, long names, empty/stale and critical two-tap guard verified with mocked APIs.
+- [x] Full 60-shot screenshot matrix and objective metrics clean in both themes at all six widths.
+- [x] System-theme following, theme parity and no-device-command assertion verified.
+- [x] Full UI suite and source/mirror guards run against the frozen tree.
+
+### Evidence
+
+A dedicated mocked acceptance harness (`acceptance_ui.py`, all `/api/**` fulfilled from fixtures) exercised every theme and recorded any command call. The final run passed **40/40** checks: exact five-view order and `aria-selected`/panel consistency, deep-link device filtering **including the visible tile count**, `data-jump-view`, visible keyboard focus rings, Escape closing both drawers/sheet and clearing the scrim, critical-device two-tap arming with **zero command calls** on the first tap, long-name wrapping and no horizontal overflow at 320px, empty-list rendering, no page errors, and reduced-motion transition suppression. A separate theme harness passed 4/4: no stored override follows the OS in both directions, and explicit light/dark overrides win regardless of OS scheme. A state harness passed 3/3: exact Haier slot names, distinct text status for online vs unreachable, and non-colour-only status class/text.
+
+### Regression found and fixed during final acceptance
+
+The first full-suite run exposed `test_control_link_opens_the_local_page_focused_on_that_device` failing with `3` visible tiles where `1` was expected. Root cause: this presentation layer's `#devices .tile { display: flex !important }` overrode the HTML `hidden` attribute that `applyFilter()` uses, so filtered-out tiles stayed visible. The original 38-check harness had only asserted the search input value, not tile visibility, so it missed this. A dedicated `hidden` diagnostic confirmed exactly two filtered-out tiles had a computed `display` of `flex` despite `[hidden]`.
+
+Fix: added a scoped hidden-attribute preservation rule (section 8b of `pilot-premium-ui.css`) covering tiles, room groups, home mini tiles, view panels, scene editors, Haier config, device-empty and update controls. No handler, id, class or API was changed. Verification after the fix: `hidden` diagnostic `0` violations; the previously failing UI test `1 passed in 35.16s`; acceptance harness strengthened to assert visible tile count, now `40/40`.
+
+Commands and exact results:
+
+```powershell
+python -u UI_REVIEW_TEMP\acceptance_ui.py UI_REVIEW_TEMP\acceptance_report_final.json
+```
+
+```text
+acceptance checks: 40 / 40 passed
+```
+
+```powershell
+python -u UI_REVIEW_TEMP\hidden_check.py
+```
+
+```text
+elements with [hidden] but non-none display: 0
+```
+
+```powershell
+python -m pytest "tests/test_ui.py::test_control_link_opens_the_local_page_focused_on_that_device" -q
+```
+
+```text
+.                                                                        [100%]
+1 passed in 35.16s
+```
+
+```powershell
+python -u UI_REVIEW_TEMP\theme_check.py
+```
+
+```text
+theme checks: 4 / 4 passed
+  OK   light OS, no override -> light -> {'themeAttr': None, 'bg': 'rgb(237, 245, 252)'}
+  OK   dark OS, no override -> dark -> {'themeAttr': None, 'bg': 'rgb(8, 16, 35)'}
+  OK   light OS, explicit dark -> dark -> {'themeAttr': 'dark', 'bg': 'rgb(8, 16, 35)'}
+  OK   dark OS, explicit light -> light -> {'themeAttr': 'light', 'bg': 'rgb(237, 245, 252)'}
+```
+
+```powershell
+python -u UI_REVIEW_TEMP\state_check.py
+```
+
+```text
+state checks: 3 / 3 passed
+  OK   two Haier slots named exactly -> ['19HFAB T3 Pro', 'FF Haier 19HFAB T3']
+  OK   online and stale statuses shown as distinct text -> Online / Unreachable
+  OK   status is not colour-only (text + class)
+```
+
+```powershell
+python -m pytest tests/test_pilot_v07_static.py -q
+node tests/test_pilot_home_layout.mjs
+```
+
+```text
+6 passed in 0.17s
+Home layout state, reorder, hide, restore and escaping: PASS
+```
+
+Source and mirror parity against the final corrected tree:
+
+```text
+templates/local_control.html + both mirrors: SHA-256 95A2E8C1...FEDD9E0D6 (identical)
+pilot-premium-ui.css + both mirrors: SHA-256 F8755219...D4615F656 (identical)
+Only template change vs base: one <link rel="stylesheet" href="static/css/pilot-premium-ui.css"> line
+```
+
+Mocked screenshots and objective metrics were re-run after the hidden-attribute fix (`after_fix`): 60 shots, `overflow failures: 0`, `page errors: 0`, and 20/20 combinations with `overflow 0`, `small targets 0`, `visible overlaps 0`, `low-contrast rows 0`, minimum contrast `3.23`. Totals were unchanged from Batch 4 (`20, 0, 0, 0, 0, 3.23`), confirming the fix was presentation-neutral for visible states.
+
+Non-UI diff scope (`git diff 3fc711f..HEAD`) contains only the three mirrored premium CSS files, the three mirrored templates (CSS link only), `AGENTS.md` (CP0 project instructions) and the UI/UX docs. No Python backend, API, protocol, key, auth, safety, backup, update, diagnostics or security file was changed.
+
+Full UI suite re-run against the final corrected CSS (hidden-attribute fix included):
+
+```powershell
+python -m pytest tests/test_ui.py -q
+```
+
+```text
+UI screenshots: test-results/ui/index.html  (generated, gitignored)
+403 passed in 1451.54s (0:24:11)
+```
+
+This is the complete `tests/test_ui.py` suite, not a subset. It supersedes the earlier stale run that found the single `hidden`-attribute regression before the fix. With all 403 UI tests plus the source guards, Home layout guard, 40/40 acceptance harness, 4/4 theme checks, 3/3 state checks, 60 mocked screenshots and clean objective metrics, the UI acceptance checklist is verified.
 
 ---
 

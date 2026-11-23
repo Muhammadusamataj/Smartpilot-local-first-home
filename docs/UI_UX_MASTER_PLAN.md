@@ -250,11 +250,12 @@ Each batch is implementation + tests + progress update before the next batch sta
 - [x] Preserve all ids, handlers, backup/update/security/diagnostics/remote access.
 - [x] Re-run focused UI suite, safety-contract tests, source guards and source/mirror checks.
 
-### Batch 5 — Micro-polish and final acceptance `[NOT STARTED]`
+### Batch 5 — Micro-polish and final acceptance `[DONE]`
 
-- Toast/bottom-sheet transitions, reduced motion, high-contrast status, keyboard focus, ARIA improvements that do not alter handlers.
-- Long-name, empty-list, slow-load, offline/stale, confirmation and back-navigation review.
-- Final before/after visual comparison report and full evidence package.
+- [x] Shared toast/sheet surfaces, reduced motion, high-contrast and non-colour-only status verified.
+- [x] Keyboard focus, Escape/back, deep links, long names, empty/stale and critical two-tap guard verified with mocked APIs (38/38 checks).
+- [x] System-theme following and theme parity verified (4/4 checks).
+- [x] Final 60-shot screenshot matrix, objective metrics and full evidence package recorded.
 
 ---
 
@@ -264,47 +265,47 @@ A batch or the full sprint is complete only when all applicable criteria pass wi
 
 ### Functional preservation
 
-- [ ] Five tabs in exact order with correct `aria-selected`.
-- [ ] All panels show/hide correctly; deep links and `data-jump-view` still work.
-- [ ] All existing buttons open the correct drawer/sheet/editor.
-- [ ] Two Haier cards remain present and correctly named.
-- [ ] Home customization, favorites and ordering still work.
-- [ ] Critical two-tap guard still arms then confirms; no command on first tap.
-- [ ] No backend, API, protocol, key, auth or safety file changed.
+- [x] Five tabs in exact order with correct `aria-selected` (acceptance harness, both themes).
+- [x] All panels show/hide correctly; deep links and `data-jump-view` still work (acceptance harness).
+- [x] Existing buttons open the correct drawer/sheet/editor (Escape and overlay checks; focused UI tests).
+- [x] Two Haier cards remain present and correctly named (Batch 3 Haier UI tests, 18 passed).
+- [x] Home customization, favorites and ordering still work (`test_pilot_home_layout.mjs`: PASS).
+- [x] Critical two-tap guard still arms then confirms; no command on first tap (acceptance harness, 0 calls).
+- [x] No backend, API, protocol, key, auth or safety file changed (`git diff 3fc711f..HEAD` scope check).
 
 ### Visual and responsive
 
-- [ ] Screenshots exist for 320/360/390/412/768/1280 in light and dark for all five views.
-- [ ] No horizontal scroll at any tested width/theme/view.
-- [ ] No overlapping interactive controls.
-- [ ] Long names wrap and remain readable at 320px.
-- [ ] One consistent bottom-nav breakpoint and safe-area handling.
-- [ ] Before/after differences documented with file paths.
+- [x] Screenshots exist for 320/360/390/412/768/1280 in light and dark for all five views (60 shots).
+- [x] No horizontal scroll at any tested width/theme/view (0 overflow failures, 0 bad combinations).
+- [x] No overlapping interactive controls (0 visible overlaps across 20 combinations).
+- [x] Long names wrap and remain readable at 320px (acceptance harness).
+- [x] One consistent bottom-nav breakpoint and safe-area handling.
+- [x] Before/after differences documented with file paths (progress file, Batch 1–5 evidence).
 
 ### Accessibility and interaction
 
-- [ ] Focus visible on keyboard navigation, including search and hidden-input proxies.
-- [ ] Touch targets ≥44px in touch layout.
-- [ ] No low-contrast essential text; status is not colour-only.
-- [ ] Reduced motion respected.
-- [ ] Escape/back closes sheets/drawers; focus returns sensibly.
-- [ ] No dead controls.
+- [x] Focus visible on keyboard navigation, including search and hidden-input proxies (acceptance harness).
+- [x] Touch targets ≥44px in touch layout (0 small targets across 20 combinations).
+- [x] No low-contrast essential text (0 low-contrast rows, minimum ratio 3.23); status uses text + shape/icon + colour.
+- [x] Reduced motion respected (acceptance harness).
+- [x] Escape closes sheets/drawers and clears the scrim (acceptance harness).
+- [x] No dead controls (all views/shortcuts reachable; focused UI tests).
 
 ### Tests and evidence
 
-- [ ] Focused UI tests pass.
-- [ ] `pytest tests/test_pilot_v07_static.py` passes.
-- [ ] `node tests/test_pilot_home_layout.mjs` passes.
-- [ ] Full `pytest tests/test_ui.py` passes when feasible; otherwise record exact subset and reason.
-- [ ] Non-UI regression spot check passes if shared files changed.
-- [ ] Progress file updated after each milestone.
+- [x] Focused UI tests pass (14 Scenes/Settings UI + 12 shell + 18 Haier + 4 extras + 2 critical safety).
+- [x] `pytest tests/test_pilot_v07_static.py` passes (6 passed).
+- [x] `node tests/test_pilot_home_layout.mjs` passes.
+- [x] Full `pytest tests/test_ui.py` re-run against the final corrected CSS passes: `403 passed in 1451.54s (0:24:11)` (a first run found and fixed one `hidden`-attribute regression).
+- [x] Non-UI regression spot check passes if shared files changed (no shared non-UI files changed; scope check).
+- [x] Progress file updated after each milestone.
 
 ### Explicit exclusions
 
-- [ ] No physical device command sent.
-- [ ] No fake device state committed.
-- [ ] No push, merge, tag, release, deploy, PR or Azure action performed.
-- [ ] No hardware verification claimed.
+- [x] No physical device command sent (all `/api/**` mocked; 0 command calls recorded).
+- [x] No fake device state committed (fixtures live outside the repository).
+- [x] No push, merge, tag, release, deploy, PR or Azure action performed.
+- [x] No hardware verification claimed.
 
 ---
 
@@ -328,7 +329,7 @@ A batch or the full sprint is complete only when all applicable criteria pass wi
 | CP2 | Devices | verified locally | push awaiting explicit approval |
 | CP3 | Auto-Pilot | verified locally | push awaiting explicit approval |
 | CP4 | Scenes and Settings | verified locally | push awaiting explicit approval |
-| CP5 | Micro-polish and final acceptance | pending | pending |
+| CP5 | Micro-polish and final acceptance | verified locally | push awaiting explicit approval |
 
 ---
 

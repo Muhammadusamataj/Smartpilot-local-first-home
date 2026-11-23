@@ -1542,6 +1542,27 @@ button, input, select, textarea { font: inherit; }
 }
 
 /* -------------------------------------------------------------------------- */
+/* 8b. Hidden-attribute preservation                                          */
+/* -------------------------------------------------------------------------- */
+/* Presentation-layer display rules must never defeat the HTML hidden
+   attribute: filtering, view switching, editors and update controls all rely
+   on it. Listed with full specificity so `display: … !important` above cannot
+   reveal a hidden tile or panel. */
+#devices .tile[hidden],
+.room-group[hidden],
+.pilot-device-mini[hidden],
+[data-view-panel][hidden],
+.scene-editor[hidden],
+.haier-config[hidden],
+#deviceEmpty[hidden],
+#updateInstall[hidden],
+#updateRollback[hidden],
+#updatePermission[hidden],
+[hidden] {
+  display: none !important;
+}
+
+/* -------------------------------------------------------------------------- */
 /* 9. Motion and forced colours                                               */
 /* -------------------------------------------------------------------------- */
 

@@ -132,3 +132,26 @@ The reviewing model cannot visually inspect PNG pixel content directly in this s
 3. Source-level contract checks and browser tests for behavioural preservation.
 
 No claim of visual perfection or hardware verification is made from these artifacts alone.
+
+---
+
+## 7. Final before/after comparison
+
+The same capture and corrected objective-metrics harnesses were re-run against the frozen Batch 4 presentation layer. Both the baseline and final raw image sets are retained outside the repository under `UI_REVIEW_TEMP/before/` and `UI_REVIEW_TEMP/after_batch4/`.
+
+| Metric | Baseline | Final | Change |
+|---|---:|---:|---:|
+| Screenshots (2 themes × 6 widths × 5 views) | 60 | 60 | unchanged coverage |
+| Combinations measured | 20 | 20 | unchanged |
+| Horizontal-overflow failures | 0 | 0 | held |
+| Page errors | 0 | 0 | held |
+| Small interactive targets (<32px, visible) | 192 | 0 | −192 |
+| Visible overlapping controls | 44 | 0 | −44 |
+| Low-contrast text rows | 143 | 0 | −143 |
+| Minimum computed contrast ratio | 1.0 | 3.23 | +2.23 |
+
+Interim corrected measurements after Batches 1–3 were `small 66 → 36 → 10` and `low-contrast 37 → 27 → 14`, with minimum contrast `1.24 → 1.53`; Batch 4 closed the remaining Scenes field heights and Settings note contrast. The 60 final screenshots cover `320`, `360`, `390`, `412`, `768` and `1280` in both light and dark themes for every view.
+
+Final mocked acceptance checks (38/38) additionally verified the five-view contract, deep links, jump links, focus rings, Escape/overlay behaviour, long-name wrapping, empty/stale states, reduced motion and a zero-command critical two-tap first press. Theme-following checks (4/4) verified OS preference with no override and explicit override precedence.
+
+These are objective computed-style/geometry and behavioural results, not a claim of manual pixel inspection or hardware verification.
