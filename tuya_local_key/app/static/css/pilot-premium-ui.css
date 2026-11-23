@@ -1,0 +1,1019 @@
+/* Smart Pilot — precision calm presentation layer.
+   Loaded after the legacy cascade. No ids, attributes, handlers or API calls
+   are changed here. All selectors are presentation-only and scoped to the
+   existing local-control DOM so the five-view contract stays intact. */
+
+/* -------------------------------------------------------------------------- */
+/* 1. Semantic tokens                                                         */
+/* -------------------------------------------------------------------------- */
+
+:root {
+  --pm-space-1: 4px;
+  --pm-space-2: 8px;
+  --pm-space-3: 12px;
+  --pm-space-4: 16px;
+  --pm-space-5: 24px;
+  --pm-space-6: 32px;
+
+  --pm-radius-sm: 8px;
+  --pm-radius-md: 12px;
+  --pm-radius-lg: 16px;
+  --pm-radius-xl: 20px;
+  --pm-radius-pill: 999px;
+
+  --pm-ease: cubic-bezier(.2, .8, .2, 1);
+  --pm-fast: 120ms;
+  --pm-normal: 180ms;
+
+  --pm-shadow-1: 0 1px 2px rgba(3, 10, 16, .16), 0 8px 20px rgba(3, 10, 16, .10);
+  --pm-shadow-2: 0 14px 34px rgba(3, 10, 16, .18);
+
+  /* Aliases keep every legacy custom property name intact. The locked body
+     colours therefore remain rgb(8,16,35) and rgb(237,245,252). */
+  --pm-canvas: var(--bg);
+  --pm-surface: var(--card);
+  --pm-surface-strong: var(--ds-surface-solid, var(--card));
+  --pm-surface-soft: var(--ds-surface, var(--card));
+  --pm-well: var(--ds-well, var(--bg));
+  --pm-fg: var(--fg);
+  --pm-muted: var(--muted);
+  --pm-line: var(--border);
+  --pm-line-strong: var(--ds-line-strong, var(--border));
+  --pm-accent: var(--accent);
+  --pm-accent-fg: var(--accent-fg);
+  --pm-ok: var(--ok);
+  --pm-warn: var(--warn);
+  --pm-danger: var(--off);
+  --pm-status-ok: var(--ok);
+  --pm-status-warn: var(--warn);
+  --pm-status-danger: var(--off);
+  --pm-eyebrow: var(--accent);
+  --pm-muted-strong: var(--muted);
+  --pm-focus: var(--ds-accent-2, var(--accent));
+
+  --pm-accent-soft: rgba(102, 233, 179, .14);
+  --pm-accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --pm-accent-line: rgba(102, 233, 179, .34);
+  --pm-accent-line: color-mix(in srgb, var(--accent) 34%, transparent);
+  --pm-ok-soft: rgba(102, 233, 179, .14);
+  --pm-ok-soft: color-mix(in srgb, var(--ok) 14%, transparent);
+  --pm-warn-soft: rgba(241, 199, 122, .14);
+  --pm-warn-soft: color-mix(in srgb, var(--warn) 14%, transparent);
+  --pm-danger-soft: rgba(255, 141, 152, .14);
+  --pm-danger-soft: color-mix(in srgb, var(--off) 14%, transparent);
+}
+
+:root[data-theme="light"] {
+  --pm-ok: #047857;
+  --pm-warn: #92400e;
+  --pm-danger: #b91c1c;
+  --pm-status-ok: #065f46;
+  --pm-status-warn: #7c2d12;
+  --pm-status-danger: #991b1b;
+  --pm-eyebrow: #006b68;
+  --pm-muted-strong: #4f6076;
+  --pm-focus: #0369a1;
+  --pm-ok-soft: rgba(4, 120, 87, .10);
+  --pm-warn-soft: rgba(146, 64, 14, .10);
+  --pm-danger-soft: rgba(185, 28, 28, .10);
+}
+
+/* Explicit System mode follows the OS. Existing code deletes data-theme when
+   the stored preference is "system", so only that state is adjusted here. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --bg: #edf5fc;
+    --card: #f9fcff;
+    --fg: #10233e;
+    --muted: #62748b;
+    --border: rgba(27, 70, 116, .16);
+    --ok: #047857;
+    --off: #b91c1c;
+    --warn: #92400e;
+    --code-bg: #eef3fa;
+    --ds-bg: #edf5fc;
+    --ds-bg-2: #e5eef9;
+    --ds-fg: #10233e;
+    --ds-muted: #62748b;
+    --ds-surface: rgba(255, 255, 255, .92);
+    --ds-surface-strong: rgba(255, 255, 255, .97);
+    --ds-surface-solid: #f9fcff;
+    --ds-well: rgba(221, 235, 251, .70);
+    --ds-line: rgba(27, 70, 116, .14);
+    --ds-line-strong: rgba(27, 70, 116, .24);
+    --lum-glass: rgba(255, 255, 255, .86);
+    --lum-glass-strong: rgba(255, 255, 255, .96);
+    --lum-well: rgba(221, 235, 251, .70);
+    --lum-line: rgba(27, 70, 116, .14);
+    --pm-status-ok: #065f46;
+    --pm-status-warn: #7c2d12;
+    --pm-status-danger: #991b1b;
+    --pm-eyebrow: #006b68;
+    --pm-muted-strong: #4f6076;
+    --pm-ok-soft: rgba(4, 120, 87, .10);
+    --pm-warn-soft: rgba(146, 64, 14, .10);
+    --pm-danger-soft: rgba(185, 28, 28, .10);
+  }
+
+  :root:not([data-theme]):not([data-palette]) {
+    --accent: #008b87;
+    --accent-fg: #fff;
+    --ds-accent: #008b87;
+    --ds-accent-2: #4383ca;
+    --lum-accent: #008b87;
+    --pm-focus: #0369a1;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* 2. Canvas, typography and focus                                             */
+/* -------------------------------------------------------------------------- */
+
+body {
+  background-image:
+    radial-gradient(circle at 96% -12%, var(--pm-accent-soft), transparent 34%),
+    linear-gradient(180deg, var(--pm-canvas), var(--pm-canvas)) !important;
+  background-attachment: fixed !important;
+  color: var(--pm-fg);
+}
+
+main {
+  max-width: 1180px;
+  padding-left: clamp(12px, 3vw, 28px) !important;
+  padding-right: clamp(12px, 3vw, 28px) !important;
+}
+
+button, input, select, textarea { font: inherit; }
+
+:where(button, a, input, select, textarea, summary, [role="tab"]):focus-visible {
+  outline: 3px solid var(--pm-focus) !important;
+  outline-offset: 3px !important;
+}
+
+.appbar .search input:focus-visible,
+.sheet input:focus-visible,
+.sheet select:focus-visible,
+.drawer input:focus-visible,
+.drawer select:focus-visible {
+  outline: 3px solid var(--pm-focus) !important;
+  outline-offset: 2px !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 3. App bar and five-destination navigation                                  */
+/* -------------------------------------------------------------------------- */
+
+.appbar {
+  min-height: 64px;
+  gap: var(--pm-space-3) !important;
+  padding: 10px clamp(12px, 3vw, 28px) !important;
+  background: var(--pm-surface-strong) !important;
+  border-bottom: 1px solid var(--pm-line) !important;
+  box-shadow: var(--pm-shadow-1) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  flex-wrap: nowrap !important;
+}
+
+.appbar .pilot-brand { gap: 10px; }
+
+.appbar .pilot-brand .logo {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: var(--pm-radius-md) !important;
+  background: linear-gradient(140deg, var(--pm-accent), var(--pm-focus)) !important;
+  box-shadow: 0 6px 18px var(--pm-accent-soft) !important;
+  color: var(--pm-accent-fg) !important;
+  font-size: 22px !important;
+}
+
+.appbar .pilot-wordmark { font-size: 15px !important; letter-spacing: -.2px !important; }
+.appbar .pilot-wordmark em { color: var(--pm-accent) !important; }
+.appbar .pilot-wordmark small {
+  font-size: 9px !important;
+  letter-spacing: 1.2px !important;
+  margin-top: 3px !important;
+}
+
+.appbar .icon-btn {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: var(--pm-radius-md) !important;
+  background: var(--pm-well) !important;
+  color: var(--pm-fg) !important;
+  border: 1px solid var(--pm-line) !important;
+  box-shadow: none !important;
+}
+
+.appbar .icon-btn.primary {
+  background: var(--pm-accent) !important;
+  color: var(--pm-accent-fg) !important;
+  border-color: transparent !important;
+}
+
+.appbar .search {
+  display: block !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  max-width: 380px !important;
+}
+
+.appbar .search input {
+  min-height: 44px;
+  padding-left: 38px;
+  background: var(--pm-well) !important;
+  color: var(--pm-fg) !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-md) !important;
+  font-size: 12px !important;
+}
+
+.view-tabs {
+  gap: var(--pm-space-1) !important;
+  padding: var(--pm-space-1) !important;
+  background: var(--pm-well) !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-md) !important;
+  box-shadow: none !important;
+}
+
+.appbar .view-tabs button {
+  min-height: 44px;
+  padding: 8px 12px !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--pm-radius-sm) !important;
+  background: transparent !important;
+  color: var(--pm-muted) !important;
+  box-shadow: none !important;
+  font-size: 12px !important;
+  font-weight: 650 !important;
+  white-space: nowrap;
+  transition: color var(--pm-fast) var(--pm-ease),
+              background-color var(--pm-fast) var(--pm-ease),
+              border-color var(--pm-fast) var(--pm-ease);
+}
+
+.appbar .view-tabs button:hover { color: var(--pm-fg) !important; }
+
+.appbar .view-tabs button.active,
+.appbar .view-tabs button[aria-selected="true"] {
+  background: var(--pm-accent-soft) !important;
+  color: var(--pm-accent) !important;
+  border-color: var(--pm-accent-line) !important;
+  box-shadow: inset 0 -3px 0 var(--pm-accent) !important;
+}
+
+.appbar .view-tabs button[data-glyph]::before { display: none; }
+
+/* One bottom-dock breakpoint. The extra band below neutralises the old 760px
+   dock without changing legacy files. */
+@media (max-width: 720px) {
+  .appbar {
+    min-height: 56px !important;
+    padding: 8px 12px !important;
+    gap: 8px !important;
+  }
+
+  .appbar .pilot-brand { gap: 8px !important; }
+  .appbar .pilot-brand .logo { width: 36px !important; height: 36px !important; font-size: 20px !important; }
+  .appbar .search { display: block !important; max-width: none !important; }
+  .appbar .search input { min-height: 44px !important; font-size: 12px !important; }
+  .appbar #settingsBtn { display: none !important; }
+  .appbar .spacer { display: none !important; }
+
+  .appbar .view-tabs {
+    position: fixed !important;
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    z-index: 45 !important;
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    flex-wrap: nowrap !important;
+    height: auto !important;
+    gap: var(--pm-space-1) !important;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom)) !important;
+    border: 0 !important;
+    border-top: 1px solid var(--pm-line) !important;
+    border-radius: 0 !important;
+    background: var(--pm-surface-strong) !important;
+    box-shadow: 0 -8px 24px rgba(3, 10, 16, .16) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .appbar .view-tabs button {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 0 !important;
+    min-height: 52px !important;
+    gap: 2px !important;
+    padding: 4px 0 !important;
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+    white-space: normal !important;
+  }
+
+  .appbar .view-tabs button[data-glyph]::before {
+    display: block !important;
+    content: attr(data-glyph);
+    font-size: 18px !important;
+    line-height: 1 !important;
+  }
+
+  main { padding-bottom: calc(96px + env(safe-area-inset-bottom)) !important; }
+}
+
+@media (min-width: 721px) and (max-width: 760px) {
+  .appbar .view-tabs {
+    position: static !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border-radius: var(--pm-radius-md) !important;
+    border: 1px solid var(--pm-line) !important;
+    box-shadow: none !important;
+  }
+  .appbar .view-tabs button[data-glyph]::before { display: none !important; }
+  main { padding-bottom: 24px !important; }
+}
+
+@media (max-width: 420px) {
+  .appbar .pilot-wordmark { display: none !important; }
+  .appbar .pilot-brand { flex: 0 0 auto !important; }
+}
+
+/* -------------------------------------------------------------------------- */
+/* 4. Home dashboard                                                          */
+/* -------------------------------------------------------------------------- */
+
+[data-view-panel="home"],
+.pilot-home {
+  max-width: 1040px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.pilot-home { padding-bottom: 20px; }
+
+.pilot-home-top {
+  align-items: flex-start !important;
+  gap: var(--pm-space-3) !important;
+  margin: var(--pm-space-1) 0 var(--pm-space-5) !important;
+}
+
+.pilot-home-top .pilot-eyebrow {
+  margin: 0 0 var(--pm-space-1) !important;
+  color: var(--pm-accent) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 1.4px !important;
+}
+
+.pilot-home-top h1 {
+  margin: 0 0 var(--pm-space-1) !important;
+  font-size: clamp(26px, 4.4vw, 34px) !important;
+  font-weight: 700 !important;
+  line-height: 1.14 !important;
+  letter-spacing: -.6px !important;
+}
+
+.pilot-home-top p,
+#summary {
+  margin: 0 !important;
+  color: var(--pm-muted) !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+
+.pilot-home .pilot-local-pill {
+  padding: 8px 12px !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-pill) !important;
+  background: var(--pm-well) !important;
+  color: var(--pm-muted) !important;
+  font-size: 11px !important;
+  white-space: nowrap !important;
+}
+
+.pilot-home-section-head {
+  gap: var(--pm-space-3) !important;
+  margin: var(--pm-space-5) 0 var(--pm-space-3) !important;
+}
+
+.pilot-home-section-head h2 {
+  margin: 0 !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  letter-spacing: -.2px !important;
+}
+
+.pilot-home-section-head h2 small { color: var(--pm-muted) !important; font-size: 11px !important; }
+
+.pilot-section-link {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 44px;
+  padding: 8px 12px !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-sm) !important;
+  background: var(--pm-surface) !important;
+  color: var(--pm-accent) !important;
+  font-size: 12px !important;
+  font-weight: 650 !important;
+  white-space: nowrap !important;
+}
+
+.pilot-home-tools { gap: var(--pm-space-2) !important; }
+
+.pilot-ac-summary-grid,
+.pilot-device-summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: var(--pm-space-3) !important;
+}
+
+.pilot-home .pilot-home-tile { min-width: 0; }
+
+.pilot-home .pilot-home-tile > .pilot-ac-mini {
+  box-sizing: border-box !important;
+  height: 100% !important;
+  min-height: 156px !important;
+  padding: var(--pm-space-4) !important;
+  gap: var(--pm-space-2) !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-lg) !important;
+  background: var(--pm-surface) !important;
+  box-shadow: var(--pm-shadow-1) !important;
+  color: var(--pm-fg) !important;
+  overflow: hidden !important;
+}
+
+.pilot-ac-mini-top { gap: var(--pm-space-2) !important; justify-content: space-between !important; }
+
+.pilot-ac-mini-icon {
+  width: 36px !important;
+  height: 36px !important;
+  flex: 0 0 36px !important;
+  border-radius: 10px !important;
+  background: var(--pm-accent-soft) !important;
+  color: var(--pm-accent) !important;
+}
+
+.pilot-ac-mini strong {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+.pilot-ac-mini-temps { gap: var(--pm-space-2) !important; flex-wrap: wrap !important; align-items: baseline !important; }
+.pilot-ac-mini-temps b { font-size: 30px !important; letter-spacing: -1px !important; line-height: 1.05 !important; }
+.pilot-ac-mini-temps span { font-size: 11px !important; line-height: 1.4 !important; white-space: normal !important; }
+
+.pilot-ac-mini-state {
+  padding: 5px 8px !important;
+  border-radius: var(--pm-radius-pill) !important;
+  background: var(--pm-well) !important;
+  color: var(--pm-muted) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+}
+
+.pilot-ac-mini-state.online { background: var(--pm-ok-soft) !important; color: var(--pm-ok) !important; }
+
+.pilot-home .pilot-home-tile .pilot-ac-mini-bottom {
+  width: 100%;
+  min-height: 0 !important;
+  margin-top: auto !important;
+  padding-top: var(--pm-space-3) !important;
+  border-top: 1px solid var(--pm-line) !important;
+  color: var(--pm-muted) !important;
+  font-size: 11px !important;
+  line-height: 1.45 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+.pilot-home-device-card {
+  display: flex !important;
+  flex-direction: column !important;
+  min-width: 0;
+  min-height: 148px !important;
+  padding: var(--pm-space-4) !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-lg) !important;
+  background: var(--pm-surface) !important;
+  box-shadow: var(--pm-shadow-1) !important;
+}
+
+.pilot-home-tile[data-critical="true"] .pilot-home-device-card {
+  border-left: 3px solid var(--pm-warn);
+}
+
+.pilot-home .pilot-home-tile .pilot-device-mini {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  height: auto !important;
+  min-height: 0 !important;
+  gap: var(--pm-space-2) !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.pilot-home .pilot-device-mini-head { gap: var(--pm-space-2) !important; min-width: 0; }
+
+.pilot-home .pilot-mini-icon {
+  width: 36px !important;
+  height: 36px !important;
+  flex: 0 0 36px !important;
+  border-radius: 10px !important;
+  background: var(--pm-well) !important;
+  color: var(--pm-accent) !important;
+}
+
+.pilot-home .pilot-mini-copy { min-width: 0; }
+
+.pilot-home .pilot-mini-copy strong {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+.pilot-home .pilot-mini-copy small {
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+.pilot-home .pilot-mini-signal {
+  align-self: flex-start !important;
+  margin: 0 !important;
+  padding: 5px 8px !important;
+  border-radius: var(--pm-radius-pill) !important;
+  background: var(--pm-well) !important;
+  color: var(--pm-muted) !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  white-space: normal !important;
+}
+
+.pilot-home .pilot-mini-signal.online { background: var(--pm-ok-soft) !important; color: var(--pm-ok) !important; }
+.pilot-home .pilot-mini-signal.stale { background: var(--pm-warn-soft) !important; color: var(--pm-warn) !important; }
+.pilot-home .pilot-mini-signal.offline { background: var(--pm-danger-soft) !important; color: var(--pm-danger) !important; }
+
+.pilot-home-inline-power {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: var(--pm-space-2) !important;
+  min-height: 48px !important;
+  margin-top: auto !important;
+  padding-top: var(--pm-space-3) !important;
+  border-top: 1px solid var(--pm-line) !important;
+}
+
+.pilot-inline-state {
+  max-width: none !important;
+  color: var(--pm-muted) !important;
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+}
+
+.pilot-home-inline-power.is-ready .pilot-inline-state,
+.pilot-inline-power.is-ready .pilot-inline-state { color: var(--pm-fg) !important; }
+
+.pilot-home-inline-power .pilot-command-note,
+.pilot-inline-power .pilot-command-note {
+  max-width: 140px;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+.pilot-home-inline-power .pilot-switch-button,
+.pilot-inline-power .pilot-switch-button {
+  min-width: 60px !important;
+  min-height: 44px !important;
+}
+
+.pilot-home-editing .pilot-home-tile {
+  border-radius: var(--pm-radius-lg);
+  outline: 2px dashed var(--pm-accent-line);
+  outline-offset: 3px;
+}
+
+.pilot-home-edit-actions button {
+  min-height: 44px;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-sm) !important;
+  background: var(--pm-well) !important;
+  color: var(--pm-fg) !important;
+}
+
+.pilot-home-hint { color: var(--pm-muted) !important; font-size: 12px !important; line-height: 1.5 !important; }
+.pilot-home-empty { border-color: var(--pm-line-strong) !important; border-radius: var(--pm-radius-lg) !important; color: var(--pm-muted) !important; }
+
+@media (max-width: 560px) {
+  .pilot-home-top { margin-bottom: var(--pm-space-4) !important; }
+  .pilot-home .pilot-local-pill { display: none !important; }
+  .pilot-ac-summary-grid,
+  .pilot-device-summary-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .pilot-home .pilot-home-tile > .pilot-ac-mini { min-height: 168px !important; }
+  .pilot-home .pilot-home-device-card { min-height: 144px !important; }
+  .pilot-ac-mini-temps b { font-size: 28px !important; }
+}
+
+/* -------------------------------------------------------------------------- */
+/* 5. Devices, overlays and shared state language                             */
+/* -------------------------------------------------------------------------- */
+
+[data-view-panel="devices"] .section-head {
+  margin: 8px 0 16px !important;
+  gap: var(--pm-space-2) !important;
+}
+
+[data-view-panel="devices"] .section-head h2 {
+  margin: 0 !important;
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  letter-spacing: -.4px !important;
+}
+
+[data-view-panel="devices"] .section-head p {
+  margin: 0 !important;
+  color: var(--pm-muted-strong) !important;
+  font-size: 12px !important;
+}
+
+#devices.grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)) !important;
+  gap: var(--pm-space-3) !important;
+  align-items: stretch !important;
+}
+
+#devices .tile {
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: var(--pm-space-3) !important;
+  min-width: 0 !important;
+  min-height: 132px !important;
+  padding: var(--pm-space-4) !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-lg) !important;
+  background: var(--pm-surface) !important;
+  box-shadow: var(--pm-shadow-1) !important;
+  color: var(--pm-fg) !important;
+  overflow: hidden !important;
+}
+
+#devices .tile[data-critical="true"] {
+  border-left: 3px solid var(--pm-warn) !important;
+}
+
+#devices .tile-head {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: var(--pm-space-2) !important;
+  min-width: 0 !important;
+}
+
+#devices .tile-icon {
+  width: 40px !important;
+  height: 40px !important;
+  flex: 0 0 40px !important;
+  border-radius: var(--pm-radius-md) !important;
+  background: var(--pm-accent-soft) !important;
+  color: var(--pm-accent) !important;
+}
+
+#devices .tile-title {
+  flex: 1 1 calc(100% - 100px) !important;
+  min-width: 0 !important;
+}
+
+#devices .tile-title h2 {
+  margin: 0 !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+#devices .tile .fav,
+#devices .tile .refresh {
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
+  flex: 0 0 44px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-md) !important;
+  background: var(--pm-well) !important;
+  color: var(--pm-fg) !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+
+#devices .tile .status {
+  order: 5 !important;
+  max-width: none !important;
+  padding: 6px 10px !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-pill) !important;
+  background: var(--pm-well) !important;
+  color: var(--pm-muted-strong) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+#devices .tile:not(.stale):not(.offline) .status {
+  background: var(--pm-ok-soft) !important;
+  color: var(--pm-status-ok) !important;
+  border-color: var(--pm-accent-line) !important;
+}
+
+#devices .tile.stale .status {
+  background: var(--pm-warn-soft) !important;
+  color: var(--pm-status-warn) !important;
+  border-color: var(--pm-warn) !important;
+}
+
+#devices .tile.offline .status {
+  background: var(--pm-danger-soft) !important;
+  color: var(--pm-status-danger) !important;
+  border-color: var(--pm-danger) !important;
+}
+
+#devices .pilot-inline-power {
+  width: 100% !important;
+  min-height: 52px !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: var(--pm-space-2) !important;
+  margin-top: auto !important;
+  padding-top: var(--pm-space-3) !important;
+  border-top: 1px solid var(--pm-line) !important;
+}
+
+#devices .pilot-inline-power .pilot-command-note,
+#deviceSheet .pilot-command-note {
+  max-width: 160px !important;
+  color: var(--pm-muted-strong) !important;
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+  white-space: normal !important;
+}
+
+.switch-control.armed .pilot-command-note,
+.switch-control.pending .pilot-command-note {
+  color: var(--pm-status-warn) !important;
+  font-weight: 700 !important;
+}
+
+#devices .pilot-switch-button {
+  min-width: 64px !important;
+  min-height: 44px !important;
+}
+
+#devices .ds-skeleton {
+  padding: var(--pm-space-4) !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-lg) !important;
+  background: var(--pm-surface) !important;
+}
+
+#devices .ds-skeleton-line {
+  height: 12px !important;
+  border-radius: var(--pm-radius-pill) !important;
+  background: var(--pm-well) !important;
+}
+
+#deviceEmpty.empty-mini {
+  padding: var(--pm-space-5) !important;
+  border: 1px dashed var(--pm-line-strong) !important;
+  border-radius: var(--pm-radius-lg) !important;
+  background: var(--pm-surface) !important;
+  color: var(--pm-muted-strong) !important;
+}
+
+/* Drawers and sheets are presentation-only overlays; closed ones stay inert. */
+.scrim {
+  background: rgba(3, 10, 18, .58) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.drawer,
+.device-sheet {
+  background: var(--pm-surface-strong) !important;
+  border-color: var(--pm-line) !important;
+  color: var(--pm-fg) !important;
+  box-shadow: var(--pm-shadow-2) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.drawer:not(.open),
+.device-sheet:not(.open) {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.drawer-head {
+  gap: var(--pm-space-2) !important;
+  padding: var(--pm-space-4) !important;
+  border-bottom: 1px solid var(--pm-line) !important;
+}
+
+.drawer-head h2 {
+  font-size: 18px !important;
+  line-height: 1.3 !important;
+  overflow-wrap: anywhere !important;
+}
+
+.drawer-head .icon-btn {
+  width: 44px !important;
+  height: 44px !important;
+  flex: 0 0 44px !important;
+}
+
+.drawer-body { padding: var(--pm-space-4) !important; }
+
+.drawer .group,
+.drawer .panel {
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-lg) !important;
+  background: var(--pm-well) !important;
+  padding: var(--pm-space-4) !important;
+}
+
+.drawer .group h3 {
+  color: var(--pm-muted-strong) !important;
+  font-size: 11px !important;
+  letter-spacing: 1px !important;
+}
+
+.drawer .field input,
+.drawer .field select,
+.drawer input,
+.drawer select {
+  min-height: 44px !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-md) !important;
+  background: var(--pm-surface) !important;
+  color: var(--pm-fg) !important;
+  font-size: 12px !important;
+}
+
+.ip-row { flex-wrap: wrap !important; }
+.ip-row .name { flex: 1 1 100% !important; }
+.ip-row input { flex: 1 1 140px !important; width: auto !important; }
+
+.ip-row button,
+.ip-row .btn,
+.device-edit .btn,
+.edit-actions .btn {
+  min-height: 44px !important;
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+}
+
+.theme-switch,
+.palette-switch {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: var(--pm-space-1) !important;
+  padding: var(--pm-space-1) !important;
+}
+
+.theme-switch button,
+.palette-switch button {
+  min-height: 44px !important;
+  padding: 8px 12px !important;
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-sm) !important;
+  background: var(--pm-surface) !important;
+  color: var(--pm-muted-strong) !important;
+  font-size: 12px !important;
+}
+
+.theme-switch button[aria-pressed="true"],
+.palette-switch button[aria-pressed="true"] {
+  border-color: var(--pm-accent-line) !important;
+  background: var(--pm-accent-soft) !important;
+  color: var(--pm-accent) !important;
+}
+
+.drawer .switch-line { min-height: 44px !important; }
+.drawer .switch-line input { min-width: 44px !important; min-height: 44px !important; }
+
+#deviceSheet .detail-card {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+#deviceSheet .detail-card .primary-row,
+#deviceSheet .detail-card details.more[open] {
+  border: 1px solid var(--pm-line) !important;
+  border-radius: var(--pm-radius-lg) !important;
+  background: var(--pm-well) !important;
+}
+
+#deviceSheet .detail-card summary {
+  min-height: 44px !important;
+  color: var(--pm-fg) !important;
+  font-size: 12px !important;
+}
+
+@media (max-width: 560px) {
+  #devices.grid { grid-template-columns: minmax(0, 1fr) !important; }
+  #devices .tile { min-height: 140px !important; }
+}
+
+@media (max-width: 720px) {
+  .drawer {
+    width: 100% !important;
+    max-width: 100% !important;
+    top: 0 !important;
+  }
+
+  .device-sheet {
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 88vh !important;
+    max-height: 88dvh !important;
+    border-left: 0 !important;
+    border-radius: var(--pm-radius-xl) var(--pm-radius-xl) 0 0 !important;
+    transform: translateY(102%) !important;
+  }
+
+  .device-sheet.open { transform: none !important; }
+}
+
+/* -------------------------------------------------------------------------- */
+/* 9. Motion and forced colours                                               */
+/* -------------------------------------------------------------------------- */
+
+.pilot-home-tile > button,
+.appbar .view-tabs button,
+.pilot-section-link {
+  transition: background-color var(--pm-fast) var(--pm-ease),
+              border-color var(--pm-fast) var(--pm-ease),
+              color var(--pm-fast) var(--pm-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .appbar *,
+  .pilot-home *,
+  .pilot-home-tile > button {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .pilot-ac-mini-state,
+  .pilot-mini-signal,
+  .pilot-home-section-head .pilot-section-link {
+    border: 1px solid CanvasText;
+    forced-color-adjust: none;
+  }
+}

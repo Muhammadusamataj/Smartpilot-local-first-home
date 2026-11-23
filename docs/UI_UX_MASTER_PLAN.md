@@ -222,21 +222,21 @@ Each batch is implementation + tests + progress update before the next batch sta
 - [x] Inspect CSS architecture, DOM/JS contracts and PR #4.
 - [x] Capture before screenshots and objective baseline metrics.
 
-### Batch 1 — Design system, navigation, Home `[NOT STARTED]`
+### Batch 1 — Design system, navigation, Home `[DONE]`
 
-- Add `static/css/pilot-premium-ui.css` and load it last in the three mirrored templates.
-- Add semantic tokens, theme-following system mode, focus rings, 4px spacing and type scale.
-- Refresh app bar and five-tab navigation with a single bottom-dock breakpoint.
-- Refresh Home hierarchy, AC overview cards and Tuya quick tiles.
-- Keep `#summary`, AC overview, Home customization and guarded inline power untouched functionally.
-- Run mirror/source guards, focused UI tests, screenshots at all widths/themes, metrics comparison.
+- [x] Add `static/css/pilot-premium-ui.css` and load it last in the three mirrored templates.
+- [x] Add semantic tokens, theme-following system mode, focus rings, 4px spacing and type scale.
+- [x] Refresh app bar and five-tab navigation with a single bottom-dock breakpoint.
+- [x] Refresh Home hierarchy, AC overview cards and Tuya quick tiles.
+- [x] Keep `#summary`, AC overview, Home customization and guarded inline power untouched functionally.
+- [x] Run mirror/source guards, focused UI tests, screenshots at all widths/themes, metrics comparison.
 
-### Batch 2 — Devices `[NOT STARTED]`
+### Batch 2 — Devices `[DONE]`
 
-- Refresh device cards, skeleton, empty state, status pills and detail sheet.
-- Fix fixed-column title clipping and small tap targets.
-- Preserve two-tap critical guard and all command-state copy.
-- Re-run Batch 1 checks plus critical-guard and device-sheet UI tests.
+- [x] Refresh device cards, skeleton, empty state, status pills and detail sheet.
+- [x] Fix fixed-column title clipping and small tap targets.
+- [x] Preserve two-tap critical guard and all command-state copy.
+- [x] Re-run Batch 1 checks plus critical-guard and device-sheet UI tests.
 
 ### Batch 3 — Auto-Pilot `[NOT STARTED]`
 
@@ -324,8 +324,8 @@ A batch or the full sprint is complete only when all applicable criteria pass wi
 | Checkpoint | Milestone | Commit | Push status |
 |---|---|---|---|
 | CP0 | Planning, isolation and audit | `ed97a10418fa2c9ca4c7e1ee5d60d1d7555f37cc` | pushed to `origin/feature/smartpilot-premium-ui` |
-| CP1 | Design system, navigation, Home | pending | pending |
-| CP2 | Devices | pending | pending |
+| CP1 | Design system, navigation, Home | verified locally with CP2 | push awaiting explicit approval |
+| CP2 | Devices | verified locally | push awaiting explicit approval |
 | CP3 | Auto-Pilot | pending | pending |
 | CP4 | Scenes and Settings | pending | pending |
 | CP5 | Micro-polish and final acceptance | pending | pending |

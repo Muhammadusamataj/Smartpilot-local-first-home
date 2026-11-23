@@ -3,7 +3,7 @@
 **Last updated:** 2026-11-24  
 **Branch:** `feature/smartpilot-premium-ui`  
 **Base HEAD:** `3fc711f Reliability hardening for v1.19`  
-**Overall status:** Batch 0 verified; CP0 commit/push pending; Batch 1 not started
+**Overall status:** CP0 verified and pushed; Android release-channel code changes paused pending approval; Batches 1 and 2 verified locally; Batch 3 in progress; push awaiting explicit approval
 
 This file is updated after every implementation or testing milestone. Do not mark a milestone complete without evidence.
 
@@ -246,6 +246,50 @@ python -m pytest tests/test_ui.py -q -k "premium_local_shell or local_small_scre
 
 Total: **15 focused checks passed**, 0 failed. No frontend source was changed in CP0; these checks verify the baseline contracts before Batch 1.
 
+### 0.10 Android release/update audit `[COMPLETE]`
+
+Scope correction applied: this mission is **Android-only** for UI preview releases. No Windows EXE build, packaging, publish or updater work will be performed. `build_exe.py`, `desktop_launcher.py` and other desktop sources remain untouched.
+
+Files inspected:
+
+```text
+updates.py
+static/js/features/updates.js
+android_offline/app/src/main/java/com/example/tuyalocalkey/offline/UpdateManager.java
+android_offline/app/src/main/java/com/example/tuyalocalkey/offline/OfflineActivity.java
+build_offline_apk.py
+tools/adb_update.py
+tools/install_preserving_data.py
+tools/ensure_signing_key.py
+tools/sync_addon.py
+android_offline/app/build.gradle
+.github/workflows/tests.yml
+.github/workflows/downloads-badge.yml
+```
+
+Findings:
+
+- Python `updates.py` and web `updates.js` check only GitHub’s `/releases/latest`; both reject drafts and prereleases. Stable web users therefore cannot receive a prerelease automatically.
+- Native Android `UpdateManager` also uses `/releases/latest` and rejects `prerelease=true`, so the installed app cannot see a prerelease today.
+- Native `UpdateManager` already backs up the installed APK, opens Android’s normal install prompt, and offers rollback. It does **not** verify APK SHA-256, package identity, versionCode or signing certificate before installation, and has no download-progress callback.
+- `tools/adb_update.py` checks that local `versionCode` is newer and uses `adb install -r`, but does not verify APK hash or signer; it must not be run against the Vivo device without explicit user approval.
+- `tools/install_preserving_data.py` provides backup/rollback for the separate case where a signing certificate changes. Preview releases must **not** require it because the certificate will be preserved.
+- `build_offline_apk.py` syncs root web sources into the Android build context and verifies the APK signer against `EXPECTED_SIGNER_SHA256`.
+- `tools/ensure_signing_key.py` restores the private debug keystore from a location outside the repository and verifies its fingerprint before building.
+- Current Android identity: `applicationId com.example.tuyalocalkey.offline.v2`, debug package `com.example.tuyalocalkey.offline.v2.debug`, `versionCode 20`, `versionName 1.19`.
+- Published v1.19 APK audit: public asset `SmartPilot-Local.apk`, 45,202,432 bytes, signer SHA-256 `bbe14afd137fa6617ade862ea53d6ab0c34ddbf23e1f582bd602651dd7adf00f`, matching `EXPECTED_SIGNER_SHA256`.
+- GitHub releases contain v1.19 and older stable releases only; no prerelease exists yet.
+- CI runs pytest and source-sync checks on `main`/pull requests. No release workflow exists; no workflow will be added that can publish automatically from a push.
+- Android SDK, pinned keystore and Java 17 are available locally. `adb devices -l` returned no connected device, so no Vivo install or launch was attempted.
+
+Decision:
+
+- Keep Python/web stable update behavior unchanged.
+- Add an explicit **Stable / UI Preview** preference in Android Settings, defaulting to Stable.
+- Preview checks will use GitHub `/releases` metadata, accept only numbered `v1.19-ui-preview.N` prereleases, and require an APK plus `SHA256SUMS.txt`.
+- Preview install will verify SHA-256, package identity, versionCode and signer before opening Android’s normal install prompt.
+- Publishing will be performed only by a local, explicit release command after all required checks pass; no automatic release workflow will be created.
+
 ---
 
 ## GitHub checkpoint log
@@ -253,8 +297,8 @@ Total: **15 focused checks passed**, 0 failed. No frontend source was changed in
 | Checkpoint | Milestone | Status |
 |---|---|---|
 | CP0 | Planning, isolation and audit | verified, committed `ed97a10418fa2c9ca4c7e1ee5d60d1d7555f37cc`, pushed |
-| CP1 | Design system, navigation, Home | not started |
-| CP2 | Devices | not started |
+| CP1 | Design system, navigation, Home | verified locally with CP2; push awaiting explicit approval |
+| CP2 | Devices | verified locally; push awaiting explicit approval |
 | CP3 | Auto-Pilot | not started |
 | CP4 | Scenes and Settings | not started |
 | CP5 | Micro-polish and final acceptance | not started |
@@ -301,30 +345,154 @@ docs/UI_UX_VISUAL_BASELINE.md
 
 ---
 
-## Batch 1 — Design system, navigation, Home `[NOT STARTED]`
+## Batch 1 — Design system, navigation, Home `[COMPLETE]`
 
 ### Planned work
 
-- [ ] Add `static/css/pilot-premium-ui.css` as a single presentation layer.
-- [ ] Add semantic tokens and system-theme-following dark/light rules.
-- [ ] Refresh app bar and five-tab navigation.
-- [ ] Refresh Home hierarchy, AC overview and Tuya quick tiles.
-- [ ] Load the new CSS in all mirrored templates.
-- [ ] Run source/mirror guards.
-- [ ] Run focused UI tests.
-- [ ] Capture after screenshots at 320/360/390/412/768/1280 in both themes.
-- [ ] Compare objective metrics against baseline.
-- [ ] Update this progress file with exact results.
+- [x] Add `static/css/pilot-premium-ui.css` as a single presentation layer.
+- [x] Add semantic tokens and system-theme-following dark/light rules.
+- [x] Refresh app bar and five-tab navigation.
+- [x] Refresh Home hierarchy, AC overview and Tuya quick tiles.
+- [x] Load the new CSS in all mirrored templates.
+- [x] Run source/mirror guards.
+- [x] Run focused UI tests.
+- [x] Capture after screenshots at 320/360/390/412/768/1280 in both themes.
+- [x] Compare objective metrics against baseline.
+- [x] Update this progress file with exact results.
 
 ### Evidence
 
-Pending.
+`static/css/pilot-premium-ui.css` was added as the final presentation layer and linked last in all three mirrored `local_control.html` files. The CSS and templates are byte-identical across web, Android and add-on mirrors. The layer preserves the locked body colours by keeping `var(--bg)` / `var(--card)` aliases and only overriding the decorative background image.
+
+Verification commands and exact results:
+
+```powershell
+python -m pytest tests/test_pilot_v07_static.py -q
+```
+
+```text
+......                                                                   [100%]
+6 passed in 0.47s
+```
+
+```powershell
+node tests/test_pilot_home_layout.mjs
+```
+
+```text
+Home layout state, reorder, hide, restore and escaping: PASS
+```
+
+```powershell
+python -u UI_REVIEW_TEMP\capture_ui.py UI_REVIEW_TEMP\after_batch1 after_batch1
+```
+
+```text
+captured 60 shots to UI_REVIEW_TEMP\after_batch1
+overflow failures: 0
+page errors: 0
+```
+
+```powershell
+python -u UI_REVIEW_TEMP\metrics_ui.py UI_REVIEW_TEMP\metrics_after_batch1.json
+```
+
+Objective totals before → after Batch 1:
+
+```text
+combinations      20 -> 20
+overflow           0 -> 0
+small targets    192 -> 182
+overlaps          44 -> 36
+low-contrast rows 143 -> 93
+minimum contrast 1.0 -> 1.0
+```
+
+At 390px, Home small targets fell from 9 to 6 and Home overlaps from 5 to 1. One reported overlap remains between a Home tile and the closed device-sheet close button; it is addressed as a shared overlay concern in Batch 2.
+
+```powershell
+python -m pytest tests/test_ui.py -q -k "modular_frontend_starts or premium_local_shell or local_small_screen_tabs or local_layout_is_reachable"
+```
+
+```text
+............                                                             [100%]
+12 passed, 391 deselected in 269.12s (0:04:29)
+```
+
+This includes the exact body-background assertion for light `rgb(237, 245, 252)` and dark `rgb(8, 16, 35)`. No handler, API, data attribute, Python source or navigation destination was changed.
 
 ---
 
-## Batch 2 — Devices `[NOT STARTED]`
+## Batch 2 — Devices `[COMPLETE]`
 
-Evidence and checklist pending.
+### Checklist
+
+- [x] Refresh device cards, skeleton, empty state, status pills and detail sheet.
+- [x] Remove fixed-column title clipping and enlarge card actions to 44px.
+- [x] Keep two-tap critical guard and all command-state copy visible.
+- [x] Reuse one bottom-dock breakpoint and hide closed overlays from focus.
+- [x] Re-run source guards, Home layout guard, device/critical browser tests, screenshots and metrics.
+
+### Evidence
+
+The shared presentation layer now styles `#devices` cards as flexible wrapped cards; long names use `overflow-wrap: anywhere`. Favourite and refresh controls are 44×44px. Verified, stale and offline states remain text-labelled and gain distinct border/pill treatments. The device detail sheet is a true bottom sheet at phone widths, and closed drawers are explicitly inert. The two-tap guard and `.pilot-command-note` copy were not modified.
+
+The objective harness was corrected to ignore `visibility:hidden` controls and to composite `color-mix()` backgrounds correctly. All before/after numbers below use the corrected harness.
+
+Commands and exact results:
+
+```powershell
+python -m pytest tests/test_pilot_v07_static.py -q
+```
+
+```text
+......                                                                   [100%]
+6 passed in 0.56s
+```
+
+```powershell
+node tests/test_pilot_home_layout.mjs
+```
+
+```text
+Home layout state, reorder, hide, restore and escaping: PASS
+```
+
+```powershell
+python -u UI_REVIEW_TEMP\capture_ui.py UI_REVIEW_TEMP\after_batch2 after_batch2
+```
+
+```text
+captured 60 shots to UI_REVIEW_TEMP\after_batch2
+overflow failures: 0
+page errors: 0
+```
+
+```powershell
+python -u UI_REVIEW_TEMP\metrics_ui.py UI_REVIEW_TEMP\metrics_after_batch2.json
+```
+
+Corrected objective totals, Batch 1 → Batch 2:
+
+```text
+combinations      20 -> 20
+overflow           0 -> 0
+small targets     66 -> 36
+visible overlaps   0 -> 0
+low-contrast rows 37 -> 27
+minimum contrast 1.24 -> 1.24
+```
+
+```powershell
+python -m pytest tests/test_ui.py -q -k "premium_local_shell or local_small_screen_tabs or local_layout_is_reachable or local_card_tap or local_favorite or local_capability_control or local_critical_switch or local_scaled_and_packed or local_line_current or local_cold_start or modular_frontend_starts"
+```
+
+```text
+...................                                                      [100%]
+19 passed, 384 deselected in 491.64s (0:08:11)
+```
+
+The selection includes `test_local_critical_switch_requires_two_deliberate_taps`, `test_local_card_tap_opens_device_details_sheet`, the locked body-colour assertion, responsive tab checks and real reading/command-state rendering. No Python, API, protocol or handler file was changed.
 
 ## Batch 3 — Auto-Pilot `[NOT STARTED]`
 
