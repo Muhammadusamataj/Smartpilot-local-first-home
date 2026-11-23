@@ -39,16 +39,24 @@ final class NetworkUtils {
                 if (links == null) continue;
                 for (LinkAddress address : links.getLinkAddresses()) {
                     if (!(address.getAddress() instanceof Inet4Address)) continue;
-                    String ip = address.getAddress().getHostAddress();
-                    if (ip == null || ip.equals("0.0.0.0") || ip.startsWith("127.")) continue;
-                    // /24 keeps a scan inside the app's MAX_ADDRESSES limit.
-                    return ip + "/24";
+                    String cidr = wifiCidr(address);
+                    if (!cidr.isEmpty()) return cidr;
                 }
             }
         } catch (Exception e) {
             return "";
         }
         return "";
+    }
+
+    /** Use the real link prefix, narrowed to at most /22 (1024 scan targets). */
+    private static String wifiCidr(LinkAddress address) {
+        String ip = address.getAddress().getHostAddress();
+        if (ip == null || ip.equals("0.0.0.0") || ip.startsWith("127.")) return "";
+        int prefix = address.getPrefixLength();
+        if (prefix < 8 || prefix > 30) prefix = 24;
+        if (prefix < 22) prefix = 22;
+        return ip + "/" + prefix;
     }
 
     /** Allowlisted network facts for the read-only per-device diagnostic.
@@ -86,11 +94,10 @@ final class NetworkUtils {
                             if (links != null) {
                                 for (LinkAddress address : links.getLinkAddresses()) {
                                     if (!(address.getAddress() instanceof Inet4Address)) continue;
-                                    String ip = address.getAddress().getHostAddress();
-                                    if (ip == null || ip.equals("0.0.0.0")
-                                            || ip.startsWith("127.")) continue;
+                                    String cidr = wifiCidr(address);
+                                    if (cidr.isEmpty()) continue;
                                     wifi.put("connected", true);
-                                    wifi.put("ipv4", ip + "/24");
+                                    wifi.put("ipv4", cidr);
                                     break;
                                 }
                             }

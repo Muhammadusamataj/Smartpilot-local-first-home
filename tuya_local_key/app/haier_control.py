@@ -67,6 +67,20 @@ _auto_errors: dict[str, str] = {}
 _auto_checked: dict[str, float] = {}
 _auto_started = False
 _auto_lock = threading.Lock()
+# The global LOCK protects short state updates only. Haier ACs accept one LAN
+# session at a time, so reads/writes for the same slot serialize here without
+# holding up other endpoints or other appliances.
+_IO_LOCKS: dict[str, threading.Lock] = {}
+_IO_LOCKS_GUARD = threading.Lock()
+
+
+def _io_lock(slot: str) -> threading.Lock:
+    with _IO_LOCKS_GUARD:
+        lock = _IO_LOCKS.get(slot)
+        if lock is None:
+            lock = threading.Lock()
+            _IO_LOCKS[slot] = lock
+        return lock
 
 
 class HaierError(RuntimeError):
@@ -139,8 +153,10 @@ def _cipher(create=False):
 def _load() -> dict:
     with LOCK:
         if not LOCAL_FILE.exists():
-            return {slot: {"mode": "manual", "pause_until": 0, "auto_power_on": False}
-                    for slot in SLOTS}
+            return {slot: {
+                "mode": "manual", "pause_until": 0, "auto_power_on": False,
+                "power_off_at": 0, "last_auto_at": 0,
+            } for slot in SLOTS}
         cipher = _cipher()
         if cipher is None:
             raise HaierError("Saved encryption key unavailable; reconfigure Haier connection")
@@ -151,6 +167,7 @@ def _load() -> dict:
         if not isinstance(raw, dict):
             raise HaierError("Invalid saved Haier settings")
         return {slot: {"mode": "manual", "pause_until": 0, "auto_power_on": False,
+                       "power_off_at": 0, "last_auto_at": 0,
                        **(raw.get(slot) if isinstance(raw.get(slot), dict) else {})}
                 for slot in SLOTS}
 
@@ -469,28 +486,47 @@ def _write(slot: str, command: str, value, *, automatic=False) -> dict:
     name, encoded = _encode_command(command, value)
     now = time.time()
     with LOCK:
-        entry = dict(_load().get(slot) or {})
+        config = _load()
+        entry = dict(config.get(slot) or {})
         if not entry or not entry.get("ip"):
             raise ValueError("Configure this Haier AC first")
         if automatic and (entry.get("mode") != "auto" or entry.get("pause_until", 0) > now):
             raise HaierError("Auto-Pilot is paused or disabled")
-        if name == "power" and encoded == 1 and now - _last_off.get(slot, 0) < 180:
+        power_off_at = max(float(_last_off.get(slot) or 0),
+                           float(entry.get("power_off_at") or 0))
+        if name == "power" and encoded == 1 and now - power_off_at < 180:
             raise HaierError("Compressor protection: wait 3 minutes after power-off")
-        if automatic and now - _auto_last.get(slot, 0) < 300:
+        auto_last_at = max(float(_auto_last.get(slot) or 0),
+                           float(entry.get("last_auto_at") or 0))
+        if automatic and now - auto_last_at < 300:
             raise HaierError("Auto-Pilot command cooldown")
+        # Reserve the safety state BEFORE the LAN write. If the device accepts
+        # the frame but the ack/readback fails, ON is still blocked for 3 min
+        # and Auto stays paused. This state is encrypted on disk so a process
+        # restart inside the window cannot lose the compressor guard.
+        changed = False
+        if name == "power" and encoded == 0:
+            off_at = time.time()
+            _last_off[slot] = off_at
+            config[slot]["power_off_at"] = off_at
+            changed = True
+        if not automatic and entry.get("mode") == "auto":
+            config[slot]["pause_until"] = now + 7200
+            changed = True
+        if changed:
+            _save(config)
     # The LAN write is read-back verified, but a silent appliance must never
     # hold the shared state lock while the socket waits.
-    result = _write_device(entry, name, encoded)
+    with _io_lock(slot):
+        result = _write_device(entry, name, encoded)
     with LOCK:
         _last_write[slot] = time.time()
-        if name == "power" and encoded == 0:
-            _last_off[slot] = time.time()
-        if not automatic and entry.get("mode") == "auto":
-            config = _load()
-            config[slot]["pause_until"] = now + 7200
-            _save(config)
         if automatic:
-            _auto_last[slot] = now
+            auto_at = time.time()
+            _auto_last[slot] = auto_at
+            config = _load()
+            config[slot]["last_auto_at"] = auto_at
+            _save(config)
         if result.get("confirmed"):
             _cache[slot] = {"verified": True, "read_at": time.time(), "data": result.get("status", {})}
     if automatic and result.get("confirmed"):
@@ -513,14 +549,18 @@ def _auto_tick(slot: str, entry: dict):
     with LOCK:
         _auto_checked[slot] = time.time()
     # Keep the shared lock free while the AC answers; see /api/haier/poll.
-    data = _read_device(entry)
+    # Per-slot I/O lock prevents the background tick, UI poll and a manual
+    # command from opening two sessions on the same single-session appliance.
+    with _io_lock(slot):
+        data = _read_device(entry)
     with LOCK:
         _auto_errors.pop(slot, None)
         _cache[slot] = {"verified": True, "read_at": time.time(), "data": data}
         if not data.get("writable") or not data.get("power_on"):
             return  # Never start or stop compressor automatically in v0.3.
         signature = (data.get("target_c"), data.get("hvac_mode"), data.get("eco_level"),
-                     data.get("quiet"), data.get("sleep"), data.get("strong"))
+                     data.get("fan"), data.get("quiet"), data.get("sleep"),
+                     data.get("strong"))
         previous = _auto_observed.get(slot)
         if previous is not None and previous != signature and time.time() - _last_write.get(slot, 0) > 40:
             config = _load()
@@ -529,7 +569,9 @@ def _auto_tick(slot: str, entry: dict):
             _auto_observed[slot] = signature
             return  # A user / official HaiSmart app changed settings.
         _auto_observed[slot] = signature
-        if time.time() - _auto_last.get(slot, 0) < 300:
+        auto_last_at = max(float(_auto_last.get(slot) or 0),
+                           float(entry.get("last_auto_at") or 0))
+        if time.time() - auto_last_at < 300:
             return
         try:
             hour = datetime.now(ZoneInfo(os.environ.get("HAIER_PILOT_TZ", "Asia/Karachi"))).hour
@@ -553,7 +595,8 @@ def _auto_tick(slot: str, entry: dict):
                 if result.get("confirmed"):
                     s = result["status"]
                     _auto_observed[slot] = (s.get("target_c"), s.get("hvac_mode"), s.get("eco_level"),
-                                            s.get("quiet"), s.get("sleep"), s.get("strong"))
+                                            s.get("fan"), s.get("quiet"), s.get("sleep"),
+                                            s.get("strong"))
 
 
 def _run_auto_loop():
@@ -713,7 +756,8 @@ def haier_read():
             raise ValueError("Configure this Haier AC first")
         # LAN I/O must not hold LOCK: one silent AC must never freeze every
         # other endpoint (settings, schedules, Tuya controls) behind it.
-        data = _read_device(entry)
+        with _io_lock(slot):
+            data = _read_device(entry)
         with LOCK:
             _cache[slot] = {"verified": True, "read_at": time.time(), "data": data}
         return jsonify({"ok": True, "status": data, "device": _summary(slot, entry)})
@@ -741,7 +785,8 @@ def haier_poll():
         if not entry.get("ip"):
             raise ValueError("Configure this Haier AC first")
         # Never hold LOCK across the LAN read; see /api/haier/read above.
-        data = _read_device(entry)
+        with _io_lock(slot):
+            data = _read_device(entry)
         with LOCK:
             _cache[slot] = {"verified": True, "read_at": time.time(), "data": data}
         return jsonify({"ok": True, "status": data, "device": _summary(slot, entry)})

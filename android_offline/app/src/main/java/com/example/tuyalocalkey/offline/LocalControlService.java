@@ -33,6 +33,8 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Owns the embedded Python server for the whole app lifetime.
@@ -47,9 +49,13 @@ public class LocalControlService extends Service {
     private static final String CHANNEL_ID = "smart-pilot-local-control";
     private static final String EVENT_CHANNEL_ID = "smart-pilot-events";
     private static final int NOTIFICATION_ID = 1001;
-    private static final int EVENT_NOTIFICATION_BASE = 2000;
     private static final int PORT = 8000;
     private static final int[] EVENT_IDS = {2000, 2001, 2002, 2003, 2004};
+
+    // Shared across START_STICKY service instances so a stop from the old
+    // instance cannot race a start from its replacement.
+    private static final ExecutorService PYTHON_TASKS = Executors.newSingleThreadExecutor(
+            runnable -> new Thread(runnable, "tuya-python-tasks"));
 
     private static volatile boolean running = false;
     private static volatile int lastEventId = -1;
@@ -97,21 +103,25 @@ public class LocalControlService extends Service {
         showNotification(getString(R.string.notification_starting));
         acquireWifiLock();
         registerNetworkCallback();
-        running = true;
+        // "running" reflects a listening Python server, set after start/rebind
+        // succeeds. The foreground service itself starts before Python.
         main.postDelayed(eventPoll, 5000);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Config config = readConfig();
+        final Config config = readConfig();
         lastHint = config.hint;
-        if (!config.key().equals(appliedConfigKey)) {
-            appliedConfigKey = config.key();
-            startOrReconfigure(config);
-        } else {
-            updateHintInPython(config.hint);
-        }
-        updateNetworkFactsInPython();
+        PYTHON_TASKS.execute(() -> {
+            if (!config.key().equals(appliedConfigKey)) {
+                appliedConfigKey = config.key();
+                startOrReconfigure(config);
+            } else {
+                updateHintInPython(config.hint);
+            }
+            // Python may have just started, so push facts on this same task.
+            updateNetworkFactsInPython();
+        });
         // Recreate with the persisted settings if Funtouch OS restarts us.
         return START_STICKY;
     }
@@ -123,11 +133,16 @@ public class LocalControlService extends Service {
 
     @Override
     public void onDestroy() {
-        running = false;
         main.removeCallbacks(eventPoll);
         releaseWifiLock();
         unregisterNetworkCallback();
-        stopPython();
+        // Keep the stop on the same serial Python task queue as start/rebind.
+        // A failed stop must leave "running" true so the next start performs a
+        // rebind instead of racing the old socket.
+        PYTHON_TASKS.execute(() -> {
+            stopPython();
+            running = pythonServerRunning();
+        });
         super.onDestroy();
     }
 
@@ -137,7 +152,9 @@ public class LocalControlService extends Service {
         if (user == null || user.isEmpty()) user = "tuya";
         if (password == null || password.isEmpty()) {
             password = NetworkUtils.randomToken();
-            prefs.edit().putString(OfflineActivity.KEY_PASSWORD, password).apply();
+            // A direct-mode URL copied immediately after this must keep working
+            // even if Funtouch OS kills the process before an async flush.
+            prefs.edit().putString(OfflineActivity.KEY_PASSWORD, password).commit();
         }
         boolean remote = prefs.getBoolean(OfflineActivity.KEY_ENABLED, false);
         String host = remote ? "0.0.0.0" : "127.0.0.1";
@@ -146,68 +163,72 @@ public class LocalControlService extends Service {
                 remote ? user : "", remote ? password : "");
     }
 
-    /** Each call gets its own thread because the Python entry points block. */
+    /** Runs only on PYTHON_TASKS; android_entry owns the blocking run loop. */
     private void startOrReconfigure(final Config config) {
-        new Thread(() -> {
-            try {
-                if (!Python.isStarted()) {
-                    Python.start(new AndroidPlatform(getApplicationContext()));
-                }
-                PyObject module = Python.getInstance().getModule("android_entry");
-                boolean alreadyRunning = module.callAttr("is_running").toBoolean();
-                if (alreadyRunning) {
-                    module.callAttr("reconfigure", getFilesDir().getAbsolutePath(),
-                            config.host, PORT, config.hint, config.tailscale,
-                            config.user, config.password);
-                } else {
-                    module.callAttr("start", getFilesDir().getAbsolutePath(),
-                            config.host, PORT, config.hint, config.tailscale,
-                            config.user, config.password);
-                }
-                lastError = "";
-                main.post(() -> showNotification(notificationText(config)));
-            } catch (final Throwable e) {
-                lastError = String.valueOf(e);
-                Log.e(TAG, "Embedded local server failed", e);
-                main.post(() -> showNotification(getString(R.string.notification_error)));
+        try {
+            if (!Python.isStarted()) {
+                Python.start(new AndroidPlatform(getApplicationContext()));
             }
-        }, "tuya-local-server").start();
+            PyObject module = Python.getInstance().getModule("android_entry");
+            boolean alreadyRunning = module.callAttr("is_running").toBoolean();
+            if (alreadyRunning) {
+                module.callAttr("reconfigure", getFilesDir().getAbsolutePath(),
+                        config.host, PORT, config.hint, config.tailscale,
+                        config.user, config.password);
+            } else {
+                module.callAttr("start", getFilesDir().getAbsolutePath(),
+                        config.host, PORT, config.hint, config.tailscale,
+                        config.user, config.password);
+            }
+            running = true;
+            lastError = "";
+            main.post(() -> showNotification(notificationText(config)));
+        } catch (final Throwable e) {
+            lastError = String.valueOf(e);
+            running = pythonServerRunning();
+            Log.e(TAG, "Embedded local server failed", e);
+            main.post(() -> showNotification(getString(R.string.notification_error)));
+        }
+    }
+
+    private boolean pythonServerRunning() {
+        try {
+            return Python.isStarted() && Python.getInstance().getModule("android_entry")
+                    .callAttr("is_running").toBoolean();
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private void updateHintInPython(String hint) {
         if (!Python.isStarted()) return;
-        new Thread(() -> {
-            try {
-                Python.getInstance().getModule("android_entry")
-                        .callAttr("update_network_hint", hint);
-            } catch (Throwable e) {
-                Log.w(TAG, "Could not refresh Wi-Fi hint", e);
-            }
-        }, "tuya-network-hint").start();
+        try {
+            Python.getInstance().getModule("android_entry")
+                    .callAttr("update_network_hint", hint);
+        } catch (Throwable e) {
+            Log.w(TAG, "Could not refresh Wi-Fi hint", e);
+        }
     }
 
     private void updateNetworkFactsInPython() {
         if (!Python.isStarted()) return;
         final String facts = NetworkUtils.networkFacts(getApplicationContext());
-        new Thread(() -> {
-            try {
-                Python.getInstance().getModule("android_entry")
-                        .callAttr("update_network_facts", facts);
-            } catch (Throwable e) {
-                Log.w(TAG, "Could not refresh network facts", e);
-            }
-        }, "tuya-network-facts").start();
+        try {
+            Python.getInstance().getModule("android_entry")
+                    .callAttr("update_network_facts", facts);
+        } catch (Throwable e) {
+            Log.w(TAG, "Could not refresh network facts", e);
+        }
     }
 
     private void stopPython() {
         if (!Python.isStarted()) return;
-        new Thread(() -> {
-            try {
-                Python.getInstance().getModule("android_entry").callAttr("stop");
-            } catch (Throwable e) {
-                Log.w(TAG, "Could not stop embedded server", e);
-            }
-        }, "tuya-local-stop").start();
+        try {
+            Python.getInstance().getModule("android_entry").callAttr("stop");
+            running = pythonServerRunning();
+        } catch (Throwable e) {
+            Log.w(TAG, "Could not stop embedded server", e);
+        }
     }
 
     private void registerNetworkCallback() {
@@ -242,8 +263,10 @@ public class LocalControlService extends Service {
     private void refreshHint() {
         String hint = NetworkUtils.wifiSubnet(getApplicationContext());
         lastHint = hint;
-        updateHintInPython(hint);
-        updateNetworkFactsInPython();
+        PYTHON_TASKS.execute(() -> {
+            updateHintInPython(hint);
+            updateNetworkFactsInPython();
+        });
     }
 
     private void unregisterNetworkCallback() {
@@ -378,8 +401,7 @@ public class LocalControlService extends Service {
                 .setContentIntent(pending)
                 .setCategory(Notification.CATEGORY_MESSAGE)
                 .setAutoCancel(true);
-        int index = Math.min(EVENT_IDS.length - 1,
-                Math.max(0, (id - EVENT_NOTIFICATION_BASE) % EVENT_IDS.length));
+        int index = Math.floorMod(id, EVENT_IDS.length);
         notificationManager.notify(EVENT_IDS[index], builder.build());
     }
 
@@ -415,7 +437,6 @@ public class LocalControlService extends Service {
         } else {
             startForeground(NOTIFICATION_ID, notification);
         }
-        notificationManager.notify(NOTIFICATION_ID, notification);
     }
 
     /** Immutable snapshot of the settings the server needs. */

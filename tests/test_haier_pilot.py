@@ -215,3 +215,55 @@ def test_discover_route_returns_identity_fields_only(monkeypatch):
     assert result["devices"][0]["device_id"] == DID
     assert "local_key" not in result
     assert "local_key" not in result["devices"][0]
+
+
+def test_io_locks_are_reused_per_slot(monkeypatch):
+    monkeypatch.setattr(h, "_IO_LOCKS", {})
+
+    assert h._io_lock("pro") is h._io_lock("pro")
+    assert h._io_lock("pro") is not h._io_lock("max")
+
+
+def test_failed_power_off_persists_guard_and_manual_override(tmp_path, monkeypatch):
+    """An unacknowledged OFF must still block ON and pause Auto after restart."""
+    monkeypatch.setattr(h, "LOCAL_FILE", tmp_path / "haier.enc")
+    monkeypatch.setattr(h, "KEY_FILE", tmp_path / "haier.key")
+    monkeypatch.setattr(h.time, "time", lambda: 1000.0)
+    entry = {**h._validate_device("192.168.10.90", DID, KEY, 4), "mode": "auto"}
+    h._save({"pro": entry})
+    monkeypatch.setattr(h, "_write_device",
+                        lambda *args: (_ for _ in ()).throw(h.HaierError("offline")))
+
+    with pytest.raises(h.HaierError, match="offline"):
+        h._write("pro", "power", False)
+
+    saved = h._load()["pro"]
+    assert saved["power_off_at"] == 1000.0
+    assert saved["pause_until"] == 8200.0
+
+    # Simulate a process restart: only the encrypted file remains.
+    monkeypatch.setattr(h, "_last_off", {})
+    monkeypatch.setattr(h, "_last_write", {})
+
+    with pytest.raises(h.HaierError, match="Compressor protection"):
+        h._write("pro", "power", True)
+
+
+def test_fan_change_detects_external_override_and_pauses_auto(tmp_path, monkeypatch):
+    monkeypatch.setattr(h, "LOCAL_FILE", tmp_path / "haier.enc")
+    monkeypatch.setattr(h, "KEY_FILE", tmp_path / "haier.key")
+    monkeypatch.setattr(h.time, "time", lambda: 1000.0)
+    monkeypatch.setattr(h, "_IO_LOCKS", {})
+    monkeypatch.setattr(h, "_last_write", {})
+    monkeypatch.setattr(h, "_auto_last", {})
+    monkeypatch.setattr(h, "_auto_observed", {})
+    h._save({"pro": {**h._validate_device("192.168.10.90", DID, KEY, 4), "mode": "auto"}})
+    h._auto_observed["pro"] = (26, "heat", 0, "low", False, False, False)
+    monkeypatch.setattr(h, "_read_device", lambda entry: {
+        "writable": True, "power_on": True, "target_c": 26, "hvac_mode": "heat",
+        "eco_level": 0, "fan": "high", "quiet": False, "sleep": False, "strong": False,
+    })
+
+    h._auto_tick("pro", {"mode": "auto", "ip": "192.168.10.90", "pause_until": 0})
+
+    assert h._load()["pro"]["pause_until"] > 1000.0

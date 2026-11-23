@@ -26,6 +26,14 @@ def test_critical_ids_match_frontend_classification():
         assert device_id in source
 
 
+def test_critical_ids_match_pilot_extras():
+    """The automation layer and LAN control layer must agree exactly."""
+    import local_control
+    import pilot_extras
+
+    assert pilot_extras.CRITICAL_DEVICE_IDS == local_control.CRITICAL_DEVICE_IDS
+
+
 def test_scene_never_operates_a_critical_device(local_app, monkeypatch):
     app, local, devices_cache, lan_cache, _ = local_app
     _seed_devices(local, devices_cache, lan_cache, [_device(GEYSER, "5vps+n4FwxR2?df;")])

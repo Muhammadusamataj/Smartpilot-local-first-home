@@ -55,11 +55,11 @@ def _device(device_id="plug1", key="5vps+n4FwxR2?df;"):
     }
 
 
-def _seed(local, devices_cache, lan_cache, profile=None):
+def _seed(local, devices_cache, lan_cache, profile=None, results=None):
     device_cache.save(str(devices_cache), local.DEVICE_CACHE_KEY_FILE,
                       _entry({"devices": [_device()]}))
     device_cache.save(str(lan_cache), local.DEVICE_CACHE_KEY_FILE,
-                      _entry({"results": {}, "summary": {"matched": 0}}))
+                      _entry({"results": results or {}, "summary": {"matched": len(results or {})}}))
     if profile is not None:
         Path(local.LAN_PROFILE_FILE).write_text(json.dumps({"plug1": profile}),
                                                 encoding="utf-8")
@@ -268,15 +268,125 @@ def test_transient_packet_loss_keeps_last_known_good_address(local_app):
     _, local, devices_cache, lan_cache, _ = local_app
     good = _failing_profile()
     good.update({"last_ok": time.time() - 10, "last_failed": 0, "fail_count": 0})
-    _seed(local, devices_cache, lan_cache, good)
     results = {"plug1": {"status": "unreachable", "ip": "192.168.99.99",
                          "version": "3.5", "checked_at": time.time()}}
+    _seed(local, devices_cache, lan_cache, good, results=results)
 
     ip, version = local._saved_address("plug1", results, {"plug1": good})
     merged = local._merged_results()["plug1"]
 
     assert (ip, version) == ("192.168.1.50", "3.4")
     assert merged["ip"] == "192.168.1.50", "a failed scan must not erase the good IP"
+    assert merged["status"] == "unreachable", "borrowing an address must not fake success"
+
+
+def test_read_unavailable_records_backoff_instead_of_retrying_forever(local_app, monkeypatch):
+    _, local, devices_cache, lan_cache, _ = local_app
+    _seed(local, devices_cache, lan_cache, _failing_profile())
+    monkeypatch.setattr(local, "_ensure_async", lambda reason="": None)
+    monkeypatch.setattr(local.lan_scan, "tcp_state", lambda ip, seconds: local.lan_scan.OPEN)
+
+    def unavailable(*args, **kwargs):
+        raise local.device_values.ReadUnavailable("missing_ip")
+
+    monkeypatch.setattr(local.device_values, "connection", unavailable)
+    local._ensure_state["running"] = False
+
+    local._ensure_connections()
+
+    profile = json.loads(Path(local.LAN_PROFILE_FILE).read_text(encoding="utf-8"))["plug1"]
+    assert profile["fail_count"] == 4
+    assert profile["last_failed"] > 0
+    assert profile["next_attempt_at"] > time.time()
+    assert local._ensure_state["reason"] == "missing_ip"
+
+
+def test_ensure_endpoint_defers_while_backoff_is_active(local_app, monkeypatch):
+    app, local, devices_cache, lan_cache, _ = local_app
+    profile = _failing_profile()
+    profile["next_attempt_at"] = time.time() + 300
+    _seed(local, devices_cache, lan_cache, profile)
+    scheduled = []
+    monkeypatch.setattr(local, "_ensure_async", lambda reason="": scheduled.append(reason))
+    local._ensure_state.update({"running": False, "reason": "done"})
+
+    body = app.app.test_client().post("/api/local/ensure").get_json()
+
+    assert scheduled == []
+    assert body["reason"] == "waiting"
+
+
+def test_v31_auto_detection_requires_matching_dev_id(local_app, monkeypatch):
+    _, local, *_ = local_app
+    context = {
+        "version": local.tuya_versions.AUTO_VERSION, "host_id": "plug1",
+        "ip": "192.168.1.50", "key": "synthetic", "gateway": False, "device22": False,
+    }
+    monkeypatch.setattr(local.device_values, "connection", lambda *a, **k: context)
+    monkeypatch.setattr(local.tuya_versions, "AUTO_DETECT_VERSIONS",
+                        [local.tuya_versions.V31_VERSION])
+    responses = [
+        {"match": True, "dev_id": "someone-else"},
+        {"match": True, "dev_id": "plug1"},
+    ]
+    monkeypatch.setattr(local.lan_scan, "probe", lambda *a, **k: responses.pop(0))
+
+    assert local._auto_detect_version([], {}, "plug1") is None
+    assert local._auto_detect_version([], {}, "plug1") == (
+        local.tuya_versions.V31_VERSION, False)
+
+
+def test_scheduler_records_last_run_only_after_execution(local_app, monkeypatch):
+    _, local, *_ = local_app
+    today = "2026-11-23"
+    scene = {
+        "id": "scene1", "name": "Test", "actions": [
+            {"device_id": "plug1", "dp": "1", "value": True},
+        ], "schedule": {"enabled": True, "time": "12:00", "days": [0, 1, 2, 3, 4, 5, 6]},
+        "last_run": "",
+    }
+    local._save_scenes([scene])
+    calls = []
+
+    def execute(passed, *, update_last_run):
+        calls.append(update_last_run)
+        return {"ok": False, "succeeded": 0, "failed": 1}
+
+    monkeypatch.setattr(local, "_execute_scene", execute)
+
+    assert local._run_scheduled_scene(scene, today) is False
+    assert local._load_scenes()[0]["last_run"] == ""
+
+    monkeypatch.setattr(local, "_execute_scene",
+                        lambda passed, *, update_last_run: {
+                            "ok": True, "succeeded": 1, "failed": 0,
+                        })
+
+    assert local._run_scheduled_scene(scene, today) is True
+    assert local._load_scenes()[0]["last_run"] == today
+    assert calls == [False]
+
+
+def test_unavailable_and_nonfinite_android_facts_fall_back_safely(local_app, monkeypatch):
+    _, local, *_ = local_app
+    import android_entry
+
+    monkeypatch.setattr(android_entry, "_NETWORK_FACTS", {
+        "source": "unavailable", "observed_at": time.time(),
+    })
+    assert android_entry.network_facts() == {}
+    assert local._diagnostic_network()["source"] == "env_hint"
+
+    monkeypatch.setattr(android_entry, "_NETWORK_FACTS", {
+        "source": "android_service", "observed_at": float("nan"),
+        "wifi": {"connected": True, "ipv4": "192.168.1.0/24"},
+        "vpn": {"connected": False, "tailscale_ip": ""},
+        "default_route": {"transport": "wifi", "is_default": True},
+    })
+    facts = local._diagnostic_network()
+    assert facts["source"] == "stale"
+    assert facts["observed_at"] == 0
+    assert facts["wifi"]["ipv4"] == "192.168.1.0/24"
 
 
 def test_diagnostics_reports_vpn_route_without_route_secrets(local_app, monkeypatch):

@@ -82,7 +82,9 @@ public class OfflineActivity extends Activity {
 
     private SharedPreferences prefs;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable waitForServerCallback = this::waitForServer;
     private int attempts = 0;
+    private int serverProbeGeneration = 0;
 
     private final Runnable phoneRefresh = new Runnable() {
         @Override
@@ -462,9 +464,12 @@ public class OfflineActivity extends Activity {
     }
 
     private void waitForServer() {
+        final int generation = ++serverProbeGeneration;
+        handler.removeCallbacks(waitForServerCallback);
         new Thread(() -> {
             boolean ready = portOpen();
             handler.post(() -> {
+                if (generation != serverProbeGeneration) return;
                 if (ready) {
                     status.setText(remoteEnabled() ? R.string.ready_direct : R.string.ready);
                     if (remoteEnabled()) {
@@ -479,7 +484,7 @@ public class OfflineActivity extends Activity {
                     status.setText(error == null || error.isEmpty()
                             ? R.string.phone_server_error : R.string.phone_server_error);
                 } else {
-                    handler.postDelayed(this::waitForServer, 300);
+                    handler.postDelayed(waitForServerCallback, 300);
                 }
                 refreshPhonePanel();
             });

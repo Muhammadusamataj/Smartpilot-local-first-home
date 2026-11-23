@@ -46,6 +46,14 @@ def test_config_validation(isolated):
     assert fh.status()["mode"] == "off"
 
 
+def test_config_rejects_public_and_link_local_addresses(isolated):
+    for address in ("http://8.8.8.8:8000", "http://169.254.1.1:8000",
+                    "http://172.32.0.1:8000", "http://hub.example:8000"):
+        with pytest.raises(fh.FamilyError):
+            fh.configure("client", address, USER, PASSWORD)
+    assert fh.status()["mode"] == "off"
+
+
 def test_disconnect_removes_saved_credentials(isolated):
     fh.configure("client", HUB, USER, PASSWORD)
     assert fh._file().exists()
