@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="static/css/pilot-compact.css">
 <link rel="stylesheet" href="static/css/pilot-v07.css">
 <link rel="stylesheet" href="static/css/pilot-v08.css">
+<link rel="stylesheet" href="static/css/pilot-home-inspired.css">
 </head>
 <body>
 
@@ -49,6 +50,18 @@
       <div><div class="pilot-eyebrow">SMART PILOT · YOUR HOME</div><h1>Home</h1><p id="summary">{% if ready %}Checking local devices…{% else %}Local control · Configure your devices{% endif %}</p></div>
       <span class="pilot-local-pill">LOCAL FIRST</span>
     </div>
+    <section class="pilot-overview-banner" aria-label="Live Tuya device overview">
+      <div class="pilot-overview-mark" aria-hidden="true">⌂</div>
+      <div class="pilot-overview-copy">
+        <span class="eyebrow">LIVE HOME STATUS</span>
+        <strong><span id="statOnline">0</span> of <span id="statTotal">0</span> Tuya devices online</strong>
+        <small>Based on verified local readings, not saved addresses</small>
+      </div>
+      <div class="pilot-overview-actions">
+        <button type="button" data-jump-view="devices">All devices</button>
+        <button type="button" data-open-drawer="network">Network check</button>
+      </div>
+    </section>
     <div class="pilot-home-section-head"><h2>Air conditioning <small>2 ACs</small></h2><button type="button" class="pilot-section-link" data-jump-view="autopilot">AC controls ›</button></div>
     <div class="pilot-ac-summary-grid" data-haier-overview aria-label="Haier AC overview"></div>
     <div class="pilot-home-section-head"><h2>Smart devices</h2><div class="pilot-home-tools"><button type="button" class="pilot-section-link" id="editHomeBtn" aria-pressed="false">Customize</button><button type="button" class="pilot-section-link" data-jump-view="devices">Devices ›</button></div></div>
