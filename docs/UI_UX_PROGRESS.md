@@ -783,11 +783,43 @@ This is the complete `tests/test_ui.py` suite, not a subset. It supersedes the e
 
 ---
 
+## v1.20 release — premium UI APK `[PUBLISHED]`
+
+The user explicitly authorized a full release, overriding the presentation-only pause for the Android release channel. Only Android version metadata changed for the release: `android_offline/app/build.gradle` `versionCode 20 -> 21`, `versionName 1.19 -> 1.20`. `pyproject.toml` (pip package version `4.7.0`) was deliberately not changed — that is a different product/update path. No Python backend, device, protocol, auth, safety, diagnostics, backup, update-logic, security or API file was changed.
+
+Commit `17c8b58c154b25410a207b34e6616b1967f311ec` ("release(ui): bump offline APK to v1.20") was pushed to `feature/smartpilot-premium-ui`. Pre-release guards `tests/test_packaging.py tests/test_update_dependencies.py`: `32 passed in 0.50s`.
+
+Build and verification:
+
+```text
++ signing key OK: bbe14afd137fa6617ade862ea53d6ab0c34ddbf23e1f582bd602651dd7adf00f
+BUILD SUCCESSFUL in 29s
++ verified signer SHA-256 bbe14afd137fa6617ade862ea53d6ab0c34ddbf23e1f582bd602651dd7adf00f
+```
+
+- APK manifest (aapt2): `versionCode='21' versionName='1.20'`, package `com.example.tuyalocalkey.offline.v2.debug`.
+- APK SHA-256 `EF52191ED50BD418E82F53A05AFFA33533BE03A24B299959066BE204188CB00C`, 45,218,820 bytes.
+- The premium CSS is byte-identical inside the APK's Chaquopy `app.imy` (SHA-256 `F8755219...D4615F656`); bundled template keeps the five views in order `home, devices, autopilot, scenes, settings` and the hidden-attribute preservation rule.
+- Source mirrors stayed byte-identical after the build's source sync; working tree clean.
+
+GitHub release:
+
+```text
+https://github.com/Muhammadusamataj/Smartpilot-local-first-home/releases/tag/v1.20
+tag v1.20 -> 17c8b58c154b25410a207b34e6616b1967f311ec
+isDraft=false  isPrerelease=false  Latest
+asset SmartPilot-Local.apk: downloaded 45,218,820 bytes, SHA-256 matches the built APK
+```
+
+No device install was performed; install is left to the user. PR #4 and PR #5 were not touched.
+
+---
+
 ## Safety log
 
 - Physical device commands sent: **0**
 - Fake device data committed: **0**
 - Backend/security/API files modified: **0**
-- Pushes to `feature/smartpilot-premium-ui`: allowed CP0 documentation checkpoints only
-- Merge/tag/release/deploy/PR/Azure actions: **0**
+- Pushes to `feature/smartpilot-premium-ui`: all milestones plus the v1.20 release commit and evidence
+- Merge/tag/release/deploy/PR/Azure actions: GitHub Release `v1.20` published with explicit user approval; no merge, PR, deploy or Azure action
 - Hardware verification claims: **0**
