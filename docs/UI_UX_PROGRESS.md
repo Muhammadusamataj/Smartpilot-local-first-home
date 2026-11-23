@@ -297,11 +297,38 @@ Decision:
 | Checkpoint | Milestone | Status |
 |---|---|---|
 | CP0 | Planning, isolation and audit | verified, committed `ed97a10418fa2c9ca4c7e1ee5d60d1d7555f37cc`, pushed |
-| CP1 | Design system, navigation, Home | verified locally with CP2; push awaiting explicit approval |
-| CP2 | Devices | verified locally; push awaiting explicit approval |
-| CP3 | Auto-Pilot | verified locally; push awaiting explicit approval |
-| CP4 | Scenes and Settings | verified locally; push awaiting explicit approval |
-| CP5 | Micro-polish and final acceptance | verified locally; push awaiting explicit approval |
+| CP1 | Design system, navigation, Home | verified; committed `322dd66`, pushed |
+| CP2 | Devices | verified; committed `322dd66`, pushed |
+| CP3 | Auto-Pilot | verified; committed `c276b7c`, pushed |
+| CP4 | Scenes and Settings | verified; committed `4993f25`, pushed |
+| CP5 | Micro-polish and final acceptance | verified; committed `27a1deb`, pushed |
+
+All five UI batches are pushed. Normal fast-forward push to `origin feature/smartpilot-premium-ui` was explicitly approved and completed.
+
+### Final push evidence
+
+Command:
+
+```powershell
+git push origin feature/smartpilot-premium-ui
+```
+
+Result:
+
+```text
+To https://github.com/Muhammadusamataj/Smartpilot-local-first-home.git
+   9cd99b3..27a1deb  feature/smartpilot-premium-ui -> feature/smartpilot-premium-ui
+```
+
+Remote verification:
+
+```text
+local HEAD:   27a1debd3441f234db05fa120539bf37e8550e97
+origin HEAD:  27a1debd3441f234db05fa120539bf37e8550e97
+ls-remote:    27a1debd3441f234db05fa120539bf37e8550e97  refs/heads/feature/smartpilot-premium-ui
+```
+
+Branch is in sync (`## feature/smartpilot-premium-ui...origin/feature/smartpilot-premium-ui`, no ahead/behind). No PR, merge, tag, release or deploy was performed.
 
 ### CP0 push evidence
 

@@ -325,11 +325,13 @@ A batch or the full sprint is complete only when all applicable criteria pass wi
 | Checkpoint | Milestone | Commit | Push status |
 |---|---|---|---|
 | CP0 | Planning, isolation and audit | `ed97a10418fa2c9ca4c7e1ee5d60d1d7555f37cc` | pushed to `origin/feature/smartpilot-premium-ui` |
-| CP1 | Design system, navigation, Home | verified locally with CP2 | push awaiting explicit approval |
-| CP2 | Devices | verified locally | push awaiting explicit approval |
-| CP3 | Auto-Pilot | verified locally | push awaiting explicit approval |
-| CP4 | Scenes and Settings | verified locally | push awaiting explicit approval |
-| CP5 | Micro-polish and final acceptance | verified locally | push awaiting explicit approval |
+| CP1 | Design system, navigation, Home | `322dd66` | pushed to `origin/feature/smartpilot-premium-ui` |
+| CP2 | Devices | `322dd66` | pushed to `origin/feature/smartpilot-premium-ui` |
+| CP3 | Auto-Pilot | `c276b7c` | pushed to `origin/feature/smartpilot-premium-ui` |
+| CP4 | Scenes and Settings | `4993f25` | pushed to `origin/feature/smartpilot-premium-ui` |
+| CP5 | Micro-polish and final acceptance | `27a1deb` | pushed to `origin/feature/smartpilot-premium-ui` |
+
+Final push verified: local and remote `HEAD` both `27a1debd3441f234db05fa120539bf37e8550e97`, branch in sync. No PR, merge, tag, release or deploy performed.
 
 ---
 
