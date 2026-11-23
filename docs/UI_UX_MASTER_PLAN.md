@@ -238,11 +238,11 @@ Each batch is implementation + tests + progress update before the next batch sta
 - [x] Preserve two-tap critical guard and all command-state copy.
 - [x] Re-run Batch 1 checks plus critical-guard and device-sheet UI tests.
 
-### Batch 3 — Auto-Pilot `[NOT STARTED]`
+### Batch 3 — Auto-Pilot `[DONE]`
 
-- Refresh Haier cards, mode tabs, temperature hierarchy, alerts and cloud/discovery panel.
-- Preserve slot names, commands, polling and verification gating.
-- Re-run all prior checks plus Haier-focused UI tests.
+- [x] Refresh Haier cards, mode tabs, temperature hierarchy, alerts and cloud/discovery panel.
+- [x] Preserve slot names, commands, polling and verification gating.
+- [x] Re-run all prior checks plus Haier-focused UI tests.
 
 ### Batch 4 — Scenes and Settings `[NOT STARTED]`
 
@@ -326,7 +326,7 @@ A batch or the full sprint is complete only when all applicable criteria pass wi
 | CP0 | Planning, isolation and audit | `ed97a10418fa2c9ca4c7e1ee5d60d1d7555f37cc` | pushed to `origin/feature/smartpilot-premium-ui` |
 | CP1 | Design system, navigation, Home | verified locally with CP2 | push awaiting explicit approval |
 | CP2 | Devices | verified locally | push awaiting explicit approval |
-| CP3 | Auto-Pilot | pending | pending |
+| CP3 | Auto-Pilot | verified locally | push awaiting explicit approval |
 | CP4 | Scenes and Settings | pending | pending |
 | CP5 | Micro-polish and final acceptance | pending | pending |
 

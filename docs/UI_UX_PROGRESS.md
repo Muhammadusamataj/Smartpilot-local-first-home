@@ -3,7 +3,7 @@
 **Last updated:** 2026-11-24  
 **Branch:** `feature/smartpilot-premium-ui`  
 **Base HEAD:** `3fc711f Reliability hardening for v1.19`  
-**Overall status:** CP0 verified and pushed; Android release-channel code changes paused pending approval; Batches 1 and 2 verified locally; Batch 3 in progress; push awaiting explicit approval
+**Overall status:** CP0 verified and pushed; Android release-channel code changes paused pending approval; Batches 1–3 verified locally; Batch 4 in progress; push awaiting explicit approval
 
 This file is updated after every implementation or testing milestone. Do not mark a milestone complete without evidence.
 
@@ -299,7 +299,7 @@ Decision:
 | CP0 | Planning, isolation and audit | verified, committed `ed97a10418fa2c9ca4c7e1ee5d60d1d7555f37cc`, pushed |
 | CP1 | Design system, navigation, Home | verified locally with CP2; push awaiting explicit approval |
 | CP2 | Devices | verified locally; push awaiting explicit approval |
-| CP3 | Auto-Pilot | not started |
+| CP3 | Auto-Pilot | verified locally; push awaiting explicit approval |
 | CP4 | Scenes and Settings | not started |
 | CP5 | Micro-polish and final acceptance | not started |
 
@@ -494,9 +494,82 @@ python -m pytest tests/test_ui.py -q -k "premium_local_shell or local_small_scre
 
 The selection includes `test_local_critical_switch_requires_two_deliberate_taps`, `test_local_card_tap_opens_device_details_sheet`, the locked body-colour assertion, responsive tab checks and real reading/command-state rendering. No Python, API, protocol or handler file was changed.
 
-## Batch 3 — Auto-Pilot `[NOT STARTED]`
+## Batch 3 — Auto-Pilot `[COMPLETE]`
 
-Evidence and checklist pending.
+### Checklist
+
+- [x] Refresh Haier cards, mode tabs, temperature hierarchy, alerts, verification pill and cloud/discovery panel.
+- [x] Keep fixed slots, names, commands, polling, verification gating and cloud-key handling untouched functionally.
+- [x] Enlarge Haier actions, icon buttons, mode tabs, cloud fields and checkbox to touch-friendly sizes.
+- [x] Re-run source guards, Home layout guard, screenshots, metrics, Haier tests and locked shell/body-colour checks.
+
+### Evidence
+
+The shared presentation layer now renders both Haier cards as border-led cards with wrapping names, 44×44px icon/action controls, distinct verified/unverified pills and high-contrast status text. Mode tabs, temperature buttons, quick actions and cloud-login inputs were enlarged without changing any `data-haier-*` attribute, command payload, polling interval or safety guard. The global eyebrow token was strengthened for light mode.
+
+Commands and exact results:
+
+```powershell
+python -m pytest tests/test_pilot_v07_static.py -q
+```
+
+```text
+......                                                                   [100%]
+6 passed in 0.48s
+```
+
+```powershell
+node tests/test_pilot_home_layout.mjs
+```
+
+```text
+Home layout state, reorder, hide, restore and escaping: PASS
+```
+
+```powershell
+python -u UI_REVIEW_TEMP\capture_ui.py UI_REVIEW_TEMP\after_batch3 after_batch3
+```
+
+```text
+captured 60 shots to UI_REVIEW_TEMP\after_batch3
+overflow failures: 0
+page errors: 0
+```
+
+```powershell
+python -u UI_REVIEW_TEMP\metrics_ui.py UI_REVIEW_TEMP\metrics_after_batch3.json
+```
+
+Corrected objective totals, Batch 2 → Batch 3:
+
+```text
+combinations      20 -> 20
+overflow           0 -> 0
+small targets     36 -> 10
+visible overlaps   0 -> 0
+low-contrast rows 27 -> 14
+minimum contrast 1.24 -> 1.53
+```
+
+```powershell
+python -m pytest tests/test_haier_pilot.py tests/test_haier_cloud_login.py -q
+```
+
+```text
+..................                                                       [100%]
+18 passed in 0.74s
+```
+
+```powershell
+python -m pytest tests/test_ui.py -q -k "premium_local_shell or local_small_screen_tabs or local_layout_is_reachable or modular_frontend_starts"
+```
+
+```text
+............                                                             [100%]
+12 passed, 391 deselected in 262.16s (0:04:22)
+```
+
+The Haier selection covers LAN IP validation, stale-cache verification revocation, failed-refresh handling, confirmed-fields-only writes, per-slot locks, compressor/manual-override safety and cloud-key secrecy. No Python, API, protocol, key, auth, polling or handler file was changed.
 
 ## Batch 4 — Scenes and Settings `[NOT STARTED]`
 
