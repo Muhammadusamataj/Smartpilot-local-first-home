@@ -64,3 +64,58 @@ def test_builder_is_source_pinned():
     assert '"--frozen-lockfile"' in script
     assert "history: createHashHistory()" in script
     assert "sendCommand(" not in script
+
+
+def test_offline_builder_rewrites_ssr_shell_without_device_commands(tmp_path):
+    """Static UI conversion must not introduce HTTP APIs or nested HTML shell."""
+    from importlib.util import module_from_spec, spec_from_file_location
+
+    path = BACKEND.parents[4] / "tools/build_lovable_webview.py"
+    spec = spec_from_file_location("build_lovable_webview", path)
+    assert spec is not None and spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    (tmp_path / "src/routes").mkdir(parents=True)
+    (tmp_path / "src/router.tsx").write_text(
+        'import { createRouter } from "@tanstack/react-router";\n'
+        'export const getRouter = () => createRouter({\n'
+        '    routeTree,\n'
+        '});\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "src/routes/__root.tsx").write_text(
+        'import appCss from "../styles.css?url";\n'
+        'const route = {\n'
+        '    links: [\n'
+        '      {\n'
+        '        rel: "stylesheet",\n'
+        '        href: appCss,\n'
+        '      },\n'
+        '      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },\n'
+        '      { rel: "preconnect", href: "https://fonts.googleapis.com" },\n'
+        '      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },\n'
+        '      {\n'
+        '        rel: "stylesheet",\n'
+        '        href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&family=Sora:wght@500;600;700&display=swap",\n'
+        '      },\n'
+        '    ],\n'
+        '  shellComponent: RootShell,\n'
+        '};\n',
+        encoding="utf-8",
+    )
+
+    module.make_webview_build(tmp_path)
+    router = (tmp_path / "src/router.tsx").read_text(encoding="utf-8")
+    root = (tmp_path / "src/routes/__root.tsx").read_text(encoding="utf-8")
+    html = (tmp_path / "index.html").read_text(encoding="utf-8")
+
+    assert "createHashHistory()" in router
+    assert "shellComponent: undefined" in root
+    assert "appCss" not in root
+    assert "fonts.googleapis.com" not in root
+    assert "fonts.gstatic.com" not in root
+    assert "/src/pilot-spa.tsx" in html
+    assert "UI preview only" in html
+    assert 'href="local"' in html
+    assert "fetch(" not in (tmp_path / "src/pilot-spa.tsx").read_text(encoding="utf-8")
