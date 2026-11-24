@@ -118,7 +118,11 @@ def test_offline_builder_rewrites_ssr_shell_without_device_commands(tmp_path):
     assert "/src/pilot-spa.tsx" in html
     assert "UI preview only" in html
     assert 'href="local"' in html
-    assert "fetch(" not in (tmp_path / "src/pilot-spa.tsx").read_text(encoding="utf-8")
+    entry = (tmp_path / "src/pilot-spa.tsx").read_text(encoding="utf-8")
+    assert "api/pilot-next/snapshot" in entry
+    assert "method: 'GET'" in entry
+    assert "method: 'POST'" not in entry
+    assert "sendCommand(" not in entry
 
 
 
