@@ -1,0 +1,44 @@
+name: Titanium offline preview safety
+
+on:
+  push:
+    branches: [integrate/lovable-titanium-v122-staging]
+  pull_request:
+    paths:
+      - 'tools/build_lovable_webview.py'
+      - 'tests/test_titanium_ui.py'
+      - 'titanium_ui.py'
+      - 'android_offline/app/src/main/python/titanium_ui.py'
+      - 'local_control.py'
+      - 'templates/local_control.html'
+      - 'Dockerfile'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated integration test dependencies
+        run: python -m pip install flask pytest
+      - name: Syntax check offline bridge and packager
+        run: |
+          python -m py_compile titanium_ui.py local_control.py tools/build_lovable_webview.py
+          python -m py_compile android_offline/app/src/main/python/titanium_ui.py
+      - name: Run no-hardware Titanium preview tests
+        run: python -m pytest -q tests/test_titanium_ui.py
+      - name: Check canonical module copies are identical
+        run: |
+          cmp app.py android_offline/app/src/main/python/app.py
+          cmp app.py tuya_local_key/app/app.py
+          cmp titanium_ui.py android_offline/app/src/main/python/titanium_ui.py
+          cmp titanium_ui.py tuya_local_key/app/titanium_ui.py
+          cmp templates/local_control.html android_offline/app/src/main/python/templates/local_control.html
+          cmp templates/local_control.html tuya_local_key/app/templates/local_control.html
