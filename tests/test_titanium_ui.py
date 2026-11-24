@@ -120,8 +120,11 @@ def test_offline_builder_rewrites_ssr_shell_without_device_commands(tmp_path):
     assert 'href="local"' in html
     entry = (tmp_path / "src/pilot-spa.tsx").read_text(encoding="utf-8")
     assert "api/pilot-next/snapshot" in entry
-    assert "method: 'GET'" in entry
-    assert "method: 'POST'" not in entry
+    assert 'method: "GET"' in entry
+    assert 'method: "POST"' not in entry
+    assert "snapshot?.hardware_commands_enabled !== false" in entry
+    assert "DEVICE_NAMES" in entry
+    assert "Device cards below are demo only" in entry
     assert "sendCommand(" not in entry
 
 
