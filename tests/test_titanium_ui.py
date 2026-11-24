@@ -179,7 +179,8 @@ def test_read_only_snapshot_never_exposes_credentials_or_unverified_status(
     assert "never-expose-me" not in payload
     assert "192.168." not in payload
     assert "private-id" not in payload
-    assert response.headers.get("Cache-Control") != "public"
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert make_client(tmp_path, monkeypatch).post(
         "/api/pilot-next/snapshot", json={"power": "on"}
     ).status_code == 405
