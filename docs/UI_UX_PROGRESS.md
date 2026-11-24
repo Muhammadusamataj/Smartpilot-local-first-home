@@ -1004,6 +1004,15 @@ panel failures and zero uncaught page errors.
   package `com.example.tuyalocalkey.offline.v2.debug`, `versionCode 22`,
   signer `bbe14afd…d7adf00f`. The existing updater can now detect v1.21 because
   it reads `/releases/latest` and rejects drafts/prereleases.
-- Milestone status: **software gates complete and stable release published**.
-  On-device TalkBack/touch/Back validation remains a separately approved activity;
-  the Vivo still has v1.20 installed and was not modified.
+- On-device update confirmed by the user and verified read-only over wireless
+  debugging: the installed package changed from **v1.20 / versionCode 21** to
+  **v1.21 / versionCode 22** (`lastUpdateTime=2026-11-24 12:52:47`) while
+  `firstInstallTime` remained `2026-11-22 18:08:15`, proving an in-place upgrade
+  with no uninstall or data clear. The wireless debugging connection went offline
+  immediately afterwards, so a full installed-APK pull/signer dump was not
+  completed; the successful in-place install itself confirms signing-certificate
+  compatibility, and the published APK signer was independently verified above.
+- Milestone status: **software gates complete, stable release published, and
+  user-side update to v1.21 confirmed on the Vivo**. TalkBack/touch/Back hardware
+  acceptance remains a separately approved activity; no physical device command
+  was sent by this workflow.
