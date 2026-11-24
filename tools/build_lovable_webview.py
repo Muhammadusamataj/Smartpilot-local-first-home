@@ -40,7 +40,7 @@ function VerifiedCachedSummary() {
         const count = snapshot.devices.filter(
           (device) => device.connection === 'online',
         ).length;
-        setSummary(count + '/7 recently verified from local cache · Read-only');
+        setSummary(count + '/7 verified in backend cache · Cards below are demo only');
       })
       .catch(() => { /* No status claim when backend is unavailable. */ });
     return () => controller.abort();
