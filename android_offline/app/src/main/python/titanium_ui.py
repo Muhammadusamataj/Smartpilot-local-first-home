@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, Response, send_file
+from flask import Blueprint, Response, jsonify, send_file
 
 bp = Blueprint("titanium_ui", __name__)
 WEB_DIR = Path(__file__).resolve().parent / "static" / "pilot-next"
@@ -119,4 +119,7 @@ def pilot_next_snapshot():
         "hardware_commands_enabled": False,
         "devices": rows,
     }
-    return response
+    reply = jsonify(response)
+    reply.headers["Cache-Control"] = "no-store"
+    reply.headers["X-Content-Type-Options"] = "nosniff"
+    return reply
