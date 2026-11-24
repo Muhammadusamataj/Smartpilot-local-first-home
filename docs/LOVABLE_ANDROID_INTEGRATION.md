@@ -47,7 +47,8 @@ and never issues real hardware commands. A banner links back to /local.
 - The Android Activity's WebView default URL stays /local.
 - No remote Lovable website is embedded.
 - No local keys, signing keystores or authentication secrets are committed.
-- This stage has no device-write API. /api/pilot-next/meta is informational only.
+- `/api/pilot-next/snapshot` is read-only and returns only seven exact device names, cached verification flags and saved Haier Manual/Auto modes. It does not return IPs, keys, DP controls or IDs. Unknown, stale and ambiguous readings remain `unknown`. Cached verification is not a fresh hardware read; cards in Lovable remain demo-only.
+- This stage has no device-write API. `/api/pilot-next/meta` and `/api/pilot-next/snapshot` are GET-only; the full backend's existing authentication guard applies.
 - Lovable state is still demonstration data. It must never be presented as
   real device readback, power metering or connectivity.
 - High-risk motors, breakers and geyser require real backend-enforced approval
