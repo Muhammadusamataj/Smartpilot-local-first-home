@@ -32,7 +32,8 @@ jobs:
         run: |
           if [ -z "$SOURCE_TOKEN" ]; then
             echo 'available=false' >> "$GITHUB_OUTPUT"
-            echo '::notice::Offline frontend build skipped: add read-only LOVABLE_SOURCE_READ_TOKEN secret to this repository Actions settings. Do not paste the token into chat or source.'
+            echo '::error::OFFLINE BUNDLE BLOCKED: Add LOVABLE_SOURCE_READ_TOKEN as an Actions secret on Smartpilot-local-first-home (fine-grained token, private Lovable repo Contents: Read only). Never paste it into chat or commits.'
+            exit 1
           else
             echo 'available=true' >> "$GITHUB_OUTPUT"
             echo '::notice::Read-only Lovable access is configured; bundle verification will start.'
