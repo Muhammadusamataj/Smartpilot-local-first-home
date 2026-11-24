@@ -995,3 +995,15 @@ panel failures and zero uncaught page errors.
   checkpoint publishes a **stable** `v1.21` tag with exactly one APK asset.
 - Physical device commands sent: **0**. No credentials, keystores or private data
   staged. No merge, force-push, stable-tag overwrite or remote branch deletion.
+- Stable release published: `v1.21`, `isDraft=false`, `isPrerelease=false`,
+  URL `https://github.com/Muhammadusamataj/Smartpilot-local-first-home/releases/tag/v1.21`.
+  `/releases/latest` returns `v1.21` with exactly four assets: the signed APK,
+  its SHA-256 checksum, `CHANGELOG-v1.21.md` and `TEST_RESULTS-v1.21.md`; no EXE.
+  Downloaded APK re-verified: 45,218,820 bytes, SHA-256
+  `25918e1864e8f3b80b57b5b863ac8a7e30d120e1f521b379fd7d6ac58414eeea`,
+  package `com.example.tuyalocalkey.offline.v2.debug`, `versionCode 22`,
+  signer `bbe14afd…d7adf00f`. The existing updater can now detect v1.21 because
+  it reads `/releases/latest` and rejects drafts/prereleases.
+- Milestone status: **software gates complete and stable release published**.
+  On-device TalkBack/touch/Back validation remains a separately approved activity;
+  the Vivo still has v1.20 installed and was not modified.

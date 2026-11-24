@@ -388,5 +388,6 @@ rejection. Keep the Python and desktop updater outside the Android beta change.
   416/416 local, 1174/1174 in CI, 60/60 mocked screenshots structurally valid.
 - [ ] Validate TalkBack, touch navigation and Android Back on Vivo separately
   (requires explicit on-device approval; installed version is still v1.20).
-- [ ] Build, verify and publish a **stable** v1.21 release after all software gates
+- [x] Build, verify and publish a **stable** v1.21 release after all software gates
   pass. The installed updater rejects prereleases, so no prerelease is published.
+  Release: https://github.com/Muhammadusamataj/Smartpilot-local-first-home/releases/tag/v1.21
