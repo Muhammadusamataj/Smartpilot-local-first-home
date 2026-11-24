@@ -22,10 +22,41 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from '@tanstack/react-router';
 import { getRouter } from './router';
 import './styles.css';
+function VerifiedCachedSummary() {
+  const [summary, setSummary] = React.useState('Cached connection status unavailable');
+  React.useEffect(() => {
+    const controller = new AbortController();
+    fetch('api/pilot-next/snapshot', {
+      method: 'GET', cache: 'no-store', credentials: 'same-origin',
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('Snapshot unavailable');
+        return response.json();
+      })
+      .then((snapshot) => {
+        if (snapshot?.read_only !== true || !Array.isArray(snapshot.devices)
+            || snapshot.devices.length !== 7) return;
+        const count = snapshot.devices.filter(
+          (device) => device.connection === 'online',
+        ).length;
+        setSummary(count + '/7 recently verified from local cache · Read-only');
+      })
+      .catch(() => { /* No status claim when backend is unavailable. */ });
+    return () => controller.abort();
+  }, []);
+  return <p role="status" style={{
+    background: '#101a2c', color: '#93a8c4', margin: 0, padding: '6px 14px',
+    fontSize: '11px', textAlign: 'center',
+  }}>{summary}</p>;
+}
 const root = document.getElementById('pilot-next-root');
 if (!root) throw new Error('Smart Pilot SPA mount missing');
 createRoot(root).render(
-  <React.StrictMode><RouterProvider router={getRouter()} /></React.StrictMode>,
+  <React.StrictMode>
+    <VerifiedCachedSummary />
+    <RouterProvider router={getRouter()} />
+  </React.StrictMode>,
 );
 """
 
