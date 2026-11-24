@@ -1,0 +1,94 @@
+name: Titanium private Lovable source offline build
+
+# Build on the Android repository's known-working public GitHub runner.
+# No secrets are printed; the private repository token is read-only.
+on:
+  push:
+    branches: [integrate/lovable-titanium-v122-staging]
+    paths:
+      - '.github/workflows/titanium-private-source-build.yml'
+      - 'tools/build_lovable_webview.py'
+      - 'tests/test_titanium_ui.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: titanium-private-source-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-access:
+    runs-on: ubuntu-latest
+    outputs:
+      available: ${{ steps.check.outputs.available }}
+    steps:
+      - name: Check whether read-only Lovable repository access is configured
+        id: check
+        env:
+          SOURCE_TOKEN: ${{ secrets.LOVABLE_SOURCE_READ_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "$SOURCE_TOKEN" ]; then
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            echo '::error::OFFLINE BUNDLE BLOCKED: Add LOVABLE_SOURCE_READ_TOKEN as an Actions secret on Smartpilot-local-first-home (fine-grained token, private Lovable repo Contents: Read only). Never paste it into chat or commits.'
+            exit 1
+          else
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+            echo '::notice::Read-only Lovable access is configured; bundle verification will start.'
+          fi
+
+  offline-bundle-and-android:
+    needs: source-access
+    if: needs.source-access.outputs.available == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Android staging source
+        uses: actions/checkout@v4
+      - name: Checkout pinned private Lovable source (read-only)
+        uses: actions/checkout@v4
+        with:
+          repository: Muhammadusamataj/pixel-perfect-portrait-616
+          ref: ef0f9f88a9c3621d919d25116dc4e14fa3b74f1a
+          token: ${{ secrets.LOVABLE_SOURCE_READ_TOKEN }}
+          path: lovable-source
+          persist-credentials: false
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test unchanged Lovable frontend safety rules
+        working-directory: lovable-source
+        run: |
+          bun install --frozen-lockfile
+          bun run test
+      - name: Export pinned offline, preview-only Lovable bundle
+        run: python tools/build_lovable_webview.py --source lovable-source
+      - name: Verify preview-only bundle and local assets
+        shell: bash
+        run: |
+          test -s android_offline/app/src/main/python/static/pilot-next/index.html
+          test -s android_offline/app/src/main/python/static/pilot-next/SOURCE_COMMIT.txt
+          ls android_offline/app/src/main/python/static/pilot-next/assets/*.js >/dev/null
+          ! grep -Eiq '(src|href)=[\"\x27]https?://' android_offline/app/src/main/python/static/pilot-next/index.html
+          grep -q 'UI preview only' android_offline/app/src/main/python/static/pilot-next/index.html
+      - name: Test read-only integration adapter
+        run: |
+          python -m pip install flask pytest
+          python -m pytest -q tests/test_titanium_ui.py
+      - name: Compile Android with embedded offline UI
+        working-directory: android_offline
+        run: bash ./gradlew --no-daemon assembleDebug
+      - name: Verify APK compiled, but do not publish this debug signer
+        run: |
+          test -s android_offline/app/build/outputs/apk/debug/app-debug.apk
+          echo 'Compile verified; APK intentionally NOT uploaded or published. Original release signer is not available in CI.'

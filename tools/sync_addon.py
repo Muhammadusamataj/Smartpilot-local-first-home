@@ -27,6 +27,7 @@ PY_FILES = [
     "device_values.py",
     "lan_scan.py",
     "local_control.py",
+    "titanium_ui.py",
     "pilot_extras.py",
     "tuya_versions.py",
     "haier_control.py",

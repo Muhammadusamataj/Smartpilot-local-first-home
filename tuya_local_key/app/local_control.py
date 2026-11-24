@@ -1470,6 +1470,7 @@ def local_page():
         "local_control.html", ready=ready, device_count=len(devices),
         subnet_hint=_subnet_hint(devices), tailscale_url=_tailscale_url(),
         home_assistant=_home_assistant(),
+        titanium_preview_ready=(Path(__file__).resolve().parent / "static" / "pilot-next" / "index.html").is_file(),
     )
 
 

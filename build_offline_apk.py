@@ -38,7 +38,7 @@ EXPECTED_SIGNER_SHA256 = os.environ.get(
 
 PY_MODULES = [
     "android_entry.py", "app.py", "wsgi.py", "device_cache.py", "device_preferences.py",
-    "device_values.py", "lan_scan.py", "local_control.py", "pilot_extras.py",
+    "device_values.py", "lan_scan.py", "local_control.py", "titanium_ui.py", "pilot_extras.py",
     "haier_control.py", "haier_hrdp_adapter.py", "haier_cloud_login.py", "family_hub.py", "support_report.py",
     "tuya_devices.py", "tuya_versions.py", "updates.py", "pyproject.toml",
 ]
