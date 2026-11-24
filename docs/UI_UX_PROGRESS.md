@@ -952,5 +952,46 @@ panel failures and zero uncaught page errors.
   `python -m pytest --basetemp ../codex-mission-guards tests/test_pilot_v07_static.py tests/test_packaging.py tests/test_update_dependencies.py -q --tb=short` → **38 passed in 1.05s**;
   `node tests/test_pilot_home_layout.mjs` → `Home layout state, reorder, hide, restore and escaping: PASS`;
   `python -m pytest --collect-only -q tests/test_ui.py` → **416 tests collected in 2.31s**.
-- Not yet executed here: full 416-case Playwright suite, Android screenshot review,
-  APK build/sign verification and prerelease publication. These remain explicit gates.
+- Previously pending gates are now executed and recorded in the final section below.
+  Release mode changed from prerelease to **normal stable release** by explicit user
+  instruction: the installed in-app updater only reads `/releases/latest` and
+  rejects drafts/prereleases.
+
+## Android v1.21 — final verification and stable release `[IN PROGRESS]`
+
+- Full local browser suite:
+  `python -m pytest --basetemp ../codex-full-ui tests/test_ui.py -q --tb=short`
+  → **416 passed in 2041.91s (0:34:01)**. `test-results/ui/index.html` generated.
+- GitHub Actions run `45345487223` on this branch: **both jobs success**;
+  `pytest -q` → **1174 passed in 679.55s (0:11:19)**; mocked Android screenshot
+  artifact uploaded. URL:
+  `https://github.com/Muhammadusamataj/Smartpilot-local-first-home/actions/runs/45345487223`.
+- Dedicated mocked harnesses: `acceptance_ui.py` **40/40**, `theme_check.py`
+  **4/4**, `state_check.py` **3/3** (exact Haier slot names and distinct
+  stale/offline text), `metrics_ui.py` **20 combos / 0 overflow / 0 small targets /
+  0 overlaps / 0 low-contrast / min contrast 3.23**.
+- Safety/packaging:
+  `python -m pytest --basetemp ../codex-final-safety tests/test_pilot_v07_static.py tests/test_packaging.py tests/test_update_dependencies.py tests/test_critical_safety.py tests/test_pilot_extras.py tests/test_haier_pilot.py tests/test_haier_cloud_login.py -q --tb=short -k 'not socket_handshake_with_synthetic_device'`
+  → **66 passed, 1 deselected in 6.68s**. Home layout guard PASS; `node --check`
+  passed on all three mirrored JS files.
+- Screenshot matrix: `check_v121_screenshots.py` → **60/60** PNGs, widths
+  320/360/390/412/768/1280, both themes, five views, all 844px tall, zero invalid
+  or missing files. The producing tests asserted zero page errors and zero
+  horizontal overflow.
+- APK: `python -u build_offline_apk.py --sdk-root 'C:\Users\abc\AppData\Local\Android\Sdk'`
+  → **BUILD SUCCESSFUL in 1m 4s** with pinned signer
+  `bbe14afd137fa6617ade862ea53d6ab0c34ddbf23e1f582bd602651dd7adf00f`.
+  `verify_v121.py` → package `com.example.tuyalocalkey.offline.v2.debug`,
+  `versionCode 22`, `versionName 1.21`, size **45,218,820** bytes, SHA-256
+  `25918E1864E8F3B80B57B5B863AC8A7E30D120E1F521B379FD7D6AC58414EEEA`; bundled
+  CSS SHA-256 `6ABBCB9570C70CCABDF4ADB02BB1A47A71248B2F4241E64BBD679D60DEC76656`
+  matches source; five-view order and Android Back hook confirmed inside `app.imy`.
+- Installer compatibility checked read-only on the user's Vivo over wireless
+  debugging `192.168.10.38:42039`: installed package is currently **v1.20 /
+  versionCode 21**. No install, uninstall or data clear was performed.
+- Updater contract verified read-only in `UpdateManager.java`: `/releases/latest`,
+  requires `draft=false` and `prerelease=false`, parses numeric `tag_name`, and
+  prefers an APK asset whose filename contains `smartpilot`. Therefore this
+  checkpoint publishes a **stable** `v1.21` tag with exactly one APK asset.
+- Physical device commands sent: **0**. No credentials, keystores or private data
+  staged. No merge, force-push, stable-tag overwrite or remote branch deletion.

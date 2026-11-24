@@ -384,6 +384,9 @@ rejection. Keep the Python and desktop updater outside the Android beta change.
 
 - [x] Local audit history preserved and feature-branch CI trigger checked.
 - [x] Source mirrors and focused safety/packaging guards verified.
-- [ ] Run and review the 416-case Playwright suite and Android screenshot artifact.
-- [ ] Validate TalkBack, touch navigation and Android Back on Vivo separately.
-- [ ] Build, verify and publish an Android preview after all software gates pass.
+- [x] Run and review the 416-case Playwright suite and Android screenshot artifact:
+  416/416 local, 1174/1174 in CI, 60/60 mocked screenshots structurally valid.
+- [ ] Validate TalkBack, touch navigation and Android Back on Vivo separately
+  (requires explicit on-device approval; installed version is still v1.20).
+- [ ] Build, verify and publish a **stable** v1.21 release after all software gates
+  pass. The installed updater rejects prereleases, so no prerelease is published.
