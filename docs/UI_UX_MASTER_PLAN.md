@@ -346,3 +346,12 @@ The final UI report must include:
 5. Accessibility and responsive results.
 6. Remaining gaps.
 7. Hardware-only verification risks.
+
+## Independent follow-up acceptance
+
+- Verify keyboard operation and named tab panels on the audit branch.
+- Review the ten-layer cascade. The premium layer alone contains 819 lines with !important, so the selector and theme conflict audit remains open.
+- Verify modal focus entry, containment and return. Closed overlays already use CSS visibility control. Native Android Back currently dispatches WebView history or Activity Back.
+- Check gesture insets, font scaling, the soft keyboard and scroll restoration on Vivo. Explicit inset handling in the premium stylesheet covers the bottom edge.
+- Check both theme modes with long names and verify loading, empty, offline/stale, busy and verified copy in each affected view.
+- Keep stable updates on releases/latest. Verify opt-in prerelease discovery independently before publishing an Android preview.

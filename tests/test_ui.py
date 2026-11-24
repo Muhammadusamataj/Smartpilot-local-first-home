@@ -6432,3 +6432,27 @@ def test_local_cold_start_and_resume_refresh_all_five_critical_devices(page, ser
     }""")
     page.wait_for_timeout(1500)
     assert all(status_ids.count(device_id) >= 2 for device_id in critical_ids)
+
+def test_local_tabs_support_keyboard_navigation(page, server):
+    page.route("**/api/**", lambda route: route.fulfill(json={}))
+    _mock_local_routes(page, devices=[])
+    page.goto(f"{server}local", wait_until="networkidle")
+
+    tabs = page.get_by_role("tab")
+    home = tabs.nth(0)
+    settings = tabs.nth(4)
+    home.focus()
+    page.keyboard.press("ArrowLeft")
+    expect(settings).to_be_focused()
+    expect(settings).to_have_attribute("aria-selected", "true")
+    expect(home).to_have_attribute("tabindex", "-1")
+    expect(page.get_by_role("tabpanel", name="Settings")).to_be_visible()
+
+    page.keyboard.press("ArrowRight")
+    expect(home).to_be_focused()
+    expect(page.get_by_role("tabpanel", name="Home")).to_be_visible()
+    page.keyboard.press("End")
+    expect(settings).to_be_focused()
+    page.keyboard.press("Home")
+    expect(home).to_be_focused()
+    expect(page.locator('[role="tab"][tabindex="0"]')).to_have_count(1)

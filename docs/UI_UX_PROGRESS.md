@@ -823,3 +823,24 @@ No device install was performed; install is left to the user. PR #4 and PR #5 we
 - Pushes to `feature/smartpilot-premium-ui`: all milestones plus the v1.20 release commit and evidence
 - Merge/tag/release/deploy/PR/Azure actions: GitHub Release `v1.20` published with explicit user approval; no merge, PR, deploy or Azure action
 - Hardware verification claims: **0**
+
+## Independent Android re-audit
+
+The isolated audit branch starts at `0712e315dd11b6a7ef332bbfb4d4941f6cc36dfe`.
+Main and v1.18 point to `ec2382547c50378ffaff4884a07f25d9b19c536e`.
+PR #5 contains v1.19 hardening and is an ancestor of the premium branch.
+Draft PR #4 adds six presentation files on an older base. Its snapshot was not adopted.
+
+The first checkpoint links all five tabs to their named panels and adds roving
+keyboard focus with Left, Right, Home and End. Existing selection, deep links,
+visibility and view handlers remain in place. The canonical template and module
+are synchronized to both packaging mirrors.
+
+- Source, packaging and dependency guards: `python -m pytest --basetemp ../pytest-guards tests/test_pilot_v07_static.py tests/test_packaging.py tests/test_update_dependencies.py -q --tb=short` passed 38 tests.
+- `node tests/test_pilot_home_layout.mjs` passed.
+- `python build_offline_apk.py` stopped at SDK discovery because ANDROID_HOME and ANDROID_SDK_ROOT were unset. No new APK or signing verification.
+- The previous 403-test result predates this change. Historical screenshots and custom acceptance scripts referenced as UI_REVIEW_TEMP are outside Git.
+- The native updater fetches releases/latest and explicitly rejects prereleases. The Python update path also uses releases/latest and rejects prereleases. Preview detection requires a separate opt-in Android channel with version, digest and signer validation.
+- Final mocked Chromium capture: 60 PNGs across six viewport widths, light and dark modes, and all five tabs. No document-width overflow, hidden active panel, or uncaught page error was observed. The fixtures cover a long Tuya label and two climate slots with different verification states. Physical requests were intercepted.
+- Visual inspection of the light Devices/Settings and dark Auto-Pilot screenshots found empty amber warning outlines on the Family sharing and Haier cloud forms. Empty warning regions now collapse their margin, padding and border while retaining live status semantics. Source CSS hashes match in all three trees.
+- A separate mocked Chromium keyboard check passed all four transitions, including wrapping from Home to Settings and back. Each transition verified the focused tab, selected state, named panel, and single tab stop.

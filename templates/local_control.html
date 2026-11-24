@@ -24,11 +24,11 @@
     <div class="pilot-wordmark">SMART <em>PILOT</em><small>LOCAL-FIRST HOME</small></div>
   </div>
   <nav class="view-tabs" role="tablist" aria-label="Main navigation">
-    <button type="button" role="tab" data-view="home" data-glyph="⌂" class="active" aria-selected="true">Home</button>
-    <button type="button" role="tab" data-view="devices" data-glyph="▦" aria-selected="false">Devices</button>
-    <button type="button" role="tab" data-view="autopilot" data-glyph="✧" aria-selected="false">Auto-Pilot</button>
-    <button type="button" role="tab" data-view="scenes" data-glyph="⚡" aria-selected="false">Scenes</button>
-    <button type="button" role="tab" data-view="settings" data-glyph="⚙" aria-selected="false">Settings</button>
+    <button type="button" role="tab" id="tab-home" aria-controls="panel-home" tabindex="0" data-view="home" data-glyph="⌂" class="active" aria-selected="true">Home</button>
+    <button type="button" role="tab" id="tab-devices" aria-controls="panel-devices" tabindex="-1" data-view="devices" data-glyph="▦" aria-selected="false">Devices</button>
+    <button type="button" role="tab" id="tab-autopilot" aria-controls="panel-autopilot" tabindex="-1" data-view="autopilot" data-glyph="✧" aria-selected="false">Auto-Pilot</button>
+    <button type="button" role="tab" id="tab-scenes" aria-controls="panel-scenes" tabindex="-1" data-view="scenes" data-glyph="⚡" aria-selected="false">Scenes</button>
+    <button type="button" role="tab" id="tab-settings" aria-controls="panel-settings" tabindex="-1" data-view="settings" data-glyph="⚙" aria-selected="false">Settings</button>
   </nav>
   <div class="search" {% if not ready %}hidden{% endif %}>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -45,7 +45,7 @@
 
 <main>
   <!-- One Home template for authenticated and setup states: never render duplicate sections. -->
-  <section class="view-panel pilot-home" data-view-panel="home">
+  <section class="view-panel pilot-home" id="panel-home" role="tabpanel" aria-labelledby="tab-home" data-view-panel="home">
     <div class="pilot-home-top">
       <div><div class="pilot-eyebrow">SMART PILOT · YOUR HOME</div><h1>Home</h1><p id="summary">{% if ready %}Checking local devices…{% else %}Local control · Configure your devices{% endif %}</p></div>
       <span class="pilot-local-pill">LOCAL FIRST</span>
@@ -56,7 +56,7 @@
     <div id="homeQuickDevices" class="pilot-device-summary-grid" aria-live="polite"></div>
     <p class="pilot-home-hint" id="homeEditHint" hidden>Use ↑ / ↓ (or drag on desktop) to reorder. Hide only removes a Home tile; device stays in Devices.</p>
   </section>
-  <section class="view-panel" data-view-panel="devices" hidden>
+  <section class="view-panel" id="panel-devices" role="tabpanel" aria-labelledby="tab-devices" data-view-panel="devices" hidden>
     <div class="section-head"><h2>Devices</h2><p>Search, select and control</p></div>
     <div id="devices" class="grid" aria-busy="true">
       <div class="ds-skeleton" aria-hidden="true"><span class="ds-skeleton-line"></span><span class="ds-skeleton-line short"></span></div>
@@ -64,7 +64,7 @@
     <div class="empty-mini" id="deviceEmpty" hidden><p>No devices match these filters.</p></div>
   </section>
 
-  <section class="view-panel" data-view-panel="settings" hidden>
+  <section class="view-panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" data-view-panel="settings" hidden>
     <div class="section-head"><h2>Settings</h2><p>Network, appearance and safe configuration</p></div>
     <div class="pilot-settings-grid" aria-label="Settings shortcuts">
       <button type="button" class="pilot-setting-tile" data-open-drawer="network"><b>⌁ Network &amp; Scan</b><small>LAN reconnect, IP checks and diagnostics</small></button>
@@ -124,7 +124,7 @@
       </div>
     </div>
   </section>
-  <section class="view-panel" data-view-panel="autopilot" hidden>
+  <section class="view-panel" id="panel-autopilot" role="tabpanel" aria-labelledby="tab-autopilot" data-view-panel="autopilot" hidden>
     <div class="pilot-eyebrow">HAIER · DIRECT LOCAL NETWORK</div>
     <div class="pilot-headline"><div><h1>Climate Control</h1><p>No Home Assistant required for the direct LAN link</p></div><span class="pilot-local-pill">● OFFLINE READY*</span></div>
     <div class="haier-intro"><div><h2>My Haier ACs</h2><p>Private Wi-Fi · Manual and Auto</p></div><span class="haier-tag">LIVE DATA ONLY</span></div>
@@ -133,7 +133,7 @@
     <div class="panel"><p class="note">*Local LAN key aur Wi-Fi zaroori hain. Internet nahi. Home Assistant integration ko same waqt poll na karne dein. Unknown models ki writes blocked hain; winter heat abhi disabled hai. Android par background Auto-Pilot phone/OS restrictions ki wajah se 24/7 guaranteed nahi.</p></div>
   </section>
 
-  <section class="view-panel pilot-scenes-view" data-view-panel="scenes" hidden>
+  <section class="view-panel pilot-scenes-view" id="panel-scenes" role="tabpanel" aria-labelledby="tab-scenes" data-view-panel="scenes" hidden>
     <div class="pilot-scenes-nav">
       <div><div class="pilot-eyebrow">SMART PILOT · ACTIONS</div><h1>Scenes &amp; Schedules</h1><p>Group actions and optional server timers</p></div>
       <span class="pilot-local-pill">LOCAL SCENES</span>

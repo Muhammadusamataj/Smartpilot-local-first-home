@@ -1191,6 +1191,14 @@ button, input, select, textarea { font: inherit; }
   line-height: 1.45 !important;
 }
 
+/* Retain the live regions for messages without drawing an empty warning. */
+.haier-warning:empty {
+  margin: 0 !important;
+  padding: 0 !important;
+  border-width: 0 !important;
+}
+
+
 .haier-auto-note {
   padding: var(--pm-space-3) !important;
   border: 1px solid var(--pm-line) !important;

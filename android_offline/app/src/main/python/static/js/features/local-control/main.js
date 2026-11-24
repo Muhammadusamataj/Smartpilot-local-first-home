@@ -679,6 +679,7 @@ function setView(view) {
   for (const button of document.querySelectorAll("[data-view]")) {
     const active = button.dataset.view === view;
     button.classList.toggle("active", active);
+    button.tabIndex = active ? 0 : -1;
     button.setAttribute("aria-selected", active ? "true" : "false");
   }
   for (const section of document.querySelectorAll("[data-view-panel]")) {
@@ -1073,8 +1074,23 @@ function initEvents() {
   for (const button of document.querySelectorAll("[data-open-drawer]")) {
     button.addEventListener("click", () => openDrawer(button.dataset.openDrawer));
   }
-  for (const button of document.querySelectorAll("[data-view]")) {
+  const tabs = Array.from(document.querySelectorAll(".view-tabs [data-view]"));
+  for (const [index, button] of tabs.entries()) {
     button.addEventListener("click", () => setView(button.dataset.view));
+    button.addEventListener("keydown", event => {
+      let nextIndex;
+      switch (event.key) {
+        case "ArrowLeft": nextIndex = (index + tabs.length - 1) % tabs.length; break;
+        case "ArrowRight": nextIndex = (index + 1) % tabs.length; break;
+        case "Home": nextIndex = 0; break;
+        case "End": nextIndex = tabs.length - 1; break;
+        default: return;
+      }
+      event.preventDefault();
+      const next = tabs[nextIndex];
+      setView(next.dataset.view);
+      next.focus();
+    });
   }
   window.addEventListener('smartpilot:home-layout', () => renderHomeQuickDevices(state.devices));
   document.addEventListener('click', event => {
