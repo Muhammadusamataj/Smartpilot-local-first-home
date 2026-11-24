@@ -869,7 +869,10 @@ button, input, select, textarea { font: inherit; }
   flex: 0 0 44px !important;
 }
 
-.drawer-body { padding: var(--pm-space-4) !important; }
+.drawer-body {
+  padding: var(--pm-space-4) !important;
+  overscroll-behavior: contain;
+}
 
 .drawer .group,
 .drawer .panel {

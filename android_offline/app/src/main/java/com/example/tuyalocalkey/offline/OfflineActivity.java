@@ -670,8 +670,27 @@ public class OfflineActivity extends Activity {
         }
     }
 
+    private boolean backCheckPending;
+
     @Override
     public void onBackPressed() {
+        if (backCheckPending) return;
+        String url = web.getUrl();
+        if (url == null || !isTrusted(Uri.parse(url))) {
+            navigateBack();
+            return;
+        }
+        backCheckPending = true;
+        web.evaluateJavascript(
+                "typeof window.smartPilotDismissOverlay === 'function' && window.smartPilotDismissOverlay()",
+                dismissed -> {
+                    backCheckPending = false;
+                    if (!isFinishing() && !isDestroyed() && url.equals(web.getUrl())
+                            && !"true".equals(dismissed)) navigateBack();
+                });
+    }
+
+    private void navigateBack() {
         if (web.canGoBack()) {
             web.goBack();
         } else {

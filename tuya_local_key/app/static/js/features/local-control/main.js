@@ -361,11 +361,11 @@ function renderDevice(device) {
   };
   card.querySelector("[data-open-details]")?.addEventListener("click", event => {
     event.stopPropagation();
-    openDeviceDetails(device);
+    openDeviceDetails(device, event.currentTarget);
   });
   card.querySelector("[data-fix]")?.addEventListener("click", event => {
     event.stopPropagation();
-    openDrawer("network");
+    openDrawer("network", event.currentTarget);
     toast("Scan or check the saved IP, then refresh this device");
   });
   card.addEventListener("details-toggle", () => {
@@ -374,12 +374,12 @@ function renderDevice(device) {
   // Smart-home gesture: tap the card for details, but never for a control.
   card.addEventListener("click", event => {
     if (event.target.closest("button, input, select, textarea, label, a, summary, details, .cap-control, .point")) return;
-    openDeviceDetails(device);
+    openDeviceDetails(device, event.currentTarget);
   });
   card.addEventListener("keydown", event => {
     if (event.target !== card || (event.key !== "Enter" && event.key !== " ")) return;
     event.preventDefault();
-    openDeviceDetails(device);
+    openDeviceDetails(device, event.currentTarget);
   });
   card.tabIndex = 0;
   card.setAttribute("aria-label", `Open details and controls for ${device.name}`);
@@ -399,7 +399,10 @@ function cardsFor(host, devices) {
   if (!host) return;
   host.innerHTML = "";
   if (!devices.length) {
-    host.innerHTML = '<div class="empty-mini"><p>No devices match these filters.</p></div>';
+    const message = state.devices.length
+      ? "No devices match these filters."
+      : "No devices added yet. Use Add device to get started.";
+    host.innerHTML = `<div class="empty-mini"><p>${message}</p></div>`;
     return;
   }
   const fragment = document.createDocumentFragment();
@@ -647,9 +650,6 @@ function renderAll({ poll = false } = {}) {
     devices: state.devices,
   }, sceneHandlers());
   applyFilter();
-  for (const id of ["devices"]) {
-    $(id)?.setAttribute("aria-busy", "false");
-  }
   if (poll) {
     for (const card of pollableCards()) queueRefresh(card);
   }
@@ -738,6 +738,8 @@ async function toggleFavorite(deviceId) {
 async function load(skipEnsure = false) {
   if (state.loading) return;
   state.loading = true;
+  const grid = $("devices");
+  grid?.setAttribute("aria-busy", "true");
   try {
     const [data, prefs, scenes] = await Promise.all([
       api("/api/local/devices"),
@@ -772,9 +774,11 @@ async function load(skipEnsure = false) {
       watchReconnect();
     }
   } catch (error) {
-    const grid = $("devices");
-    if (grid) grid.innerHTML = `<div class="note">${esc(error.message)}</div>`;
+    if (grid) grid.innerHTML = `<div class="note" role="status">Device list unavailable. ${esc(error.message)}</div>`;
+    const summary = $("summary");
+    if (summary && !state.devices.length) summary.textContent = "Device list unavailable";
   } finally {
+    grid?.setAttribute("aria-busy", "false");
     state.loading = false;
   }
 }
@@ -964,37 +968,82 @@ async function startScan(targets) {
   }
 }
 
-function openDrawer(focus) {
-  const drawer = $("drawer");
-  const scrim = $("scrim");
-  if (!drawer) return;
-  closeDeviceSheet();
-  drawer.classList.add("open");
-  scrim?.classList.add("open");
-  drawer.setAttribute("aria-hidden", "false");
-  if (focus === "add") setTimeout(() => $("devName")?.focus(), 220);
-  if (focus === "network") setTimeout(() => $("scanTargets")?.focus(), 220);
-  if (focus === "appearance") setTimeout(() => document.querySelector("[data-theme-option]")?.focus(), 220);
+let overlayOpener = null;
+
+function activeOverlay() {
+  return document.querySelector("#deviceSheet.open, #drawer.open");
 }
 
-function closeDrawer() {
-  $("drawer")?.classList.remove("open");
-  $("drawer")?.setAttribute("aria-hidden", "true");
-  if (!$("deviceSheet")?.classList.contains("open")) $("scrim")?.classList.remove("open");
-}
-
-function closeDeviceSheet() {
-  const sheet = $("deviceSheet");
-  sheet?.classList.remove("open");
-  sheet?.setAttribute("aria-hidden", "true");
-  state.detailDeviceId = "";
-  if (!$("drawer")?.classList.contains("open")) $("scrim")?.classList.remove("open");
+function showOverlay(overlay, opener) {
+  const previous = activeOverlay();
+  if (previous === overlay) return;
+  const returnTo = previous ? overlayOpener : opener;
+  closeOverlays();
+  overlayOpener = returnTo;
+  overlay.classList.add("open");
+  overlay.setAttribute("aria-hidden", "false");
+  $("scrim")?.classList.add("open");
+  for (const element of document.querySelectorAll("body > header, body > main")) {
+    element.inert = true;
+  }
 }
 
 function closeOverlays() {
-  closeDrawer();
-  closeDeviceSheet();
+  const overlay = activeOverlay();
+  if (!overlay) return false;
+  const opener = overlayOpener;
+  overlayOpener = null;
+  state.detailDeviceId = "";
+  for (const element of document.querySelectorAll("body > header, body > main")) {
+    element.inert = false;
+  }
+  const fallback = document.querySelector('.view-tabs [aria-selected="true"]');
+  if (opener instanceof HTMLElement && opener.getClientRects().length) {
+    opener.focus({preventScroll: true});
+  }
+  if (overlay.contains(document.activeElement) || document.activeElement === document.body) {
+    fallback?.focus({preventScroll: true});
+  }
+  overlay.classList.remove("open");
+  overlay.setAttribute("aria-hidden", "true");
   $("scrim")?.classList.remove("open");
+  return true;
+}
+
+// Native Android Back uses the same dismissal and focus restoration as Escape.
+window.smartPilotDismissOverlay = closeOverlays;
+
+function openDrawer(section, opener = document.activeElement) {
+  const drawer = $("drawer");
+  if (!drawer) return;
+  showOverlay(drawer, opener);
+  const target = {
+    add: $("devName"),
+    network: $("scanTargets"),
+    appearance: drawer.querySelector("[data-theme-option]"),
+  }[section];
+  (target || $("closeDrawer") || drawer).focus();
+}
+
+function handleOverlayKey(event) {
+  const overlay = activeOverlay();
+  if (!overlay || event.defaultPrevented) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeOverlays();
+  }
+  if (event.key !== "Tab") return;
+  const tabStops = [...overlay.querySelectorAll(
+    "button, a[href], input, select, textarea, summary, [tabindex]"
+  )].filter(element => element.tabIndex >= 0 && !element.matches(":disabled")
+    && element.getClientRects().length && getComputedStyle(element).visibility === "visible");
+  const first = tabStops[0];
+  const last = tabStops[tabStops.length - 1];
+  const current = document.activeElement;
+  if (!tabStops.includes(current) || current === (event.shiftKey ? first : last)) {
+    event.preventDefault();
+    (event.shiftKey ? last || overlay : first || overlay).focus();
+  }
 }
 
 function renderDetailSheet() {
@@ -1003,15 +1052,18 @@ function renderDetailSheet() {
   if (!sheet?.classList.contains("open") || !body || !state.detailDeviceId) return;
   const device = state.devices.find(item => sameId(item.id, state.detailDeviceId));
   if (!device) {
-    closeDeviceSheet();
+    closeOverlays();
     return;
   }
   const card = renderDevice(device);
   card.classList.add("detail-card");
+  card.removeAttribute("tabindex");
+  card.removeAttribute("aria-label");
   card.querySelector("[data-open-details]")?.remove();
   card.dataset.keepOpen = "1";
   // Advanced/raw Tuya DPs stay collapsed until deliberately opened.
   // The everyday sheet should show understandable controls first.
+  if (body.contains(document.activeElement)) $("closeDeviceSheet")?.focus();
   body.replaceChildren(card);
   const title = $("deviceSheetTitle");
   const subtitle = $("deviceSheetSubtitle");
@@ -1019,15 +1071,14 @@ function renderDetailSheet() {
   if (subtitle) subtitle.textContent = `${statusLabel(device)} · ${roomName(device)}`;
 }
 
-function openDeviceDetails(device) {
+function openDeviceDetails(device, opener = document.activeElement) {
   const sheet = $("deviceSheet");
   if (!sheet || !device) return;
+  if (activeOverlay() === sheet && sameId(state.detailDeviceId, device.id)) return;
+  showOverlay(sheet, opener);
   state.detailDeviceId = device.id;
-  closeDrawer();
-  sheet.classList.add("open");
-  sheet.setAttribute("aria-hidden", "false");
-  $("scrim")?.classList.add("open");
   renderDetailSheet();
+  $("closeDeviceSheet")?.focus({preventScroll: true});
 }
 
 function pollableCards() {
@@ -1059,20 +1110,15 @@ function schedulePoll() {
 }
 
 function initEvents() {
-  $("settingsBtn")?.addEventListener("click", () => openDrawer());
+  $("settingsBtn")?.addEventListener("click", event => openDrawer(undefined, event.currentTarget));
   $("editHomeBtn")?.addEventListener("click", () => setHomeEditing(!isHomeEditing()));
-  $("addBtn")?.addEventListener("click", () => openDrawer("add"));
-  $("closeDrawer")?.addEventListener("click", closeDrawer);
-  $("closeDeviceSheet")?.addEventListener("click", closeDeviceSheet);
+  $("addBtn")?.addEventListener("click", event => openDrawer("add", event.currentTarget));
+  $("closeDrawer")?.addEventListener("click", closeOverlays);
+  $("closeDeviceSheet")?.addEventListener("click", closeOverlays);
   $("scrim")?.addEventListener("click", closeOverlays);
-  document.addEventListener("keydown", event => {
-    if (event.key !== "Escape") return;
-    if ($("deviceSheet")?.classList.contains("open")) closeDeviceSheet();
-    else closeDrawer();
-    $("scrim")?.classList.remove("open");
-  });
+  document.addEventListener("keydown", handleOverlayKey);
   for (const button of document.querySelectorAll("[data-open-drawer]")) {
-    button.addEventListener("click", () => openDrawer(button.dataset.openDrawer));
+    button.addEventListener("click", event => openDrawer(button.dataset.openDrawer, event.currentTarget));
   }
   const tabs = Array.from(document.querySelectorAll(".view-tabs [data-view]"));
   for (const [index, button] of tabs.entries()) {
@@ -1103,7 +1149,7 @@ function initEvents() {
     const deviceButton = event.target.closest('#homeQuickDevices [data-device-id]');
     if (deviceButton && !isHomeEditing()) {
       const device = state.devices.find(item=>sameId(item.id,deviceButton.dataset.deviceId));
-      if (device) openDeviceDetails(device);
+      if (device) openDeviceDetails(device, deviceButton);
       return;
     }
   });

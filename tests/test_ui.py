@@ -6096,7 +6096,8 @@ def test_local_card_tap_opens_device_details_sheet(page, server):
 
     card = page.locator('#homeQuickDevices .pilot-home-tile[data-home-key="tuya:sheet-plug"]')
     expect(card.locator(".pilot-home-inline-power button.switch[role='switch']")).to_have_count(1)
-    card.locator(".pilot-device-mini").click()
+    opener = card.locator(".pilot-device-mini")
+    opener.click()
 
     sheet = page.locator("#deviceSheet")
     expect(sheet).to_have_attribute("aria-hidden", "false")
@@ -6110,8 +6111,17 @@ def test_local_card_tap_opens_device_details_sheet(page, server):
     expect(page.locator('[data-view="home"]')).to_have_attribute("aria-selected", "true")
     expect(page.locator('[data-view-panel="home"]')).to_be_visible()
 
-    page.locator("#closeDeviceSheet").click()
+    close = page.locator("#closeDeviceSheet")
+    expect(close).to_be_focused()
+    expect(page.get_by_role("dialog", name="Desk Lamp")).to_be_visible()
+    close.press("Shift+Tab")
+    assert sheet.evaluate("(sheet) => sheet.contains(document.activeElement)")
+    page.keyboard.press("Tab")
+    expect(close).to_be_focused()
+    assert page.evaluate("window.smartPilotDismissOverlay()") is True
     expect(sheet).to_have_attribute("aria-hidden", "true")
+    expect(opener).to_be_focused()
+    assert page.evaluate("window.smartPilotDismissOverlay()") is False
     assert commands == []
 
     # The visible card toggle still commands directly and never opens the sheet.
@@ -6364,27 +6374,49 @@ def test_local_small_screen_tabs_and_device_search_are_reachable(page, server):
 
 
 @pytest.mark.parametrize("width", [320, 360, 390, 412, 768, 1280])
-def test_local_layout_is_reachable_at_target_widths(page, server, width):
-    """No horizontal scrolling and all five panels stay usable on Vivo/tablet/desktop."""
-    _mock_local_routes(page, devices=[_local_device("plug-a", "Living Room Plug")])
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_local_layout_is_reachable_at_target_widths(page, server, width, scheme):
+    """Capture the five usable views in both system themes using mocked device data."""
+    page.route("**/api/**", lambda route: route.fulfill(json={}))
+    point = {"dp": "1", "code": "switch", "type": "bool", "value": False}
+    _mock_local_routes(page, devices=[_local_device("plug-a", "Living Room Plug With a Long Label",
+                                                   points=[point])],
+                       status={"status": "ok", "verified": True, "values": [point]})
+    page.route("**/api/haier/devices", lambda route: route.fulfill(json={"devices": [
+        {"id": "pro", "name": "19HFAB T3 Pro", "configured": True, "verified": True,
+         "mode": "manual", "status": {"writable": True, "room_c": 28, "target_c": 26,
+                                      "power_on": True}},
+        {"id": "ff", "name": "FF Haier 19HFAB T3", "configured": True, "verified": False,
+         "mode": "auto"},
+    ]}))
+    page.emulate_media(color_scheme=scheme, reduced_motion="reduce")
     page.set_viewport_size({"width": width, "height": 844})
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
     page.goto(f"{server}local", wait_until="networkidle")
 
-    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-    tabs = page.locator(".view-tabs [data-view]")
+    capture_dir = SHOTS_DIR.parent / "android-ui"
+    capture_matrix = SHOTS_ENABLED or os.environ.get("UI_ANDROID_MATRIX") == "1"
+    if capture_matrix:
+        capture_dir.mkdir(parents=True, exist_ok=True)
+    tabs = page.get_by_role("tab")
     expect(tabs).to_have_count(5)
-    for tab in tabs.all():
-        expect(tab).to_be_visible()
+    for view in ["home", "devices", "autopilot", "scenes", "settings"]:
+        tab = page.locator(f'[data-view="{view}"]')
         expect(tab).to_be_enabled()
+        tab.click()
+        expect(tab).to_have_attribute("aria-selected", "true")
+        expect(page.locator(f'[data-view-panel="{view}"]')).to_be_visible()
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        if capture_matrix:
+            page.screenshot(path=capture_dir / f"android-{scheme}-{width}-{view}.png")
 
-    tabs.nth(1).click()
-    expect(page.locator('[data-view-panel="devices"]')).to_be_visible()
+    page.locator('[data-view="devices"]').click()
     search = page.locator("#deviceSearch")
     expect(search).to_be_visible()
     search.fill("Living")
-    expect(search).to_have_value("Living")
     expect(page.locator("#devices .tile:visible")).to_have_count(1)
-    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    assert not errors
 
 
 def test_local_cold_start_and_resume_refresh_all_five_critical_devices(page, server):
@@ -6456,3 +6488,79 @@ def test_local_tabs_support_keyboard_navigation(page, server):
     page.keyboard.press("Home")
     expect(home).to_be_focused()
     expect(page.locator('[role="tab"][tabindex="0"]')).to_have_count(1)
+
+
+def test_local_drawer_traps_focus_and_escape_returns_to_opener(page, server):
+    page.route("**/api/**", lambda route: route.fulfill(json={}))
+    _mock_local_routes(page, devices=[])
+    page.goto(f"{server}local", wait_until="networkidle")
+    page.locator('[data-view="settings"]').click()
+    opener = page.locator('[data-open-drawer="appearance"]').first
+    opener.click()
+
+    drawer = page.get_by_role("dialog", name="Advanced settings")
+    expect(drawer).to_be_visible()
+    assert drawer.evaluate("(drawer) => drawer.contains(document.activeElement)")
+    assert page.locator("main").evaluate("(main) => main.inert")
+    close = page.locator("#closeDrawer")
+    close.focus()
+    close.press("Shift+Tab")
+    assert drawer.evaluate("(drawer) => drawer.contains(document.activeElement)")
+    page.keyboard.press("Tab")
+    expect(close).to_be_focused()
+    page.keyboard.press("Escape")
+    expect(drawer).to_have_count(0)
+    expect(opener).to_be_focused()
+    assert not page.locator("main").evaluate("(main) => main.inert")
+
+@pytest.mark.parametrize("reply, http_status, tone, feedback", [
+    ({"ok": True, "confirmed": False}, 200, "warn", "state not confirmed"),
+    ({"error": "busy", "message": "Device busy"}, 409, "warn", "status uncertain"),
+    ({"message": "Write refused"}, 403, "error", "Write refused"),
+])
+def test_local_pending_write_keeps_last_confirmed_value(page, server, reply, http_status, tone, feedback):
+    point = {"dp": "1", "code": "switch", "type": "bool", "value": False}
+    page.route("**/api/**", lambda route: route.fulfill(json={}))
+    _mock_local_routes(page, devices=[_local_device("fixture-plug", "Fixture plug", points=[point])],
+                       status={"status": "ok", "verified": True, "values": [point]})
+    held = []
+    page.route("**/api/local/command", lambda route: held.append(route))
+    page.goto(f"{server}local", wait_until="networkidle")
+    page.locator('[data-view="devices"]').click()
+    control = page.locator("#devices .switch-control").last
+    switch = control.get_by_role("switch")
+    switch.click()
+    expect(switch).to_have_attribute("data-pending", "1")
+    expect(switch).to_have_attribute("aria-checked", "false")
+    expect(switch).to_be_disabled()
+    expect(control.get_by_role("status")).to_contain_text("Sending ON")
+    assert len(held) == 1
+
+    held[0].fulfill(status=http_status, json=reply)
+    expect(page.locator("#toast")).to_have_attribute("data-kind", tone)
+    expect(page.locator("#toast")).to_contain_text(feedback)
+    expect(switch).to_have_attribute("aria-checked", "false")
+    expect(control.get_by_role("status")).to_contain_text("Unconfirmed")
+    assert len(held) == 1
+
+@pytest.mark.parametrize("available", [True, False])
+def test_local_device_list_leaves_loading_for_empty_or_error(page, server, available):
+    page.route("**/api/**", lambda route: route.fulfill(json={}))
+    _mock_local_routes(page, devices=[])
+    held = []
+    page.route("**/api/local/devices", lambda route: held.append(route))
+    page.goto(f"{server}local", wait_until="domcontentloaded")
+    page.locator('[data-view="devices"]').click()
+    grid = page.locator("#devices")
+    expect(grid).to_have_attribute("aria-busy", "true")
+    expect(grid.locator(".ds-skeleton")).to_be_visible()
+    expect(page.locator("#summary")).to_contain_text("Checking local devices")
+    assert len(held) == 1
+
+    if available:
+        held[0].fulfill(json={"devices": [], "repair": {}})
+        expect(grid).to_contain_text("No devices added yet")
+    else:
+        held[0].fulfill(status=503, json={"message": "Temporarily unavailable"})
+        expect(grid.get_by_role("status")).to_contain_text("Device list unavailable")
+    expect(grid).to_have_attribute("aria-busy", "false")

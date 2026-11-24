@@ -150,9 +150,9 @@
 </main>
 
 <div class="scrim" id="scrim"></div>
-<aside class="drawer" id="drawer" aria-label="Advanced settings">
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" aria-hidden="true" tabindex="-1">
   <div class="drawer-head">
-    <h2>Advanced settings</h2>
+    <h2 id="drawerTitle">Advanced settings</h2>
     <button type="button" class="icon-btn" id="closeDrawer" aria-label="Close">✕</button>
   </div>
   <div class="drawer-body">
@@ -248,7 +248,7 @@
   </div>
 </aside>
 
-<aside class="drawer device-sheet" id="deviceSheet" aria-label="Device details" aria-hidden="true">
+<aside class="drawer device-sheet" id="deviceSheet" role="dialog" aria-modal="true" aria-labelledby="deviceSheetTitle" aria-describedby="deviceSheetSubtitle" aria-hidden="true" tabindex="-1">
   <div class="drawer-head">
     <div class="drawer-title">
       <h2 id="deviceSheetTitle">Device</h2>

@@ -355,3 +355,35 @@ The final UI report must include:
 - Check gesture insets, font scaling, the soft keyboard and scroll restoration on Vivo. Explicit inset handling in the premium stylesheet covers the bottom edge.
 - Check both theme modes with long names and verify loading, empty, offline/stale, busy and verified copy in each affected view.
 - Keep stable updates on releases/latest. Verify opt-in prerelease discovery independently before publishing an Android preview.
+
+## Android v1.21 finalization follow-up
+
+- Preserve the original audit branch and fast-forward the authorized local premium branch before further changes.
+- Verify modal names, focus entry, Tab and Shift+Tab cycling, Escape, scrim, and opener return. Verify the WebView Back hook separately from native Vivo gesture dispatch.
+- Verify loading, empty, stale, offline, verified, busy, pending, and failed states using mocked responses, then run the full browser suite.
+- Check font scale, colour contrast, spacing, and computed overflow in dark, light, and system theme before marking visual acceptance complete.
+- Verify the APK package, increasing version code, signer and digest before preparing any preview. Publishing and installation require explicit approval.
+
+### Proposed preview channel (approval required for implementation)
+
+Keep Stable as the default and preserve its releases/latest endpoint. Store an explicit
+Beta opt-in in Android preferences only. For Beta, query the repository releases
+list and select an eligible non-draft prerelease with the documented Android beta
+tag format and exactly one recognized APK plus a trusted SHA-256 digest. Disable
+Beta discovery immediately on opt-out. An already installed higher-version beta
+must wait for a newer stable version code before an in-place return to Stable.
+
+Use numeric Android version codes for upgrade eligibility. Before Keystore-backed
+installation, validate the downloaded digest, package ID, monotonically increasing
+version code and existing signing certificate. Use the existing installer confirmation
+and keep existing app data. Add mocked tests for opt-in, opt-out, stable and beta
+isolation, malformed releases, ambiguity, wrong package, hash or signer, and downgrade
+rejection. Keep the Python and desktop updater outside the Android beta change.
+
+### Current verification gates
+
+- [x] Local audit history preserved and feature-branch CI trigger checked.
+- [x] Source mirrors and focused safety/packaging guards verified.
+- [ ] Run and review the 416-case Playwright suite and Android screenshot artifact.
+- [ ] Validate TalkBack, touch navigation and Android Back on Vivo separately.
+- [ ] Build, verify and publish an Android preview after all software gates pass.

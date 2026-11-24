@@ -857,3 +857,100 @@ panel failures and zero uncaught page errors.
 - `python -m pytest --basetemp ../pytest-climate-elevated tests/test_haier_pilot.py tests/test_haier_cloud_login.py -q --tb=short`: 18 passed, including the synthetic loopback handshake. The sandboxed attempt stalled at the loopback test.
 - GitHub's latest release endpoint returned v1.20 with draft and prerelease both false.
 - Focused browser regression run started at the first checkpoint: `python -m pytest --basetemp ../pytest-browser-verified tests/test_ui.py -q -k 'local_tabs_support or local_layout_is_reachable or local_card_tap or local_critical_switch or local_scene_run or premium_local_shell' --tb=short`: 11 passed, 393 deselected in 355.61s. The later climate-order change was covered by the refreshed screenshot matrix and the Haier and mirror guards above.
+
+## Android v1.21 finalization — in progress
+
+- Preserved audit commits 8273881 and 64398ec on codex/android-ui-audit.
+  `git merge --ff-only codex/android-ui-audit` fast-forwarded local
+  feature/smartpilot-premium-ui. GitHub compare confirmed the remote remains at
+  0712e31. `git push origin feature/smartpilot-premium-ui` failed at DNS
+  (getaddrinfo). Sandbox escalation was automatically rejected. No remote ref changed.
+- Mirrored the modal markup and interaction changes. Device details and Advanced
+  settings have accessible dialog names, focus entry, an inert background,
+  Tab and Shift+Tab wrapping, and focus return on dismissal. Android Back
+  queries the same dismissal handler before WebView history or Activity exit.
+  The Playwright tests include drawer and sheet regression cases.
+- `python -m pytest --basetemp ../final-guards-after tests/test_pilot_v07_static.py tests/test_packaging.py tests/test_update_dependencies.py -q --tb=short`: 38 passed.
+  `node tests/test_pilot_home_layout.mjs` and JS syntax check passed.
+- `python -m pytest --collect-only -q tests/test_ui.py`: 405 collected.
+  Full Playwright, targeted modal checks and the screenshot recapture did not
+  produce a pass/fail result in this session. A loopback TCP connectivity probe
+  returned WinError 10013. Prior screenshots are baseline evidence only.
+- Located the installed Android SDK with platform 34, build-tools 34.0.0,
+  platform-tools and command-line tools. Exported ANDROID_HOME and ANDROID_SDK_ROOT
+  to the same SDK for the build. The prospective configuration uses v1.21,
+  versionCode 22 and the existing debug package ID.
+- `python build_offline_apk.py` verified the source signing key fingerprint
+  bbe14afd137fa6617ade862ea53d6ab0c34ddbf23e1f582bd602651dd7adf00f, then failed
+  on the Gradle wrapper lock outside the workspace. Retried with a workspace
+  Gradle home and the installed Gradle 8.7 runner. Offline assembleDebug
+  could not connect to the Gradle daemon. APK hash and signer remain unverified.
+- Stable/Beta implementation is proposed in the master plan. The native and
+  Python update paths remain stable-only. No tag, prerelease, install or
+  hardware action was performed.
+
+### Autonomous continuation checkpoint
+
+- The local feature branch preserves both audit commits and adds CI checkpoint
+  093871477949288efcac392225cd7b8df81db36f. The original audit branch still
+  points to 64398ec. The CI YAML was parsed and checked for the authorized
+  feature push trigger, full pytest command and screenshot artifact path.
+- The previous CI workflow ran on main pushes or pull requests. The checkpoint
+  adds the authorized branch to the existing push trigger and scopes screenshot
+  upload to that branch. GitHub confirmed 64398ec is absent and the remote
+  feature ref is still at 0712e31. Normal push continues to fail at DNS.
+  The connector can update a ref to an existing remote object, but the local
+  objects must first be uploaded with their commit identities intact.
+- Working-tree changes preserve the modal/Android Back work, pass real opener
+  elements to restore focus, remove redundant keyboard stops inside the sheet,
+  and contain overlay scroll chaining. Device-list failures clear aria-busy
+  and report an unavailable list. An empty inventory is distinguished from
+  a filter with no matches.
+- Added mocked Playwright cases for loading, empty, error, pending, busy,
+  uncertain and rejected requests. Expanded the layout test to exercise and
+  capture all five views across two system colour schemes and all six widths.
+- The focused safety, source and packaging run passed 66 tests with the
+  synthetic loopback handshake deselected due to the demonstrated socket
+  restriction. Command:
+  `python -m pytest --basetemp ../mission-final-checks tests/test_pilot_v07_static.py tests/test_packaging.py tests/test_update_dependencies.py tests/test_critical_safety.py tests/test_pilot_extras.py tests/test_haier_pilot.py tests/test_haier_cloud_login.py -q --tb=short -k 'not socket_handshake_with_synthetic_device'`.
+  Node Home layout, module syntax check and git diff whitespace check passed.
+- The browser suite collects 416 cases. The new browser tests, screenshot
+  matrix and native behavior still require execution. Candidate source stays
+  outside the verified CI commit. A portable bundle preserves the committed
+  history and a separate patch preserves the browser/build candidate changes.
+- Android build and release remain gated on an actual APK and full test evidence.
+  A runner for signing must have the existing key under private control. The
+  repository's update-logic restriction remains in force. No Beta logic was
+  changed or published.
+
+## Codex recovery integration — verified checkpoint `[IN PROGRESS]`
+
+- Recovered the missing history from `smart-pilot-verified-checkpoints.bundle`.
+  `git bundle verify` reported: 1 ref (`093871477949288efcac392225cd7b8df81db36f`),
+  requires `0712e315dd11b6a7ef332bbfb4d4941f6cc36dfe`, bundle is okay. Created
+  backup ref `backup/pre-codex-recovery-0712e31` at the pre-recovery HEAD.
+- Fetched the bundle into isolated ref `codex-recovery/premium-ui`. Both reported
+  commits exist: `64398ec6a2a5035a673908c12315654aa1ca401f` (local climate before
+  optional cloud setup) and `093871477949288efcac392225cd7b8df81db36f` (feature-branch
+  regression CI). A third recovered commit `8273881a12f747b073fc17411231b1ebfea68e97`
+  adds ARIA tablist semantics and keyboard tab navigation. Ancestry verified:
+  bundle head descends directly from `0712e315` with 3 commits.
+- Audited `smart-pilot-android-candidate.patch` before applying: 57,071 bytes,
+  valid UTF-8, zero replacement characters, no secrets/credentials, no weakened
+  assertions. `git apply --check` failed against `0712e315` but passed cleanly
+  against the bundle head in an isolated worktree. The patch contains modal focus
+  management, Android Back dismissal, strengthened mocked tests, Android v1.21
+  metadata (versionCode 22) and evidence docs.
+- Fast-forwarded `feature/smartpilot-premium-ui` from `0712e315` to bundle head
+  `0938714` with `git merge --ff-only codex-recovery/premium-ui` (exit 0), then
+  applied the candidate patch (`git apply --check` exit 0, `git apply` exit 0).
+- Verified all three mirrored presentation files are byte-identical across
+  `static/`, `android_offline/app/src/main/python/` and `tuya_local_key/app/`:
+  `pilot-premium-ui.css` SHA-256 `6ABBCB95…76656`, `main.js` SHA-256
+  `0C9D0980…8905`, `local_control.html` SHA-256 `48BCB2A6…E031D`.
+- Commands and results in this environment:
+  `python -m pytest --basetemp ../codex-mission-guards tests/test_pilot_v07_static.py tests/test_packaging.py tests/test_update_dependencies.py -q --tb=short` → **38 passed in 1.05s**;
+  `node tests/test_pilot_home_layout.mjs` → `Home layout state, reorder, hide, restore and escaping: PASS`;
+  `python -m pytest --collect-only -q tests/test_ui.py` → **416 tests collected in 2.31s**.
+- Not yet executed here: full 416-case Playwright suite, Android screenshot review,
+  APK build/sign verification and prerelease publication. These remain explicit gates.
