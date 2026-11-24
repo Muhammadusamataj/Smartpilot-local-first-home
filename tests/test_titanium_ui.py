@@ -119,3 +119,83 @@ def test_offline_builder_rewrites_ssr_shell_without_device_commands(tmp_path):
     assert "UI preview only" in html
     assert 'href="local"' in html
     assert "fetch(" not in (tmp_path / "src/pilot-spa.tsx").read_text(encoding="utf-8")
+
+
+
+def test_read_only_snapshot_never_exposes_credentials_or_unverified_status(
+    tmp_path, monkeypatch,
+):
+    from types import SimpleNamespace
+
+    class StubResponse:
+        def get_json(self, silent=False):
+            return {
+                "devices": [
+                    {"id": "private-id", "name": "Geyser", "verified": True,
+                     "local_key": "never-expose-me", "ip": "192.168.1.5"},
+                    {"id": "another", "name": "Bore Motor", "verified": False,
+                     "local_key": "also-secret"},
+                    {"id": "outside", "name": "Unrelated Device", "verified": True},
+                ],
+            }
+
+    fake_tuya = SimpleNamespace(local_devices=lambda: StubResponse())
+    fake_haier = SimpleNamespace(
+        _load=lambda: {
+            "pro": {"secret": "never-expose-me", "mode": "manual"},
+            "ff": {"secret": "never-expose-me", "mode": "auto"},
+        },
+        _summary=lambda slot, entry: {
+            "verified": slot == "pro", "mode": entry["mode"],
+            "local_key": entry["secret"], "ip": "192.168.1.7",
+        },
+    )
+    monkeypatch.setitem(sys.modules, "local_control", fake_tuya)
+    monkeypatch.setitem(sys.modules, "haier_control", fake_haier)
+    response = make_client(tmp_path, monkeypatch).get("/api/pilot-next/snapshot")
+    assert response.status_code == 200
+    assert response.json["source"] == "local_cache"
+    assert response.json["read_only"] is True
+    assert response.json["hardware_commands_enabled"] is False
+    devices = response.json["devices"]
+    assert len(devices) == 7
+    assert {d["name"] for d in devices} == {
+        "19HFAB T3 Pro", "FF Haier 19HFAB T3", "Water Tank",
+        "First Floor Breaker", "Ground Floor", "Bore Motor", "Geyser",
+    }
+    by_name = {d["name"]: d for d in devices}
+    assert by_name["19HFAB T3 Pro"]["controlMode"] == "manual"
+    assert by_name["FF Haier 19HFAB T3"]["controlMode"] == "auto"
+    assert by_name["19HFAB T3 Pro"]["connection"] == "online"
+    assert by_name["FF Haier 19HFAB T3"]["connection"] == "unknown"
+    assert by_name["Geyser"]["connection"] == "online"
+    assert by_name["Bore Motor"]["connection"] == "unknown"
+    assert by_name["Water Tank"]["connection"] == "unknown"
+    payload = response.get_data(as_text=True)
+    assert "never-expose-me" not in payload
+    assert "192.168." not in payload
+    assert "private-id" not in payload
+    assert response.headers.get("Cache-Control") != "public"
+    assert make_client(tmp_path, monkeypatch).post(
+        "/api/pilot-next/snapshot", json={"power": "on"}
+    ).status_code == 405
+
+
+def test_ambiguous_duplicate_names_are_never_claimed_online(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    class StubResponse:
+        def get_json(self, silent=False):
+            return {"devices": [
+                {"name": "Geyser", "verified": True},
+                {"name": "Geyser", "verified": True},
+            ]}
+
+    monkeypatch.setitem(sys.modules, "local_control",
+                        SimpleNamespace(local_devices=lambda: StubResponse()))
+    monkeypatch.setitem(sys.modules, "haier_control",
+                        SimpleNamespace(_load=lambda: {},
+                                        _summary=lambda *_: {"verified": False}))
+    result = make_client(tmp_path, monkeypatch).get("/api/pilot-next/snapshot").json
+    geyser = next(row for row in result["devices"] if row["name"] == "Geyser")
+    assert geyser["connection"] == "unknown"
