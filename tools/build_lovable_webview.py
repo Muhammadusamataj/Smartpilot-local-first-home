@@ -22,34 +22,106 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from '@tanstack/react-router';
 import { getRouter } from './router';
 import './styles.css';
+type CachedDevice = {
+  name: string;
+  ecosystem: string;
+  connection: "online" | "unknown";
+  controlMode?: "manual" | "auto" | "unknown";
+};
+
+const DEVICE_NAMES = [
+  "19HFAB T3 Pro", "FF Haier 19HFAB T3", "Water Tank",
+  "First Floor Breaker", "Ground Floor", "Bore Motor", "Geyser",
+] as const;
+
 function VerifiedCachedSummary() {
-  const [summary, setSummary] = React.useState('Cached connection status unavailable');
+  const [devices, setDevices] = React.useState<CachedDevice[] | null>(null);
+  const [error, setError] = React.useState("Cached connection status unavailable");
+
   React.useEffect(() => {
     const controller = new AbortController();
-    fetch('api/pilot-next/snapshot', {
-      method: 'GET', cache: 'no-store', credentials: 'same-origin',
+    // Cache-only GET. No network reads to devices and no hardware commands.
+    fetch("api/pilot-next/snapshot", {
+      method: "GET", cache: "no-store", credentials: "same-origin",
       signal: controller.signal,
     })
       .then((response) => {
-        if (!response.ok) throw new Error('Snapshot unavailable');
+        if (!response.ok) throw new Error("Snapshot unavailable");
         return response.json();
       })
       .then((snapshot) => {
-        if (snapshot?.read_only !== true || !Array.isArray(snapshot.devices)
-            || snapshot.devices.length !== 7) return;
-        const count = snapshot.devices.filter(
-          (device) => device.connection === 'online',
-        ).length;
-        setSummary(count + '/7 verified in backend cache · Cards below are demo only');
+        if (
+          snapshot?.read_only !== true ||
+          snapshot?.hardware_commands_enabled !== false ||
+          !Array.isArray(snapshot.devices) ||
+          snapshot.devices.length !== DEVICE_NAMES.length
+        ) throw new Error("Invalid read-only snapshot");
+        const rows: CachedDevice[] = DEVICE_NAMES.map((name) => {
+          const matches = snapshot.devices.filter((item: unknown) =>
+            typeof item === "object" && item !== null &&
+            (item as { name?: unknown }).name === name);
+          if (matches.length !== 1) throw new Error("Ambiguous cached device");
+          const item = matches[0] as Partial<CachedDevice>;
+          return {
+            name,
+            ecosystem: name.includes("Haier") || name === "19HFAB T3 Pro" ? "Haier" : "Tuya",
+            connection: item.connection === "online" ? "online" : "unknown",
+            controlMode: item.controlMode === "auto" || item.controlMode === "manual"
+              ? item.controlMode : "unknown",
+          };
+        });
+        setDevices(rows);
+        setError("");
       })
-      .catch(() => { /* No status claim when backend is unavailable. */ });
+      .catch(() => {
+        if (!controller.signal.aborted) setError("Cached connection status unavailable");
+      });
     return () => controller.abort();
   }, []);
-  return <p role="status" style={{
-    background: '#101a2c', color: '#93a8c4', margin: 0, padding: '6px 14px',
-    fontSize: '11px', textAlign: 'center',
-  }}>{summary}</p>;
+
+  const verified = devices?.filter((device) => device.connection === "online").length ?? 0;
+  return (
+    <section aria-label="Real local cache status (read-only)" style={{
+      background: "#101a2c", color: "#bdcce2", padding: "8px 14px",
+      fontFamily: "system-ui, sans-serif", fontSize: 12,
+      borderBottom: "1px solid #29405a",
+    }}>
+      <details>
+        <summary style={{ cursor: "pointer", fontWeight: 600, lineHeight: 1.6 }}>
+          {devices ? verified + "/7 verified in backend cache" : error}
+          <span style={{ color: "#8d9fb8", marginLeft: 8, fontWeight: 400 }}>
+            Read-only · Device cards below are demo only · Tap for details
+          </span>
+        </summary>
+        {devices ? (
+          <ul style={{ padding: 0, margin: "8px 0 2px", listStyle: "none",
+            display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))",
+            gap: 6 }}>
+            {devices.map((device) => (
+              <li key={device.name} style={{ border: "1px solid #2a4058",
+                borderRadius: 9, padding: "7px 9px",
+                background: "rgba(255,255,255,.02)" }}>
+                <strong>{device.name}</strong>
+                <div style={{ color: device.connection === "online" ? "#88d9c3" : "#9dabc1",
+                  marginTop: 3 }}>
+                  {device.connection === "online" ? "Cache verified" : "Unknown / unverified"}
+                  {device.ecosystem === "Haier" && device.controlMode &&
+                    device.controlMode !== "unknown"
+                    ? " · " + (device.controlMode === "auto" ? "Auto" : "Manual") : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p style={{ margin: "8px 0 0" }}>
+            No device status claimed. Existing local controls remain available.
+          </p>
+        )}
+      </details>
+    </section>
+  );
 }
+
 const root = document.getElementById('pilot-next-root');
 if (!root) throw new Error('Smart Pilot SPA mount missing');
 createRoot(root).render(
