@@ -844,3 +844,16 @@ are synchronized to both packaging mirrors.
 - Final mocked Chromium capture: 60 PNGs across six viewport widths, light and dark modes, and all five tabs. No document-width overflow, hidden active panel, or uncaught page error was observed. The fixtures cover a long Tuya label and two climate slots with different verification states. Physical requests were intercepted.
 - Visual inspection of the light Devices/Settings and dark Auto-Pilot screenshots found empty amber warning outlines on the Family sharing and Haier cloud forms. Empty warning regions now collapse their margin, padding and border while retaining live status semantics. Source CSS hashes match in all three trees.
 - A separate mocked Chromium keyboard check passed all four transitions, including wrapping from Home to Settings and back. Each transition verified the focused tab, selected state, named panel, and single tab stop.
+
+### Auto-Pilot layout checkpoint
+
+Moved the local climate cards ahead of the optional cloud key renewal form in
+document order. Both Haier slots, configuration controls, form handlers and API
+calls are preserved. The 390px dark capture shows the first local card in the
+initial viewport. The refreshed 60-shot matrix reported zero width-overflow or
+panel failures and zero uncaught page errors.
+
+- `python -m pytest --basetemp ../pytest-final-mirrors tests/test_pilot_v07_static.py -q --tb=short`: 6 passed.
+- `python -m pytest --basetemp ../pytest-climate-elevated tests/test_haier_pilot.py tests/test_haier_cloud_login.py -q --tb=short`: 18 passed, including the synthetic loopback handshake. The sandboxed attempt stalled at the loopback test.
+- GitHub's latest release endpoint returned v1.20 with draft and prerelease both false.
+- Focused browser regression run started at the first checkpoint: `python -m pytest --basetemp ../pytest-browser-verified tests/test_ui.py -q -k 'local_tabs_support or local_layout_is_reachable or local_card_tap or local_critical_switch or local_scene_run or premium_local_shell' --tb=short`: 11 passed, 393 deselected in 355.61s. The later climate-order change was covered by the refreshed screenshot matrix and the Haier and mirror guards above.
