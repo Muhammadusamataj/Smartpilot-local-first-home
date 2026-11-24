@@ -1448,6 +1448,10 @@ import local_control  # noqa: E402
 
 app.register_blueprint(local_control.bp)
 
+# Opt-in offline Lovable Titanium preview. Existing /local remains the default.
+import titanium_ui  # noqa: E402
+app.register_blueprint(titanium_ui.bp)
+
 import haier_control  # noqa: E402
 app.register_blueprint(haier_control.bp)
 
