@@ -75,6 +75,17 @@ def prepare_source(folder: Path, source: Path | None) -> None:
     if source:
         if not (source / "src/router.tsx").is_file():
             raise SystemExit("Source path is not a Lovable application checkout.")
+        try:
+            revision = subprocess.check_output(
+                ["git", "-C", str(source), "rev-parse", "HEAD"], text=True,
+            ).strip()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            raise SystemExit("A verifiable Git checkout is required for --source.") from None
+        if revision != SOURCE_COMMIT:
+            raise SystemExit(
+                "Lovable source revision does not match pinned SHA. "
+                "Re-audit a newer revision before using it."
+            )
         shutil.copytree(
             source, folder, dirs_exist_ok=True,
             ignore=shutil.ignore_patterns("node_modules", ".git", "dist", ".output", ".tanstack"),
