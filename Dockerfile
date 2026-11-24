@@ -22,7 +22,7 @@ COPY requirements.txt requirements-web.txt ./
 RUN pip install -r requirements-web.txt
 
 # App
-COPY tuya_devices.py app.py wsgi.py device_cache.py device_preferences.py device_values.py lan_scan.py local_control.py haier_control.py haier_hrdp_adapter.py support_report.py updates.py pyproject.toml ./
+COPY tuya_devices.py app.py wsgi.py device_cache.py device_preferences.py device_values.py lan_scan.py local_control.py titanium_ui.py haier_control.py haier_hrdp_adapter.py support_report.py updates.py pyproject.toml ./
 COPY LICENSE NOTICE ./
 COPY haismart_hrdp ./haismart_hrdp
 COPY templates ./templates
