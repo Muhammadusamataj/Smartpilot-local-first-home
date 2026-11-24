@@ -70,3 +70,33 @@ and never issues real hardware commands. A banner links back to /local.
 - Gradually integrate only safe, permitted commands with explicit approvals.
 - Test hardware behaviors, energy readings and manual/auto override safety.
 - Run full Python/Android/frontend test suites and verified signed APK build.
+
+
+## GitHub CI workaround for blocked private-repo runner
+
+The private Lovable repository currently has GitHub Actions jobs failing before
+runner setup. To build with the Android repository's working GitHub Actions
+runner, the staging branch contains
+.github/workflows/titanium-private-source-build.yml.
+
+An owner must configure ONE secret (do not paste tokens into chat or commits):
+
+1. On GitHub create a **fine-grained, short-lived personal access token**,
+   restricted to ONLY the private repository
+   Muhammadusamataj/pixel-perfect-portrait-616, with Contents: Read.
+   No write, Actions, admin, or other repository permission is needed.
+2. In the Android repository Smartpilot-local-first-home, open:
+   Settings > Secrets and variables > Actions > New repository secret.
+   Name it LOVABLE_SOURCE_READ_TOKEN and save the token value there.
+3. Re-run the workflow
+   "Titanium private Lovable source offline build" on the staging branch,
+   or trigger a safe branch push. The workflow then checks out the EXACT
+   pinned Lovable source commit, runs frontend tests, bundles the full UI,
+   tests the read-only Flask integration, and compiles a debug APK.
+4. Verify the workflow steps and full CI are green. The CI APK remains
+   compile-only and is NEVER uploaded or treated as an installable v1.22
+   upgrade because the original pinned signer is absent in GitHub Actions.
+5. Revoke or rotate the read-only token when the integration is finished.
+
+Without this secret, the preflight intentionally FAILS with a clear blocker
+rather than incorrectly reporting the offline bundle as tested.
