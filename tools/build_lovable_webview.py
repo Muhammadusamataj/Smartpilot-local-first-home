@@ -122,7 +122,22 @@ def make_webview_build(folder: Path) -> None:
 '''
     if remote_font_link not in content:
         raise SystemExit("Unknown remote font reference. Re-audit offline resources.")
-    root.write_text(content.replace(remote_font_link, ""), encoding="utf-8")
+    content = content.replace(remote_font_link, "")
+    # The original SSR shell renders html/head/body. The offline SPA already
+    # has those tags in index.html and must not nest a second document.
+    shell = "  shellComponent: RootShell,"
+    if shell not in content:
+        raise SystemExit("Unknown SSR shell structure: re-audit before bundling.")
+    content = content.replace(shell, "  shellComponent: undefined,")
+    css_import = 'import appCss from "../styles.css?url";' + "\n"
+    css_link = ('      {\n        rel: "stylesheet",\n        href: appCss,\n      },\n')
+    if css_import not in content or css_link not in content:
+        raise SystemExit("Unknown root stylesheet HEAD entry: re-audit before bundling.")
+    # CSS is imported in src/pilot-spa.tsx, so avoid a second root-relative
+    # stylesheet URL which would not resolve at /pilot-next.
+    content = content.replace(css_import, "").replace(css_link, "")
+    content = content.replace('href: "/favicon.ico"', 'href: "icon.png"')
+    root.write_text(content, encoding="utf-8")
 
     (folder / "src/pilot-spa.tsx").write_text(SPA_ENTRY, encoding="utf-8")
     (folder / "index.html").write_text(SPA_HTML, encoding="utf-8")
