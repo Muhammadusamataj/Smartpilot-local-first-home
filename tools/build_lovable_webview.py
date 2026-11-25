@@ -140,6 +140,8 @@ SPA_HTML = """<!doctype html>
 <meta name="theme-color" content="#0b1220">
 <title>Smart Pilot | Titanium Preview</title>
 <style>
+html, body { margin: 0; overflow-x: hidden; }
+#pilot-next-root { max-width: 100vw; overflow-x: hidden; }
 .pilot-next-safety { background:#0b1220; color:#cbd5e1; font:12px/1.6 system-ui,sans-serif;
   padding:9px 14px; border-bottom:1px solid #30445d; display:flex; flex-wrap:wrap; gap:12px;
   justify-content:space-between; align-items:center; position:relative; z-index:80; }

@@ -317,7 +317,7 @@ tests/test_pilot_adapter.mjs                                (new)
 docs/LOVABLE_ANDROID_INTEGRATION.md                         (updated)
 ```
 
-Not committed (awaiting explicit authorization per staging notes): the generated `pilot-next/` Lovable WebView bundle (`index.html`, `assets/index-*.js`, `assets/index-*.css`, `SOURCE_COMMIT.txt`) and temp/build noise (`.gradle-home/`, `UI_REVIEW_TEMP/`).
+Committed in CP7: the generated `pilot-next/` Lovable WebView bundle (`index.html`, `assets/index-*.js`, `assets/index-*.css`, `SOURCE_COMMIT.txt`) mirrored byte-identically to all three runtime copies (root `static/`, Android Python source, add-on source), plus the matching `tools/build_lovable_webview.py` overflow fix. Still uncommitted: temp/build noise (`.gradle-home/`, `UI_REVIEW_TEMP/`).
 
 Verification commands and exact results:
 
@@ -360,7 +360,64 @@ Explicit exclusions honored:
 - No physical device command sent (adapter returns `delivered: false` in preview; no command POST in tests).
 - No fake device state committed (Reported<T> is known only from real reads).
 - No push, merge, tag, release, deploy, PR or Azure action performed yet (this milestone's push is the next step).
-- `pilot-next/` generated bundle not committed; awaits explicit authorization.
+- `pilot-next/` generated bundle now committed in CP7 (all three mirrors byte-identical); still preview-only and reached through the existing ✦ header link, not the default screen.
+
+## CP7 — Apply the Lovable UI bundle to the repository `[COMPLETE]`
+
+### What was actually missing
+The Lovable "Titanium Control" UI was staged as untracked files in the Android
+source tree only. The Flask route `/pilot-next`, the read-only snapshot API and
+the ✦ header link were already committed, but a fresh clone had **no bundle** —
+so the ✦ link would have served an empty page. The built v1.22 APK did contain
+the bundle inside Chaquopy `assets/chaquopy/app.imy` (6 `static/pilot-next/*`
+entries), but that artifact was built from the working tree, not from committed
+source.
+
+### Applied changes
+- Copied the pinned Lovable bundle (`SOURCE_COMMIT.txt` = `ef0f9f88…`) byte-identically to all three runtime copies: root `static/pilot-next/`, `android_offline/app/src/main/python/static/pilot-next/`, `tuya_local_key/app/static/pilot-next/`.
+- Committed the matching `tools/build_lovable_webview.py` overflow fix (`html,body{margin:0;overflow-x:hidden}` and `#pilot-next-root{max-width:100vw;overflow-x:hidden}`) so regeneration reproduces the committed `index.html`.
+- No Python backend, API, protocol, auth, device-command or template change.
+
+### Evidence
+Mirror verification (SHA-256 first 16 hex, all three copies identical):
+```
+index.html                 3E42570B5AEF7A2F | 3E42570B5AEF7A2F | 3E42570B5AEF7A2F
+SOURCE_COMMIT.txt          2E014F2CD63CE897 | 2E014F2CD63CE897 | 2E014F2CD63CE897
+assets/index-Gc5PqH-j.js    5C73C8F4D579EE5C | 5C73C8F4D579EE5C | 5C73C8F4D579EE5C
+assets/index-lhkNRLjW.css   0BF288E03DB80B47 | 0BF288E03DB80B47 | 0BF288E03DB80B47
+```
+
+```powershell
+python -m pytest tests/test_titanium_ui.py tests/test_pilot_v07_static.py -q
+```
+```text
+13 passed in 0.98s
+```
+
+Read-only mocked-browser check (`UI_REVIEW_TEMP/shot_compare.py`, local launcher,
+no hardware commands), 390px and 1280px:
+
+```
+[/local @ 390]       status=200 title='Smart Pilot · Local Devices'  overflow=False
+[/pilot-next @ 390]  status=200 title='Smart Pilot | Titanium Preview'
+                     rootChildren=3 safety=True overflow=False pageerrors=[]
+[/local @ 1280]      status=200 overflow=False
+[/pilot-next @ 1280] status=200 body starts 'Smart Pilot / Titanium Control / Overview / Devices …'
+                     overflow=False pageerrors=[]
+```
+
+APK archive proof (built v1.22, `dist/TuyaLocalKey-Offline.apk`):
+```
+assets/chaquopy/app.imy -> static/pilot-next/ (6 entries, incl. index.html,
+index-Gc5PqH-j.js, index-lhkNRLjW.css, SOURCE_COMMIT.txt)
+```
+
+### Scope boundary
+The Lovable UI remains a **preview-only** page at `/pilot-next` reached via the
+existing ✦ header link. It deliberately issues no hardware commands and the app
+still opens `/local` by default, per the safety contract. Making `/pilot-next`
+the default screen requires an explicit decision and a safe migration of the
+real command path; it is **not** done here.
 
 ## GitHub checkpoint log
 
@@ -373,6 +430,7 @@ Explicit exclusions honored:
 | CP4 | Scenes and Settings | verified; committed `4993f25`, pushed |
 | CP5 | Micro-polish and final acceptance | verified; committed `27a1deb`, pushed |
 | CP6 | Lovable typed backend adapter + v1.22 preparation | verified; committed `b1a854f3aee0d884491f3bdd3de093b76388d7b7`, pushed to `feature/smartpilot-premium-ui` |
+| CP7 | Apply Lovable UI bundle to repository (3 mirrors) | verified; pending commit/push |
 
 All five UI batches plus CP6 are on `feature/smartpilot-premium-ui`. Normal fast-forward push to `origin feature/smartpilot-premium-ui` is the next step. No PR, merge, tag, release or deploy performed.
 
