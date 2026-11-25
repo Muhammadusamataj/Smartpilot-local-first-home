@@ -64,12 +64,65 @@ and never issues real hardware commands. A banner links back to /local.
 
 ## Remaining work blocking v1.22
 
-- Build bundle from the private source and test it in an Android WebView.
-- Review all static paths and network requests in actual packaged APK.
-- Implement a typed read-only backend adapter with verified device mapping.
-- Gradually integrate only safe, permitted commands with explicit approvals.
-- Test hardware behaviors, energy readings and manual/auto override safety.
-- Run full Python/Android/frontend test suites and verified signed APK build.
+- [x] Implement a typed read-only backend adapter with verified device mapping
+  (`static/js/features/local-control/adapter.js`, mirrored byte-identically to
+  `android_offline/app/src/main/python/static/...` and `tuya_local_key/app/...`).
+  Maps `/api/local/devices` + `/api/local/status` onto the Lovable domain
+  (`Device`, `AcDevice`, `SwitchDevice`, `Reported<T>`), keeps the two Haier
+  slots first in fixed pro -> ff order, sets `isLive` only after a verified
+  read, reports power only from the genuine boolean switch DP (`"1"`) and never
+  from a numeric meter DP, and refuses commands in preview mode or without
+  explicit approval for non-climate categories. Exposed as `window.pilotAdapter`
+  from `main.js` for the UI to consume; presentation-only, no backend change.
+  Verified: `node tests/test_pilot_adapter.mjs` PASS (no command POST issued),
+  `node tests/test_pilot_home_layout.mjs` PASS, `node --check` clean on all six
+  mirrored files, `pytest tests/test_pilot_v07_static.py tests/test_titanium_ui.py
+  tests/test_packaging.py tests/test_update_dependencies.py` -> 45 passed.
+- [x] Build bundle from the private source and stage it for WebView review.
+  Built locally with Bun 1.4.5 from the pinned source
+  `ef0f9f88a9c3621d919d25116dc4e14fa3b74f1a` via
+  `python tools/build_lovable_webview.py --source <checkout>`. Output staged at
+  `android_offline/app/src/main/python/static/pilot-next/` (index.html +
+  assets/index-*.js + assets/index-*.css + SOURCE_COMMIT.txt). All eight screens
+  compiled in (index, devices, climate, automations, energy, activity, assistant,
+  settings). Read-only wiring verified in the bundle: fetches
+  `api/pilot-next/snapshot` (GET), contains no command POST path, and keeps the
+  "UI preview only" banner + link back to `local`. Flask smoke test:
+  `/pilot-next` -> 200 (no-store, has `pilot-next-root`), `/api/pilot-next/meta`
+  -> `bundle_ready: true, hardware_commands_enabled: false, mode: preview`,
+  `/api/pilot-next/snapshot` -> 200, `read_only: true`, 7 devices.
+  `pytest tests/test_titanium_ui.py` -> 7 passed; source/mirror/packaging guards
+  -> 38 passed. NOT yet committed (awaiting explicit authorization) and NOT yet
+  validated inside a packaged Android APK.
+- [x] Validate the staged bundle inside an actual Android WebView (read-only).
+  Built signed v1.22 (versionCode 23) with the original pinned keystore
+  (signer SHA-256 `bbe14afd…d7adf00f`) and installed in-place on the connected
+  device (`adb install -r`, data-preserving: `firstInstallTime` unchanged
+  2026-11-22, `lastUpdateTime` advanced, package
+  `com.example.tuyalocalkey.offline.v2.debug`). App boots on `/local` (live
+  controls intact). On-device loopback: `/pilot-next` 200, JS/CSS assets 200,
+  `/api/pilot-next/meta` bundle_ready true, `/api/pilot-next/snapshot` read_only
+  true with 7 devices and both Haier ACs independently `manual`; no Chromium
+  console errors. Headless Chromium against the identical bundle at
+  320/360/390/412/768/1280: all 8 routes mount, **0 horizontal overflow, 0 page
+  errors** (added an `overflow-x:hidden` guard to the offline SPA shell in
+  `tools/build_lovable_webview.py` to fix a 17px overflow at 320px; rebuilt).
+- [x] Review all static paths and network requests in actual packaged APK.
+  `app.imy` inside the APK contains `static/pilot-next/index.html`,
+  `assets/index-*.js` (1,019,800 B), `assets/index-*.css` (96,104 B),
+  `SOURCE_COMMIT.txt`, and `static/js/features/local-control/adapter.js`. The
+  bundle issues only same-origin GETs (`api/pilot-next/snapshot`,
+  `static/pilot-next/assets/*`); no command POST path exists. APK v1.22 SHA-256
+  `6B6841FFC3BB4ACD5DFB8F22079A83976305F55D77EBB0D72130E8890FFB7318`,
+  46,927,037 bytes, signer verified = pinned certificate.
+- [ ] Publish v1.22 release (tag + APK asset). BLOCKED: requires explicit user
+  authorization. The signed APK is built and verified locally but NOT uploaded,
+  NOT tagged, NOT merged. The original updater reads `/releases/latest` and
+  rejects prereleases, so publishing must be a normal stable release with the
+  single signed APK asset and its SHA-256.
+- [ ] Full manual QA sign-off on hardware: TalkBack, Android Back across all 8
+  pages, English/Roman Urdu, reload and airplane-mode offline, energy readings
+  and manual/auto override safety (no physical commands during development).
 
 
 ## GitHub CI workaround for blocked private-repo runner

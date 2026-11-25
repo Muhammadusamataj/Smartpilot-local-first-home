@@ -3,7 +3,13 @@
 
 import { api, debounce, esc, LimitedConcurrency, toast } from "./api.js";
 import { capabilities, deviceIcon } from "./model.js";
+import { adapter } from "./adapter.js";
 import { commandsInFlight, renderPoints, renderSwitch, updatePoints } from "./controls.js";
+
+// Typed local-backend adapter (Lovable domain over the real /api/local/* API).
+// isLive stays false until a verified LAN read succeeds; hardware actuation
+// remains disabled until explicitly authorized.
+window.pilotAdapter = adapter;
 import { homeTile, sortHomeItems, showOnHome, isHomeEditing, setHomeEditing, homeAction, moveHomeTile } from "./home-layout.js";
 import {
   deleteScene, loadScenes, mountSceneEditor, renderSceneList, runScene, saveScene,

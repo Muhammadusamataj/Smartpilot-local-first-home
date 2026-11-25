@@ -330,8 +330,9 @@ A batch or the full sprint is complete only when all applicable criteria pass wi
 | CP3 | Auto-Pilot | `c276b7c` | pushed to `origin/feature/smartpilot-premium-ui` |
 | CP4 | Scenes and Settings | `4993f25` | pushed to `origin/feature/smartpilot-premium-ui` |
 | CP5 | Micro-polish and final acceptance | `27a1deb` | pushed to `origin/feature/smartpilot-premium-ui` |
+| CP6 | Lovable typed backend adapter + v1.22 preparation | (pending push) | not yet pushed; local HEAD `4df3b41` + working-tree v1.22/adapter changes |
 
-Final push verified: local and remote `HEAD` both `27a1debd3441f234db05fa120539bf37e8550e97`, branch in sync. No PR, merge, tag, release or deploy performed.
+Final push verified: local and remote `HEAD` both `27a1debd3441f234db05fa120539bf37e8550e97`, branch in sync. No PR, merge, tag, release or deploy performed. CP6 source changes are verified locally; pushing them to `origin/feature/smartpilot-premium-ui` is the next checkpoint step.
 
 ---
 

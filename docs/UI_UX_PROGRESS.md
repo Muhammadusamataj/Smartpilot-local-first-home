@@ -292,6 +292,76 @@ Decision:
 
 ---
 
+## Lovable typed backend adapter + v1.22 preparation `[COMPLETE]`
+
+### Planned work
+- Map the Lovable typed domain (`Device`, `AcDevice`, `SwitchDevice`, `Reported<T>`, `DeviceCommand`, `CommandResult`) onto the existing `/api/local/*` Flask backend via a new presentation-layer adapter (`static/js/features/local-control/adapter.js`), byte-mirrored to the Android and add-on source copies.
+- Wire `window.pilotAdapter` from `local-control/main.js` (all three mirrors kept byte-identical).
+- Keep real hardware commands disabled: `isLive` flips only after a verified LAN read; preview mode returns "Preview only — Not sent to device."; `requiresApproval` devices refuse commands without explicit approval.
+- Bump Android metadata to v1.22 (`versionCode 23`, `versionName '1.22'`) preserving package identity and pinned signer.
+- Add `tests/test_pilot_adapter.mjs` (no network, no command POST) and update `docs/LOVABLE_ANDROID_INTEGRATION.md`.
+
+### Evidence
+
+New/changed source files (presentation only; no Python backend, API, protocol, key, auth or safety change):
+
+```
+static/js/features/local-control/adapter.js                 (new)
+android_offline/app/src/main/python/static/js/features/local-control/adapter.js   (mirror)
+tuya_local_key/app/static/js/features/local-control/adapter.js                    (mirror)
+static/js/features/local-control/main.js                    (adapter import + window.pilotAdapter)
+android_offline/app/src/main/python/static/js/features/local-control/main.js   (mirror)
+tuya_local_key/app/static/js/features/local-control/main.js                    (mirror)
+android_offline/app/build.gradle                            (versionCode 22 -> 23, versionName 1.21 -> 1.22)
+tests/test_pilot_adapter.mjs                                (new)
+docs/LOVABLE_ANDROID_INTEGRATION.md                         (updated)
+```
+
+Not committed (awaiting explicit authorization per staging notes): the generated `pilot-next/` Lovable WebView bundle (`index.html`, `assets/index-*.js`, `assets/index-*.css`, `SOURCE_COMMIT.txt`) and temp/build noise (`.gradle-home/`, `UI_REVIEW_TEMP/`).
+
+Verification commands and exact results:
+
+```powershell
+node tests/test_pilot_adapter.mjs
+```
+```text
+Adapter read-only mapping, verified-only power, preview and approval gating: PASS
+```
+
+```powershell
+node tests/test_pilot_home_layout.mjs
+```
+```text
+Home layout state, reorder, hide, restore and escaping: PASS
+```
+
+```powershell
+python -m pytest tests/test_pilot_v07_static.py tests/test_titanium_ui.py tests/test_packaging.py tests/test_update_dependencies.py -q
+```
+```text
+45 passed in 50.96s
+```
+
+Mirror/source-sync guard `test_web_android_and_addon_are_source_synced` passes (all three `main.js` copies byte-identical).
+
+Signed v1.22 APK artifact (built locally, NOT uploaded/tagged/released):
+
+```
+dist/TuyaLocalKey-Offline.apk   46,927,037 bytes
+dist/SmartPilot-Local.apk       46,927,037 bytes
+SHA-256: 6B6841FFC3BB4ACD5DFB8F22079A83976305F55D77EBB0D72130E8890FFB7318
+package: com.example.tuyalocalkey.offline.v2.debug
+versionCode: 23   versionName: 1.22
+signer SHA-256: bbe14afd137fa6617ade862ea53d6ab0c34ddbf23e1f582bd602651dd7adf00f (pinned, matches)
+scheme v2: verified, 1 signer
+```
+
+Explicit exclusions honored:
+- No physical device command sent (adapter returns `delivered: false` in preview; no command POST in tests).
+- No fake device state committed (Reported<T> is known only from real reads).
+- No push, merge, tag, release, deploy, PR or Azure action performed yet (this milestone's push is the next step).
+- `pilot-next/` generated bundle not committed; awaits explicit authorization.
+
 ## GitHub checkpoint log
 
 | Checkpoint | Milestone | Status |
@@ -302,8 +372,9 @@ Decision:
 | CP3 | Auto-Pilot | verified; committed `c276b7c`, pushed |
 | CP4 | Scenes and Settings | verified; committed `4993f25`, pushed |
 | CP5 | Micro-polish and final acceptance | verified; committed `27a1deb`, pushed |
+| CP6 | Lovable typed backend adapter + v1.22 preparation | verified; about to commit and push to `feature/smartpilot-premium-ui` |
 
-All five UI batches are pushed. Normal fast-forward push to `origin feature/smartpilot-premium-ui` was explicitly approved and completed.
+All five UI batches plus CP6 are on `feature/smartpilot-premium-ui`. Normal fast-forward push to `origin feature/smartpilot-premium-ui` is the next step. No PR, merge, tag, release or deploy performed.
 
 ### Final push evidence
 
