@@ -372,7 +372,7 @@ Explicit exclusions honored:
 | CP3 | Auto-Pilot | verified; committed `c276b7c`, pushed |
 | CP4 | Scenes and Settings | verified; committed `4993f25`, pushed |
 | CP5 | Micro-polish and final acceptance | verified; committed `27a1deb`, pushed |
-| CP6 | Lovable typed backend adapter + v1.22 preparation | verified; about to commit and push to `feature/smartpilot-premium-ui` |
+| CP6 | Lovable typed backend adapter + v1.22 preparation | verified; committed `b1a854f3aee0d884491f3bdd3de093b76388d7b7`, pushed to `feature/smartpilot-premium-ui` |
 
 All five UI batches plus CP6 are on `feature/smartpilot-premium-ui`. Normal fast-forward push to `origin feature/smartpilot-premium-ui` is the next step. No PR, merge, tag, release or deploy performed.
 
