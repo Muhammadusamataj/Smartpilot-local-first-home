@@ -1603,3 +1603,172 @@ button, input, select, textarea { font: inherit; }
     forced-color-adjust: none;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* 10. Lovable "Midnight Titanium" reskin (tokens only)                       */
+/* -------------------------------------------------------------------------- */
+/* Port of the pinned Lovable design system onto the existing local-control
+   DOM. This is a token override, not a new cascade layer: every rule above
+   reads these variables, so the whole interface adopts the Titanium palette
+   without adding !important flags or changing a single id, class, handler,
+   data attribute, API call or device behaviour.
+
+   WebView-safe: hex/rgba only. The Lovable source uses oklch()/color-mix(),
+   which older Android WebViews cannot parse, so each value is pre-computed
+   here. --bg is deliberately untouched: tests/test_ui.py pins the computed
+   body background to rgb(8,16,35) / rgb(237,245,252). */
+
+/* Match the specificity of pilot-theme.css's dark block so source order wins. */
+:root:not([data-theme="light"]) {
+  --ti-primary: #7dd3fc;
+  --ti-cobalt: #8b7cf6;
+  --ti-emerald: #5eead4;
+  --ti-warning: #fbbf24;
+  --ti-danger: #fb7185;
+  --ti-glass: rgba(40, 54, 82, .55);
+  --ti-glass-strong: rgba(28, 40, 64, .86);
+  --ti-glass-border: rgba(165, 210, 255, .16);
+
+  --accent: var(--ti-primary);
+  --accent-fg: #0a1c2e;
+  --ok: var(--ti-emerald);
+  --warn: var(--ti-warning);
+  --off: var(--ti-danger);
+  --muted: #a8b8cf;
+  --border: rgba(165, 210, 255, .15);
+  --card: #16233c;
+
+  --ds-accent: var(--ti-primary);
+  --ds-accent-2: var(--ti-cobalt);
+  --lum-accent: var(--ti-primary);
+  --lum-accent-2: var(--ti-cobalt);
+  --ds-surface: var(--ti-glass);
+  --ds-surface-strong: var(--ti-glass-strong);
+  --ds-line: var(--ti-glass-border);
+  --ds-line-strong: rgba(165, 210, 255, .28);
+  --lum-glass: var(--ti-glass);
+  --lum-glass-strong: var(--ti-glass-strong);
+  --lum-line: var(--ti-glass-border);
+
+  --pm-radius-md: 14px;
+  --pm-radius-lg: 16px;
+  --pm-radius-xl: 20px;
+  --pm-shadow-1: 0 1px 0 rgba(255, 255, 255, .06) inset,
+                 0 12px 30px -14px rgba(0, 0, 0, .55);
+  --pm-shadow-2: 0 1px 0 rgba(255, 255, 255, .08) inset,
+                 0 22px 48px -18px rgba(0, 0, 0, .60);
+  --pm-accent-soft: rgba(125, 211, 252, .14);
+  --pm-accent-line: rgba(125, 211, 252, .38);
+  --pm-ok-soft: rgba(94, 234, 212, .14);
+  --pm-warn-soft: rgba(251, 191, 36, .15);
+  --pm-danger-soft: rgba(251, 113, 133, .15);
+  --pm-focus: var(--ti-primary);
+  --pm-eyebrow: var(--ti-primary);
+  --pm-muted-strong: #c2d0e2;
+  --pm-status-ok: var(--ti-emerald);
+  --pm-status-warn: var(--ti-warning);
+  --pm-status-danger: var(--ti-danger);
+}
+
+/* Explicit light theme — "Titanium Daylight". */
+:root[data-theme="light"] {
+  --ti-primary: #2563eb;
+  --ti-cobalt: #6d28d9;
+  --ti-emerald: #0f9d76;
+  --ti-warning: #b45309;
+  --ti-danger: #be123c;
+  --ti-glass: rgba(255, 255, 255, .72);
+  --ti-glass-strong: rgba(255, 255, 255, .92);
+  --ti-glass-border: rgba(37, 99, 235, .18);
+
+  --accent: var(--ti-primary);
+  --accent-fg: #ffffff;
+  --ok: var(--ti-emerald);
+  --warn: var(--ti-warning);
+  --off: var(--ti-danger);
+  --muted: #556883;
+  --border: rgba(37, 99, 235, .18);
+
+  --ds-accent: var(--ti-primary);
+  --ds-accent-2: var(--ti-cobalt);
+  --ds-surface: var(--ti-glass);
+  --ds-surface-strong: var(--ti-glass-strong);
+  --ds-line: var(--ti-glass-border);
+  --ds-line-strong: rgba(37, 99, 235, .30);
+  --lum-glass: var(--ti-glass);
+  --lum-glass-strong: var(--ti-glass-strong);
+  --lum-line: var(--ti-glass-border);
+
+  --pm-ok: #0f766e;
+  --pm-warn: #92400e;
+  --pm-danger: #be123c;
+  --pm-status-ok: #0f766e;
+  --pm-status-warn: #92400e;
+  --pm-status-danger: #be123c;
+  --pm-eyebrow: #1d4ed8;
+  --pm-muted-strong: #4f6076;
+  --pm-focus: #2563eb;
+  --pm-accent-soft: rgba(37, 99, 235, .10);
+  --pm-accent-line: rgba(37, 99, 235, .28);
+  --pm-ok-soft: rgba(15, 118, 110, .10);
+  --pm-warn-soft: rgba(146, 64, 14, .10);
+  --pm-danger-soft: rgba(190, 18, 60, .10);
+}
+
+/* System theme with no stored override follows the OS, matching the explicit
+   light palette above without touching --bg. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --ti-primary: #2563eb;
+    --ti-cobalt: #6d28d9;
+    --ti-emerald: #0f9d76;
+    --ti-warning: #b45309;
+    --ti-danger: #be123c;
+    --ti-glass: rgba(255, 255, 255, .72);
+    --ti-glass-strong: rgba(255, 255, 255, .92);
+    --ti-glass-border: rgba(37, 99, 235, .18);
+
+    --accent: var(--ti-primary);
+    --accent-fg: #ffffff;
+    --ok: var(--ti-emerald);
+    --warn: var(--ti-warning);
+    --off: var(--ti-danger);
+    --muted: #556883;
+    --border: rgba(37, 99, 235, .18);
+
+    --ds-accent: var(--ti-primary);
+    --ds-accent-2: var(--ti-cobalt);
+    --ds-surface: var(--ti-glass);
+    --ds-surface-strong: var(--ti-glass-strong);
+    --ds-line: var(--ti-glass-border);
+    --ds-line-strong: rgba(37, 99, 235, .30);
+    --lum-glass: var(--ti-glass);
+    --lum-glass-strong: var(--ti-glass-strong);
+    --lum-line: var(--ti-glass-border);
+
+    --pm-ok: #0f766e;
+    --pm-warn: #92400e;
+    --pm-danger: #be123c;
+    --pm-status-ok: #0f766e;
+    --pm-status-warn: #92400e;
+    --pm-status-danger: #be123c;
+    --pm-eyebrow: #1d4ed8;
+    --pm-muted-strong: #4f6076;
+    --pm-focus: #2563eb;
+    --pm-accent-soft: rgba(37, 99, 235, .10);
+    --pm-accent-line: rgba(37, 99, 235, .28);
+    --pm-ok-soft: rgba(15, 118, 110, .10);
+    --pm-warn-soft: rgba(146, 64, 14, .10);
+    --pm-danger-soft: rgba(190, 18, 60, .10);
+  }
+}
+
+/* Icon buttons must not flex-shrink below the 44px touch target at the
+   desktop/tablet breakpoint (721-760px is where the dock returns to inline).
+   The search field absorbs the remaining space instead. */
+@media (min-width: 721px) {
+  .appbar .icon-btn {
+    flex: 0 0 44px !important;
+    min-width: 44px !important;
+  }
+}
