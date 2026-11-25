@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Export pinned Lovable React UI as offline, preview-only WebView SPA.
+"""Export pinned Lovable React UI as an offline, live WebView SPA.
+
+The bundle talks to the existing Flask /api/local/* and /api/haier/* routes
+for reads and commands. Every hardware action keeps the backend's server-side
+safety gates; nothing in this builder changes protocols, keys or API contracts.
 
 Never changes the Android entry URL, hardware endpoints, app version or signer.
 Requires Bun, Git credentials and/or a local Lovable repository checkout.
@@ -7,6 +11,8 @@ Requires Bun, Git credentials and/or a local Lovable repository checkout.
 from __future__ import annotations
 
 import argparse
+import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -17,116 +23,80 @@ TARGET = ROOT / "android_offline/app/src/main/python/static/pilot-next"
 SOURCE_URL = "https://github.com/Muhammadusamataj/pixel-perfect-portrait-616.git"
 SOURCE_COMMIT = "ef0f9f88a9c3621d919d25116dc4e14fa3b74f1a"
 
+OVERLAY_DIR = ROOT / "tools" / "lovable_full_live"
+_OVERLAY_FILES = {
+    "lib/smartpilot/adapter.ts": "adapter.ts",
+    "lib/smartpilot/store.tsx": "store.tsx",
+    "lib/smartpilot/local-backend-adapter.ts": "local-backend-adapter.ts",
+    "components/sp/DeviceSheet.tsx": "DeviceSheet.tsx",
+    "components/sp/AcControl.tsx": "AcControl.tsx",
+    "components/sp/primitives.tsx": "primitives.tsx",
+    "routes/index.tsx": "index.tsx",
+    "lib/smartpilot/backend-api.ts": "backend-api.ts",
+    "routes/devices.tsx": "devices.tsx",
+    "routes/automations.tsx": "automations.tsx",
+    "routes/energy.tsx": "energy.tsx",
+    "routes/activity.tsx": "activity.tsx",
+    "routes/settings.tsx": "settings.tsx",
+    "lib/smartpilot/assistant.ts": "assistant.ts",
+    "routes/assistant.tsx": "assistant.tsx",
+}
+
+# Deterministic visible-copy patches. Anchors are pinned to the audited source
+# revision; a missing anchor or unexpected count aborts the build instead of
+# silently shipping stale preview claims. Tuples are (anchor, replacement, n).
+_STRING_PATCHES = {
+    "components/sp/AppShell.tsx": [
+        (
+            '<ShieldCheck className="size-3.5" aria-hidden /> {t("prototype")}',
+            '<ShieldCheck className="size-3.5" aria-hidden /> Live local',
+            1,
+        ),
+        (
+            "No hardware is connected. Controls are previews and never reach your devices.",
+            "Reads and commands use this app’s local backend. Critical devices still require explicit approval.",
+            1,
+        ),
+        (
+            '{t("prototype")} · {t("previewOnly")}',
+            "Live local control · verified reads only",
+            2,
+        ),
+    ],
+    "routes/climate.tsx": [
+        (
+            'import { PageHeader, PreviewBadge } from "@/components/sp/primitives";',
+            'import { LiveBadge, PageHeader } from "@/components/sp/primitives";',
+            1,
+        ),
+        ("eyebrow={<PreviewBadge />}", "eyebrow={<LiveBadge />}", 1),
+    ],
+    "routes/__root.tsx": [
+        (
+            'content: "Smart-home control prototype for Haier ACs and Smart Life devices. Preview only.",',
+            'content: "Live local control for Haier ACs and Smart Life devices.",',
+            2,
+        ),
+    ],
+    "routes/index.tsx": [
+        (
+            '"Home dashboard for your Haier ACs and Smart Life devices. Preview-only prototype.",',
+            '"Live local dashboard for your Haier ACs and Smart Life devices.",',
+            1,
+        ),
+    ],
+}
+
 SPA_ENTRY = """import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from '@tanstack/react-router';
 import { getRouter } from './router';
 import './styles.css';
-type CachedDevice = {
-  name: string;
-  ecosystem: string;
-  connection: "online" | "unknown";
-  controlMode?: "manual" | "auto" | "unknown";
-};
-
-const DEVICE_NAMES = [
-  "19HFAB T3 Pro", "FF Haier 19HFAB T3", "Water Tank",
-  "First Floor Breaker", "Ground Floor", "Bore Motor", "Geyser",
-] as const;
-
-function VerifiedCachedSummary() {
-  const [devices, setDevices] = React.useState<CachedDevice[] | null>(null);
-  const [error, setError] = React.useState("Cached connection status unavailable");
-
-  React.useEffect(() => {
-    const controller = new AbortController();
-    // Cache-only GET. No network reads to devices and no hardware commands.
-    fetch("api/pilot-next/snapshot", {
-      method: "GET", cache: "no-store", credentials: "same-origin",
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error("Snapshot unavailable");
-        return response.json();
-      })
-      .then((snapshot) => {
-        if (
-          snapshot?.read_only !== true ||
-          snapshot?.hardware_commands_enabled !== false ||
-          !Array.isArray(snapshot.devices) ||
-          snapshot.devices.length !== DEVICE_NAMES.length
-        ) throw new Error("Invalid read-only snapshot");
-        const rows: CachedDevice[] = DEVICE_NAMES.map((name) => {
-          const matches = snapshot.devices.filter((item: unknown) =>
-            typeof item === "object" && item !== null &&
-            (item as { name?: unknown }).name === name);
-          if (matches.length !== 1) throw new Error("Ambiguous cached device");
-          const item = matches[0] as Partial<CachedDevice>;
-          return {
-            name,
-            ecosystem: name.includes("Haier") || name === "19HFAB T3 Pro" ? "Haier" : "Tuya",
-            connection: item.connection === "online" ? "online" : "unknown",
-            controlMode: item.controlMode === "auto" || item.controlMode === "manual"
-              ? item.controlMode : "unknown",
-          };
-        });
-        setDevices(rows);
-        setError("");
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setError("Cached connection status unavailable");
-      });
-    return () => controller.abort();
-  }, []);
-
-  const verified = devices?.filter((device) => device.connection === "online").length ?? 0;
-  return (
-    <section aria-label="Real local cache status (read-only)" style={{
-      background: "#101a2c", color: "#bdcce2", padding: "8px 14px",
-      fontFamily: "system-ui, sans-serif", fontSize: 12,
-      borderBottom: "1px solid #29405a",
-    }}>
-      <details>
-        <summary style={{ cursor: "pointer", fontWeight: 600, lineHeight: 1.6 }}>
-          {devices ? verified + "/7 verified in backend cache" : error}
-          <span style={{ color: "#8d9fb8", marginLeft: 8, fontWeight: 400 }}>
-            Read-only · Device cards below are demo only · Tap for details
-          </span>
-        </summary>
-        {devices ? (
-          <ul style={{ padding: 0, margin: "8px 0 2px", listStyle: "none",
-            display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))",
-            gap: 6 }}>
-            {devices.map((device) => (
-              <li key={device.name} style={{ border: "1px solid #2a4058",
-                borderRadius: 9, padding: "7px 9px",
-                background: "rgba(255,255,255,.02)" }}>
-                <strong>{device.name}</strong>
-                <div style={{ color: device.connection === "online" ? "#88d9c3" : "#9dabc1",
-                  marginTop: 3 }}>
-                  {device.connection === "online" ? "Cache verified" : "Unknown / unverified"}
-                  {device.ecosystem === "Haier" && device.controlMode &&
-                    device.controlMode !== "unknown"
-                    ? " · " + (device.controlMode === "auto" ? "Auto" : "Manual") : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p style={{ margin: "8px 0 0" }}>
-            No device status claimed. Existing local controls remain available.
-          </p>
-        )}
-      </details>
-    </section>
-  );
-}
 
 const root = document.getElementById('pilot-next-root');
 if (!root) throw new Error('Smart Pilot SPA mount missing');
 createRoot(root).render(
   <React.StrictMode>
-    <VerifiedCachedSummary />
     <RouterProvider router={getRouter()} />
   </React.StrictMode>,
 );
@@ -138,7 +108,7 @@ SPA_HTML = """<!doctype html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0b1220">
-<title>Smart Pilot | Titanium Preview</title>
+<title>Smart Pilot | Titanium Live</title>
 <style>
 html, body { margin: 0; overflow-x: hidden; }
 #pilot-next-root { max-width: 100vw; overflow-x: hidden; }
@@ -147,11 +117,19 @@ html, body { margin: 0; overflow-x: hidden; }
   justify-content:space-between; align-items:center; position:relative; z-index:80; }
 .pilot-next-safety strong {color:#7dd3fc}
 .pilot-next-safety a {color:#7dd3fc;text-decoration:underline}
+/* Touch-layout target sizes for secondary text links inherited from the
+   pinned Lovable UI. Device buttons already use the 44px touch size. */
+@media (pointer: coarse) {
+  .pilot-next-safety a, header a, main a, a.sr-only {
+    display: inline-flex; align-items: center; min-height: 44px; min-width: 44px;
+  }
+  button { min-height: 44px; min-width: 44px; }
+}
 </style>
 </head>
 <body>
 <div class="pilot-next-safety" role="status">
-  <span><strong>UI preview only.</strong> Device controls here do not reach hardware.</span>
+  <span><strong>Live local control.</strong> Verified reads only; critical devices need approval. Commands use your existing local backend.</span>
   <a href="local">Open existing live controls</a>
 </div>
 <div id="pilot-next-root"></div>
@@ -173,6 +151,12 @@ export default defineConfig({
 
 
 def run(*args: str, cwd: Path | None = None) -> None:
+    # npm installs `bun` as a .cmd shim on Windows; CreateProcess cannot run
+    # that directly, so route it through cmd.exe while keeping args explicit.
+    executable = shutil.which(args[0])
+    if os.name == "nt" and executable and executable.lower().endswith((".cmd", ".bat")):
+        subprocess.run([executable, *args[1:]], cwd=cwd, check=True, shell=True)
+        return
     subprocess.run(args, cwd=cwd, check=True)
 
 
@@ -204,7 +188,44 @@ def prepare_source(folder: Path, source: Path | None) -> None:
         raise SystemExit("Missing Lovable bun.lock: refusing unpinned dependency install.")
 
 
+def apply_overlay(folder: Path) -> None:
+    """Copy the live-command patched Lovable source files into the checkout.
+
+    The pinned upstream source stays untouched; only the temp build copy is
+    patched so the exported WebView bundle uses the real local adapter.
+    """
+    if not OVERLAY_DIR.is_dir():
+        raise SystemExit(f"Missing live overlay source directory: {OVERLAY_DIR}")
+    for dest_rel, overlay_name in _OVERLAY_FILES.items():
+        src = OVERLAY_DIR / overlay_name
+        dst = folder / "src" / dest_rel
+        if not src.is_file():
+            raise SystemExit(f"Missing overlay source file: {src}")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dst)
+
+
+def apply_string_patches(folder: Path) -> None:
+    """Replace preview-only UI copy in the temp build copy with live wording."""
+    for rel_path, patches in _STRING_PATCHES.items():
+        target = folder / "src" / rel_path
+        if not target.is_file():
+            raise SystemExit(f"Missing source file for copy patch: {target}")
+        content = target.read_text(encoding="utf-8")
+        for anchor, replacement, expected in patches:
+            found = content.count(anchor)
+            if found != expected:
+                raise SystemExit(
+                    f"Copy patch anchor mismatch in {rel_path}: "
+                    f"expected {expected}, found {found}: {anchor[:60]}"
+                )
+            content = content.replace(anchor, replacement)
+        target.write_text(content, encoding="utf-8")
+
+
 def make_webview_build(folder: Path) -> None:
+    apply_overlay(folder)
+    apply_string_patches(folder)
     # Hash routing keeps navigation under /pilot-next in the WebView.
     router = folder / "src/router.tsx"
     content = router.read_text(encoding="utf-8")
@@ -249,6 +270,29 @@ def make_webview_build(folder: Path) -> None:
     (folder / "vite.pilot.config.ts").write_text(VITE_CONFIG, encoding="utf-8")
 
 
+def write_local_template(html: str) -> None:
+    """Regenerate the `/local` shell with the current asset hashes and mirrors."""
+    js_match = re.search(r'src="static/pilot-next/assets/([^"]+\.js)"', html)
+    css_match = re.search(r'href="static/pilot-next/assets/([^"]+\.css)"', html)
+    if not js_match or not css_match:
+        raise SystemExit("Built HTML has no local JS/CSS asset references.")
+    source = OVERLAY_DIR / "local_control.template.html"
+    if not source.is_file():
+        raise SystemExit(f"Missing local template source: {source}")
+    content = (source.read_text(encoding="utf-8")
+               .replace("__JS_ASSET__", js_match.group(1))
+               .replace("__CSS_ASSET__", css_match.group(1)))
+    destinations = [
+        ROOT / "templates" / "local_control.html",
+        ROOT / "android_offline/app/src/main/python/templates/local_control.html",
+        ROOT / "tuya_local_key/app/templates/local_control.html",
+    ]
+    for target in destinations:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    print("Updated /local template and mirrors with", js_match.group(1), css_match.group(1))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=None,
@@ -283,7 +327,8 @@ def main() -> None:
         if TARGET.exists():
             shutil.rmtree(TARGET)
         staging.rename(TARGET)
-        print("Offline, preview-only Titanium bundle staged in", TARGET)
+        write_local_template(html)
+        print("Offline, live Titanium bundle staged in", TARGET)
 
 
 if __name__ == "__main__":

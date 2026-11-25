@@ -1214,3 +1214,76 @@ panel failures and zero uncaught page errors.
   user-side update to v1.21 confirmed on the Vivo**. TalkBack/touch/Back hardware
   acceptance remains a separately approved activity; no physical device command
   was sent by this workflow.
+
+
+## CP9 — Live Lovable UI on `/local` + separate debug APK `[VERIFIED]`
+
+- Builder overlay: `tools/lovable_full_live/` (real `LocalBackendAdapter`,
+  store/DeviceSheet/AcControl/primitives/Home patches) applied only to the temp
+  build copy; pinned Lovable source stays at
+  `ef0f9f88a9c3621d919d25116dc4e14fa3b74f1a`.
+- Reads use existing `/api/local/devices`, `/api/local/status?id=`,
+  `/api/haier/devices`, `/api/haier/poll`. Commands use `/api/local/command`,
+  `/api/haier/command`, `/api/haier/mode`. Backend safety gates remain
+  authoritative; no Python route, protocol, key or contract was changed.
+- Three bundle mirrors byte-identical: `static/pilot-next`,
+  `android_offline/app/src/main/python/static/pilot-next`,
+  `tuya_local_key/app/static/pilot-next` (tree SHA-256
+  `5AB55A864FDC92699E64B7CA711AE6B401B5832E476041A4DDEEA3B0E7F3DFE9`).
+- `templates/local_control.html` now serves the live Lovable SPA at `/local`;
+  the full classic UI is preserved byte-for-byte as
+  `templates/local_control_classic.html` and served at `/local?classic=1`,
+  linked from the new UI's "Open classic controls" banner. All three template
+  mirrors are byte-identical.
+- `python UI_REVIEW_TEMP/check_local_routes.py`: `/local` 200 with
+  "Titanium Live"/classic link/exact body-colour pins; `/local?classic=1` 200
+  with `view-tabs` and all five `data-view` values.
+- `python -m pytest tests/test_titanium_ui.py tests/test_pilot_v07_static.py
+  tests/test_packaging.py -q` -> **28 passed**.
+- `python -m pytest tests/test_ui.py -k "premium or modular_frontend or
+  control_link" -q` -> **6 passed, 410 deselected in 72.61s**.
+- `python -m pytest tests/test_local_control.py tests/test_critical_safety.py -q`
+  -> **52 passed**.
+- `node tests/test_pilot_adapter.mjs` PASS; `node
+  tests/test_pilot_home_layout.mjs` PASS.
+- `python UI_REVIEW_TEMP/check_pilot_next_live.py`: **12/12** checkpoints PASS
+  (320/360/390/412/768/1280 x dark/light; 0 overflow, 0 page errors, 0
+  sub-44px targets). Shots in `UI_REVIEW_TEMP/shots_live/`.
+- `python UI_REVIEW_TEMP/check_pilot_next_commands.py`: mocked approval and
+  command payloads verified — local
+  `{"device_id":"sw-1","dp":"1","value":true}` and Haier
+  `{"slot":"pro","command":"mode","value":"cool"}`; `NO_UNEXPECTED_WRITES True`,
+  `PAGE_ERRORS []`. Physical device commands sent: **0**.
+- APK: `python -u build_offline_apk.py --sdk-root
+  'C:\Users\abc\AppData\Local\Android\Sdk'` -> BUILD SUCCESSFUL, pinned
+  signer `bbe14afd137fa6617ade862ea53d6ab0c34ddbf23e1f582bd602651dd7adf00f`.
+  `dist/SmartPilot-Local.apk`: package
+  `com.example.tuyalocalkey.offline.v2.debug`, versionCode 24, versionName 1.23,
+  46,931,244 bytes, SHA-256
+  `ACDF318B0D727E68CDB8A6CF230BE1C98FEF4AFDE07C86A738C0D7B0226DD635` (from the
+  build immediately before the final template swap; rebuilt again after it).
+- Wireless ADB pairing/install on the Vivo was performed with the user's
+  explicit instruction: `adb pair 192.168.100.21:42707 <code>` ->
+  "Successfully paired", `adb install -r dist\SmartPilot-Local.apk` ->
+  "Success". On-device screenshot `UI_REVIEW_TEMP/phone_local_final.png`
+  confirms the Lovable UI rendering at `/local`.
+- No release, tag, PR, merge, deploy, force-push or stable-branch change.
+
+
+### CP9 on-device screen review (final APK)
+
+- `adb install -r dist\SmartPilot-Local.apk` -> Success. Wireless ADB device
+  `adb-10FF3H02QE0004Y...` connected.
+- Navigation-only screenshots in `UI_REVIEW_TEMP/phone_screens/`:
+  `00_overview.png` (live banner, Customize, Refresh status, Ask Smart Pilot),
+  `devices.png` (Add device, LAN scan, Homes & rooms, 6 verified devices),
+  `climate.png` / `climate_cloud.png` (AC status, AC setup, Read now, Pause Auto 2h,
+  Strong airflow, Optional cloud key renewal with **Last renewed 2026-11-26 02:26:43**),
+  `assistant.png` (dynamic Smart Auto-Pilot, advisory-only banner),
+  `automations_final.png` (Scenes/Scheduler/Rules/Activity tabs, New scene),
+  `energy.png`, `activity.png`, `settings.png`, `more_menu.png`.
+- The renewal timestamp proves the new silent auto-renew ran on-device from the
+  saved refresh token; no password was stored or shown.
+- Physical device controls (power, scene run, scheduler tick) were NOT tapped on
+  the phone; those paths were verified only with mocked /api/** responses
+  (LOCAL_SWITCH_COMMAND_OK / HAIER_MODE_COMMAND_OK True, 0 unexpected writes).

@@ -447,7 +447,7 @@ def test_card_layout_supports_bulk_selection(page):
 
 
 def test_control_link_opens_the_local_page_focused_on_that_device(page, server):
-    page.goto(f"{server}local?device={quote(PLUG.id)}")
+    page.goto(f"{server}local?classic=1&device={quote(PLUG.id)}")
     page.wait_for_function("document.getElementById('deviceSearch')?.value.length > 0")
 
     expect(page.locator("#deviceSearch")).to_have_value(PLUG.name)
@@ -6042,7 +6042,7 @@ def test_premium_local_shell_shows_home_by_default_and_loads_the_module(page, se
     _mock_local_routes(page, devices=devices, scenes=scenes)
     requests = []
     page.on("request", lambda request: requests.append(request.url))
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
 
     expect(page.locator('[data-view-panel="home"]')).to_be_visible()
     for view in ("devices", "autopilot", "scenes", "settings"):
@@ -6091,7 +6091,7 @@ def test_local_card_tap_opens_device_details_sheet(page, server):
     device["room_name"] = "Study"
     _mock_local_routes(page, devices=[device], status=status,
                        command=command, command_posts=commands)
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
     expect(page.locator('[data-view-panel="home"]')).to_be_visible()
 
     card = page.locator('#homeQuickDevices .pilot-home-tile[data-home-key="tuya:sheet-plug"]')
@@ -6138,7 +6138,7 @@ def test_local_palette_is_presentation_only_and_persists(page, server):
         {"dp": "1", "code": "switch", "type": "bool", "value": False, "cloud_value": False},
     ]
     _mock_local_routes(page, devices=[_local_device("plug-palette", "Plug", points=points)])
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
     page.locator('[data-view="devices"]').click()
     page.locator("#settingsBtn").click()
 
@@ -6165,7 +6165,7 @@ def test_local_favorite_posts_preferences_and_filters_the_devices(page, server):
     _mock_local_routes(page,
                        devices=[_local_device("plug-a", "Plug A"), _local_device("plug-b", "Plug B")],
                        preferences_posts=posts)
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
     page.locator('[data-view="devices"]').click()
 
     star = page.locator('#devices .tile[data-id="plug-a"] [data-fav]')
@@ -6200,7 +6200,7 @@ def test_local_capability_control_and_reading_command_is_confirmed(page, server)
 
     _mock_local_routes(page, devices=[_local_device("plug-live", "Living Plug", points=points)],
                        status=status, command=command, command_posts=commands)
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
     page.locator('[data-view="devices"]').click()
 
     card = page.locator('#devices .tile[data-id="plug-live"]')
@@ -6239,7 +6239,7 @@ def test_local_critical_switch_requires_two_deliberate_taps(page, server):
                            product_name="Breaker", points=points)
     _mock_local_routes(page, devices=[device], status=status,
                        command=command, command_posts=commands)
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
     page.locator('[data-view="devices"]').click()
 
     card = page.locator('#devices .tile[data-id="bfccb1925a4b0b269dfph5"]')
@@ -6279,7 +6279,7 @@ def test_local_scaled_and_packed_readings_render_with_real_units(page, server):
     device = _local_device("breaker-live", "Water Tank", category="dlq",
                            product_name="Breaker", points=points)
     _mock_local_routes(page, devices=[device], status=status)
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
     page.locator('[data-view="devices"]').click()
 
     card = page.locator('#devices .tile[data-id="breaker-live"]')
@@ -6306,7 +6306,7 @@ def test_local_line_current_is_shown_in_amps_but_leakage_stays_in_ma(page, serve
     device = _local_device("motor-live", "Bore Motor", category="cz",
                            product_name="Smart plug", points=points)
     _mock_local_routes(page, devices=[device], status=status)
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
     page.locator('[data-view="devices"]').click()
 
     card = page.locator('#devices .tile[data-id="motor-live"]')
@@ -6330,7 +6330,7 @@ def test_local_scene_run_reports_a_partial_failure_honestly(page, server):
     _mock_local_routes(page,
                        devices=[_local_device("plug-a", "Plug A"), _local_device("plug-b", "Plug B")],
                        scenes=scenes, scene_run=run_result)
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
     page.locator('[data-view="scenes"]').click()
 
     expect(page.locator('[data-view-panel="scenes"]')).to_be_visible()
@@ -6350,7 +6350,7 @@ def test_local_scene_run_reports_a_partial_failure_honestly(page, server):
 def test_local_small_screen_tabs_and_device_search_are_reachable(page, server):
     _mock_local_routes(page, devices=[_local_device("plug-a", "Living Room Plug")])
     page.set_viewport_size({"width": 390, "height": 844})
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
 
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     tabs = page.locator(".view-tabs [data-view]")
@@ -6393,7 +6393,7 @@ def test_local_layout_is_reachable_at_target_widths(page, server, width, scheme)
     page.set_viewport_size({"width": width, "height": 844})
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
 
     capture_dir = SHOTS_DIR.parent / "android-ui"
     capture_matrix = SHOTS_ENABLED or os.environ.get("UI_ANDROID_MATRIX") == "1"
@@ -6452,7 +6452,7 @@ def test_local_cold_start_and_resume_refresh_all_five_critical_devices(page, ser
                 status_ids.append(found.group(1))
 
     page.on("request", record_status)
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
     page.wait_for_timeout(1500)
     assert set(status_ids) == set(critical_ids)
 
@@ -6468,7 +6468,7 @@ def test_local_cold_start_and_resume_refresh_all_five_critical_devices(page, ser
 def test_local_tabs_support_keyboard_navigation(page, server):
     page.route("**/api/**", lambda route: route.fulfill(json={}))
     _mock_local_routes(page, devices=[])
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
 
     tabs = page.get_by_role("tab")
     home = tabs.nth(0)
@@ -6493,7 +6493,7 @@ def test_local_tabs_support_keyboard_navigation(page, server):
 def test_local_drawer_traps_focus_and_escape_returns_to_opener(page, server):
     page.route("**/api/**", lambda route: route.fulfill(json={}))
     _mock_local_routes(page, devices=[])
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
     page.locator('[data-view="settings"]').click()
     opener = page.locator('[data-open-drawer="appearance"]').first
     opener.click()
@@ -6525,7 +6525,7 @@ def test_local_pending_write_keeps_last_confirmed_value(page, server, reply, htt
                        status={"status": "ok", "verified": True, "values": [point]})
     held = []
     page.route("**/api/local/command", lambda route: held.append(route))
-    page.goto(f"{server}local", wait_until="networkidle")
+    page.goto(f"{server}local?classic=1", wait_until="networkidle")
     page.locator('[data-view="devices"]').click()
     control = page.locator("#devices .switch-control").last
     switch = control.get_by_role("switch")
@@ -6549,7 +6549,7 @@ def test_local_device_list_leaves_loading_for_empty_or_error(page, server, avail
     _mock_local_routes(page, devices=[])
     held = []
     page.route("**/api/local/devices", lambda route: held.append(route))
-    page.goto(f"{server}local", wait_until="domcontentloaded")
+    page.goto(f"{server}local?classic=1", wait_until="domcontentloaded")
     page.locator('[data-view="devices"]').click()
     grid = page.locator("#devices")
     expect(grid).to_have_attribute("aria-busy", "true")

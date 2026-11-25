@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Pilot · Local Devices</title>
+<link rel="icon" href="icon.png" type="image/png">
+<link rel="stylesheet" href="static/css/base.css">
+<link rel="stylesheet" href="static/css/local-control.css">
+<link rel="stylesheet" href="static/css/design-system.css">
+<link rel="stylesheet" href="static/css/lumen.css">
+<link rel="stylesheet" href="static/css/pilot-theme.css">
+<link rel="stylesheet" href="static/css/haier.css">
+<link rel="stylesheet" href="static/css/pilot-compact.css">
+<link rel="stylesheet" href="static/css/pilot-v07.css">
+<link rel="stylesheet" href="static/css/pilot-v08.css">
+<link rel="stylesheet" href="static/css/pilot-premium-ui.css">
+</head>
+<body>
+
+<header class="appbar">
+  <div class="brand pilot-brand" aria-label="Smart Pilot Tuya local devices">
+    <span class="logo" aria-hidden="true">⌁</span>
+    <div class="pilot-wordmark">SMART <em>PILOT</em><small>LOCAL-FIRST HOME</small></div>
+  </div>
+  <nav class="view-tabs" role="tablist" aria-label="Main navigation">
+    <button type="button" role="tab" id="tab-home" aria-controls="panel-home" tabindex="0" data-view="home" data-glyph="⌂" class="active" aria-selected="true">Home</button>
+    <button type="button" role="tab" id="tab-devices" aria-controls="panel-devices" tabindex="-1" data-view="devices" data-glyph="▦" aria-selected="false">Devices</button>
+    <button type="button" role="tab" id="tab-autopilot" aria-controls="panel-autopilot" tabindex="-1" data-view="autopilot" data-glyph="✧" aria-selected="false">Auto-Pilot</button>
+    <button type="button" role="tab" id="tab-scenes" aria-controls="panel-scenes" tabindex="-1" data-view="scenes" data-glyph="⚡" aria-selected="false">Scenes</button>
+    <button type="button" role="tab" id="tab-settings" aria-controls="panel-settings" tabindex="-1" data-view="settings" data-glyph="⚙" aria-selected="false">Settings</button>
+  </nav>
+  <div class="search" {% if not ready %}hidden{% endif %}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input type="search" id="deviceSearch" placeholder="Find device, room or home" aria-label="Find device">
+  </div>
+  <div class="spacer"></div>
+  <button type="button" class="icon-btn primary" id="addBtn" title="Add device" aria-label="Add device">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+  {% if titanium_preview_ready %}
+  <a href="pilot-next" class="icon-btn" title="Preview new Titanium UI (no real device commands)" aria-label="Preview Titanium UI (no real commands)" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center">✦</a>
+  {% endif %}
+  <button type="button" class="icon-btn" id="settingsBtn" title="Advanced settings" aria-label="Advanced settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.56V21h-4v-.1a1.7 1.7 0 0 0-1-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06L4.2 17l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1H3v-4h.1a1.7 1.7 0 0 0 1.56-1 1.7 1.7 0 0 0-.34-1.87L4.2 7l2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.56V3h4v.1a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06L19.8 7l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.56 1H21v4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
+</header>
+
+<main>
+  <!-- One Home template for authenticated and setup states: never render duplicate sections. -->
+  <section class="view-panel pilot-home" id="panel-home" role="tabpanel" aria-labelledby="tab-home" data-view-panel="home">
+    <div class="pilot-home-top">
+      <div><div class="pilot-eyebrow">SMART PILOT · YOUR HOME</div><h1>Home</h1><p id="summary">{% if ready %}Checking local devices…{% else %}Local control · Configure your devices{% endif %}</p></div>
+      <span class="pilot-local-pill">LOCAL FIRST</span>
+    </div>
+    <div class="pilot-home-section-head"><h2>Air conditioning <small>2 ACs</small></h2><button type="button" class="pilot-section-link" data-jump-view="autopilot">AC controls ›</button></div>
+    <div class="pilot-ac-summary-grid" data-haier-overview aria-label="Haier AC overview"></div>
+    <div class="pilot-home-section-head"><h2>Smart devices</h2><div class="pilot-home-tools"><button type="button" class="pilot-section-link" id="editHomeBtn" aria-pressed="false">Customize</button><button type="button" class="pilot-section-link" data-jump-view="devices">Devices ›</button></div></div>
+    <div id="homeQuickDevices" class="pilot-device-summary-grid" aria-live="polite"></div>
+    <p class="pilot-home-hint" id="homeEditHint" hidden>Use ↑ / ↓ (or drag on desktop) to reorder. Hide only removes a Home tile; device stays in Devices.</p>
+  </section>
+  <section class="view-panel" id="panel-devices" role="tabpanel" aria-labelledby="tab-devices" data-view-panel="devices" hidden>
+    <div class="section-head"><h2>Devices</h2><p>Search, select and control</p></div>
+    <div id="devices" class="grid" aria-busy="true">
+      <div class="ds-skeleton" aria-hidden="true"><span class="ds-skeleton-line"></span><span class="ds-skeleton-line short"></span></div>
+    </div>
+    <div class="empty-mini" id="deviceEmpty" hidden><p>No devices match these filters.</p></div>
+  </section>
+
+  <section class="view-panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" data-view-panel="settings" hidden>
+    <div class="section-head"><h2>Settings</h2><p>Network, appearance and safe configuration</p></div>
+    <div class="pilot-settings-grid" aria-label="Settings shortcuts">
+      <button type="button" class="pilot-setting-tile" data-open-drawer="network"><b>⌁ Network &amp; Scan</b><small>LAN reconnect, IP checks and diagnostics</small></button>
+      <button type="button" class="pilot-setting-tile" data-open-drawer="appearance"><b>◐ Appearance</b><small>Dark/Light theme and colour palette</small></button>
+      <button type="button" class="pilot-setting-tile" data-open-drawer="add"><b>＋ Manage devices</b><small>Add devices, room names and local connection</small></button>
+    </div>
+    <div data-family-hub></div>
+    <div class="panel">
+      <p class="note">LAN keys stay encrypted in the device cache. This page never sends them back to the browser. Live status here means a device answered on your local network — a saved IP alone is never shown as online.</p>
+      <p class="note" style="margin-top:10px">Scenes and schedules run on the server. Closing this WebView or phone does not stop a server-side schedule, but schedules need an always-on PC, Home Assistant add-on, or trusted hub.</p>
+      <button type="button" class="btn" data-open-drawer="network" style="margin-top:12px">Open network &amp; scan settings →</button>
+    </div>
+
+    <div class="section-head" style="margin-top:20px"><h2>Safety &amp; Automation</h2><p>On-device rules, schedules, usage and updates</p></div>
+    <div class="pilot-extras-grid">
+      <div class="panel pilot-extra-card">
+        <h3>Schedules</h3>
+        <div id="schedulerInfo" class="pilot-extra-body">Checking…</div>
+        <button type="button" class="btn" id="schedulerTick" style="margin-top:8px">Run due scenes now</button>
+      </div>
+      <div class="panel pilot-extra-card">
+        <h3>Safety rules</h3>
+        <div id="rulesInfo" class="pilot-extra-body">Loading…</div>
+        <div class="pilot-rule-presets">
+          <button type="button" class="btn" data-rule-preset="motor">Motor: OFF after 30 min ON</button>
+          <button type="button" class="btn" data-rule-preset="geyser">Geyser: OFF after 60 min ON</button>
+        </div>
+      </div>
+      <div class="panel pilot-extra-card">
+        <h3>Usage &amp; verification</h3>
+        <div id="usageInfo" class="pilot-extra-body">Loading…</div>
+      </div>
+      <div class="panel pilot-extra-card">
+        <h3>Activity</h3>
+        <div id="eventsInfo" class="pilot-extra-body">Loading…</div>
+      </div>
+      <div class="panel pilot-extra-card">
+        <h3>Backup &amp; restore</h3>
+        <div class="pilot-extra-body">
+          <p class="note">Keys remain encrypted inside the downloaded ZIP. Keep the file offline and restore only on this app.</p>
+          <div class="pilot-inline-actions">
+            <button type="button" class="btn" id="backupDownload">Download backup</button>
+            <label class="btn" for="restoreFile">Restore…</label>
+            <input type="file" id="restoreFile" accept=".zip,application/zip" hidden>
+          </div>
+        </div>
+      </div>
+      <div class="panel pilot-extra-card" id="updateCard">
+        <h3>App updates &amp; rollback</h3>
+        <div id="updateInfo" class="pilot-extra-body">Checking GitHub Releases…</div>
+        <div class="pilot-inline-actions">
+          <button type="button" class="btn" id="updateCheck">Check for update</button>
+          <button type="button" class="btn" id="updateInstall" hidden>Install update</button>
+          <button type="button" class="btn" id="updateRollback" hidden>Roll back</button>
+          <button type="button" class="btn" id="updatePermission" hidden>Allow install</button>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="view-panel" id="panel-autopilot" role="tabpanel" aria-labelledby="tab-autopilot" data-view-panel="autopilot" hidden>
+    <div class="pilot-eyebrow">HAIER · DIRECT LOCAL NETWORK</div>
+    <div class="pilot-headline"><div><h1>Climate Control</h1><p>No Home Assistant required for the direct LAN link</p></div><span class="pilot-local-pill">● OFFLINE READY*</span></div>
+    <div class="haier-intro"><div><h2>My Haier ACs</h2><p>Private Wi-Fi · Manual and Auto</p></div><span class="haier-tag">LIVE DATA ONLY</span></div>
+    <div class="haier-grid" data-haier-cards></div>
+    <div data-haier-cloud-login></div>
+    <div class="panel"><p class="note">*Local LAN key aur Wi-Fi zaroori hain. Internet nahi. Home Assistant integration ko same waqt poll na karne dein. Unknown models ki writes blocked hain; winter heat abhi disabled hai. Android par background Auto-Pilot phone/OS restrictions ki wajah se 24/7 guaranteed nahi.</p></div>
+  </section>
+
+  <section class="view-panel pilot-scenes-view" id="panel-scenes" role="tabpanel" aria-labelledby="tab-scenes" data-view-panel="scenes" hidden>
+    <div class="pilot-scenes-nav">
+      <div><div class="pilot-eyebrow">SMART PILOT · ACTIONS</div><h1>Scenes &amp; Schedules</h1><p>Group actions and optional server timers</p></div>
+      <span class="pilot-local-pill">LOCAL SCENES</span>
+    </div>
+{% if ready %}
+    <div class="section-head"><h2>Saved scenes</h2><p>Run or manage scenes</p></div>
+    <div id="sceneList"></div>
+    <div class="section-head"><h2>Scene editor</h2><p>Only real DPs from saved devices</p></div>
+    <div class="panel" id="sceneEditor"></div>
+{% else %}
+    <div class="panel"><p class="note">Add a Tuya device first to create scenes.</p></div>
+{% endif %}
+  </section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" aria-hidden="true" tabindex="-1">
+  <div class="drawer-head">
+    <h2 id="drawerTitle">Advanced settings</h2>
+    <button type="button" class="icon-btn" id="closeDrawer" aria-label="Close">✕</button>
+  </div>
+  <div class="drawer-body">
+
+    <section class="group" id="addGroup">
+      <h3>Device add karein</h3>
+      <div class="note" style="margin-bottom:10px">Local key aur IP se device directly LAN par chalega. Cloud request nahi hoga.</div>
+      <form id="addForm">
+        <div class="field"><label for="devName">Device name</label><input id="devName" required placeholder="e.g. Living Room Plug" maxlength="60"></div>
+        <div class="field"><label for="devId">Device ID</label><input id="devId" required placeholder="Tuya device id" maxlength="64"></div>
+        <div class="field"><label for="devKey">Local key (16–32 characters)</label><input id="devKey" required placeholder="0123456789abcdef" maxlength="32"></div>
+        <div class="field-row">
+          <div class="field"><label for="devIp">IP address</label><input id="devIp" required placeholder="192.168.1.50"></div>
+          <div class="field"><label for="devVersion">Version</label><select id="devVersion"><option value="auto" selected>Auto (detect)</option><option>3.5</option><option>3.4</option><option>3.3</option><option>3.2</option><option>3.1</option></select></div>
+        </div>
+        <div class="field"><label for="devDp">ON/OFF DP (usually 1)</label><input id="devDp" value="1" inputmode="numeric"></div>
+        <button class="btn primary" type="submit" style="width:100%">Save device</button>
+      </form>
+    </section>
+
+    <section class="group">
+      <h3>Homes &amp; rooms</h3>
+      <p class="note" style="margin-bottom:10px">Names are saved locally only. They never become device credentials.</p>
+      <div id="organizeList"></div>
+      <button type="button" class="btn" id="saveOrganize" style="width:100%;margin-top:8px">Save home &amp; room names</button>
+    </section>
+
+    <section class="group">
+      <h3>Network &amp; scan</h3>
+      <p class="network-line" id="networkLine">Detected network: {{ subnet_hint or 'searching…' }}</p>
+      <button type="button" class="btn" id="scanBtn" style="width:100%">Auto scan network</button>
+      <span id="scanStatus" style="font-size:12px;color:var(--muted)"></span>
+      <details style="margin-top:10px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--muted)">Manually set subnet</summary>
+        <div class="scan-box">
+          <input type="text" id="scanTargets" value="{{ subnet_hint or '' }}" placeholder="192.168.1.0/24" aria-label="LAN subnet to scan">
+          <button type="button" class="btn" id="scanCustomBtn">Scan</button>
+        </div>
+      </details>
+    </section>
+
+    <section class="group">
+      <h3>Device IPs</h3>
+      <p class="note" style="margin-bottom:10px">Har device ke <b>Edit</b> se name, IP, protocol version aur (zarurat ho to) local key badal sakte hain. Version <b>Auto</b> rakhein to app pehli live read par khud version detect karke yaad kar leta hai. Saved key screen par kabhi nahi dikhti.</p>
+      <div id="ipList"><p class="note">Koi device nahi mila.</p></div>
+    </section>
+
+    <section class="group">
+      <h3>Appearance</h3>
+      <div class="switch-line"><span>Theme</span>
+        <div class="theme-switch" role="group" aria-label="Theme">
+          <button type="button" data-theme-option="system" aria-pressed="true">System</button>
+          <button type="button" data-theme-option="light" aria-pressed="false">Light</button>
+          <button type="button" data-theme-option="dark" aria-pressed="false">Dark</button>
+        </div>
+      </div>
+      <div class="switch-line"><span>Palette</span>
+        <div class="palette-switch" role="group" aria-label="Palette">
+          <button type="button" data-palette-option="midnight" aria-pressed="true">Midnight</button>
+          <button type="button" data-palette-option="frost" aria-pressed="false">Frost</button>
+          <button type="button" data-palette-option="rose" aria-pressed="false">Rose</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="group">
+      <h3>Behaviour</h3>
+      <div class="switch-line"><span>Auto refresh (silent)</span><label class="switch"><input type="checkbox" id="autoRefresh" checked><span class="track"><span class="thumb"></span></span></label></div>
+      <button type="button" class="btn" id="refreshAll" style="width:100%">Refresh all now</button>
+      <p class="note" style="margin-top:12px">
+        IP aur protocol ek baar save ho gaye to app unhi se chalata hai. Network badalne par khud hi thoda reconnect karta hai — baar baar scan karne ki zarurat nahi.
+      </p>
+    </section>
+
+    <section class="group">
+      <h3>Remote access</h3>
+      {% if home_assistant %}
+      <p class="note">Remote access ka best tareeka: Home Assistant me <b>Tailscale add-on</b> (ya WireGuard) chalayein aur is add-on ko <b>ingress</b> se kholein. HA auth + Tailscale dono milkar secure remote access dete hain — app ko directly internet par kholne ki zarurat nahi.</p>
+      {% elif tailscale_url %}
+      <p class="note">Direct Tailscale access enabled hai. Apne tailnet ke kisi bhi device par ye URL kholein:</p>
+      <p style="font-size:12px;word-break:break-all;margin:8px 0"><a href="{{ tailscale_url }}" style="color:var(--accent)">{{ tailscale_url }}</a></p>
+      {% else %}
+      <p class="note">Direct Tailscale binding default me band hai. Remote access ke liye Home Assistant add-on + Tailscale/WireGuard use karein. Desktop par chahin to <code>--tailscale</code> flag se direct binding on kar sakte hain.</p>
+      {% endif %}
+    </section>
+
+    <section class="group">
+      <h3>Setup (alag screen)</h3>
+      <p class="note" style="margin-bottom:10px">QR login, Smart Life device list aur advanced scan ab yahan alag hain. Roz ke liye yahi Devices screen khulti hai.</p>
+      <a class="btn" href="./" style="width:100%;display:block;text-align:center">Setup / Smart Life login →</a>
+    </section>
+
+  </div>
+</aside>
+
+<aside class="drawer device-sheet" id="deviceSheet" role="dialog" aria-modal="true" aria-labelledby="deviceSheetTitle" aria-describedby="deviceSheetSubtitle" aria-hidden="true" tabindex="-1">
+  <div class="drawer-head">
+    <div class="drawer-title">
+      <h2 id="deviceSheetTitle">Device</h2>
+      <p id="deviceSheetSubtitle">Live controls and settings</p>
+    </div>
+    <button type="button" class="icon-btn" id="closeDeviceSheet" aria-label="Close device details">✕</button>
+  </div>
+  <div class="drawer-body" id="deviceSheetBody"></div>
+</aside>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="static/js/shared/theme.js"></script>
+<script type="module" src="static/js/shared/palette.js"></script>
+<script type="module" src="static/js/features/local-control/main.js"></script>
+<script type="module" src="static/js/features/local-control/haier.js"></script>
+<script type="module" src="static/js/features/local-control/family.js"></script>
+<script type="module" src="static/js/features/local-control/extras.js"></script>
+</body>
+</html>

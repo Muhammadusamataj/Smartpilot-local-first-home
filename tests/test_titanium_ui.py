@@ -66,8 +66,8 @@ def test_builder_is_source_pinned():
     assert "sendCommand(" not in script
 
 
-def test_offline_builder_rewrites_ssr_shell_without_device_commands(tmp_path):
-    """Static UI conversion must not introduce HTTP APIs or nested HTML shell."""
+def test_offline_builder_rewrites_ssr_shell_for_live_webview(tmp_path):
+    """Static UI conversion must keep hash routing and a live local banner."""
     from importlib.util import module_from_spec, spec_from_file_location
 
     path = BACKEND.parents[4] / "tools/build_lovable_webview.py"
@@ -101,7 +101,46 @@ def test_offline_builder_rewrites_ssr_shell_without_device_commands(tmp_path):
         '      },\n'
         '    ],\n'
         '  shellComponent: RootShell,\n'
-        '};\n',
+        '};\n'
+        'content: "Smart-home control prototype for Haier ACs and Smart Life devices. Preview only.",\n'
+        'content: "Smart-home control prototype for Haier ACs and Smart Life devices. Preview only.",\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "src/components/sp").mkdir(parents=True)
+    (tmp_path / "src/components/sp/AppShell.tsx").write_text(
+        '<ShieldCheck className="size-3.5" aria-hidden /> {t("prototype")}\n'
+        "No hardware is connected. Controls are previews and never reach your devices.\n"
+        '{t("prototype")} · {t("previewOnly")}\n'
+        '{t("prototype")} · {t("previewOnly")}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "src/routes/climate.tsx").write_text(
+        'import { PageHeader, PreviewBadge } from "@/components/sp/primitives";\n'
+        "eyebrow={<PreviewBadge />}\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "src/routes/settings.tsx").write_text(
+        'body: "Planned primary adapter. Not configured in this prototype.",\n'
+        '    status: "Not configured",\n'
+        'body: "5 devices catalogued. No account linked, no credentials stored.",\n'
+        '    status: "Not connected",\n'
+        'body: "2 ACs catalogued. The official HaiSmart app stays fully usable.",\n'
+        '    status: "Not connected",\n'
+        '<dd className="font-medium">Web UI prototype — no hardware control</dd>\n'
+        "The Android app is a separate project and is not updated by this web prototype.\n"
+        '              title="Hardware actuation"\n'
+        '              body="Disabled in this prototype. Nothing is ever sent to a device."\n'
+        '              checked={false}\n'
+        '              locked\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "src/routes/activity.tsx").write_text(
+        'import { DemoBadge, EmptyState, PageHeader, Panel, PreviewBadge } from "@/components/sp/primitives";\n'
+        '{e.source === "demo" ? <DemoBadge /> : <PreviewBadge />}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "src/routes/index.tsx").write_text(
+        '"Home dashboard for your Haier ACs and Smart Life devices. Preview-only prototype.",\n',
         encoding="utf-8",
     )
 
@@ -116,16 +155,59 @@ def test_offline_builder_rewrites_ssr_shell_without_device_commands(tmp_path):
     assert "fonts.googleapis.com" not in root
     assert "fonts.gstatic.com" not in root
     assert "/src/pilot-spa.tsx" in html
-    assert "UI preview only" in html
+    assert "Live local control" in html
+    assert "UI preview only" not in html
     assert 'href="local"' in html
+    assert "@media (pointer: coarse)" in html
+    assert "min-height: 44px" in html
     entry = (tmp_path / "src/pilot-spa.tsx").read_text(encoding="utf-8")
-    assert "api/pilot-next/snapshot" in entry
-    assert 'method: "GET"' in entry
-    assert 'method: "POST"' not in entry
-    assert "snapshot?.hardware_commands_enabled !== false" in entry
-    assert "DEVICE_NAMES" in entry
-    assert "Device cards below are demo only" in entry
+    assert "RouterProvider" in entry
+    assert "getRouter" in entry
+    assert "api/pilot-next/snapshot" not in entry
+    assert "hardware_commands_enabled" not in entry
+    assert "DEVICE_NAMES" not in entry
     assert "sendCommand(" not in entry
+    # The live overlay must land under src/ (not the repo root) for Vite.
+    overlay_adapter = tmp_path / "src/lib/smartpilot/local-backend-adapter.ts"
+    assert overlay_adapter.is_file()
+    assert "class LocalBackendAdapter" in overlay_adapter.read_text(encoding="utf-8")
+    assert not (tmp_path / "lib/smartpilot/local-backend-adapter.ts").exists()
+    home = (tmp_path / "src/routes/index.tsx").read_text(encoding="utf-8")
+    assert "connection.state" in home
+    assert "Approval-gated writes" in home
+    assert "offlineDemo" not in home
+    # Preview-only visible copy must be replaced honestly in the live bundle.
+    shell = (tmp_path / "src/components/sp/AppShell.tsx").read_text(encoding="utf-8")
+    assert "No hardware is connected" not in shell
+    assert "Live local control · verified reads only" in shell
+    assert "explicit approval" in shell
+    climate = (tmp_path / "src/routes/climate.tsx").read_text(encoding="utf-8")
+    assert "LiveBadge" in climate and "PreviewBadge" not in climate
+    settings = (tmp_path / "src/routes/settings.tsx").read_text(encoding="utf-8")
+    assert "Planned primary adapter. Not configured in this prototype." not in settings
+    assert "Unverified writes are refused by the backend." in settings
+    assert "@/lib/smartpilot/backend-api" in settings
+    activity = (tmp_path / "src/routes/activity.tsx").read_text(encoding="utf-8")
+    assert "PreviewBadge" not in activity
+    assert "LiveBadge" in activity
+
+
+def test_live_overlay_uses_existing_backend_endpoints_only():
+    """Live adapter may only call the existing Flask read/command routes."""
+    overlay = BACKEND.parents[4] / "tools/lovable_full_live"
+    adapter = (overlay / "local-backend-adapter.ts").read_text(encoding="utf-8")
+    assert 'const LOCAL = "/api/local"' in adapter
+    assert 'const HAIER = "/api/haier"' in adapter
+    assert "${LOCAL}/devices" in adapter
+    assert "${LOCAL}/status?id=" in adapter
+    assert "${LOCAL}/command" in adapter
+    assert "${HAIER}/devices" in adapter
+    assert "${HAIER}/poll" in adapter
+    assert "${HAIER}/command" in adapter
+    assert "${HAIER}/mode" in adapter
+    assert "sendCommand(" in adapter
+    assert "needs_approval" in adapter
+    assert "Waiting for a verified local read" in adapter
 
 
 

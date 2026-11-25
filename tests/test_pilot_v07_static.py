@@ -5,7 +5,7 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 
 def test_only_one_home_per_device_category_and_four_tabs():
-    html = (ROOT / 'templates/local_control.html').read_text(encoding="utf-8")
+    html = (ROOT / 'templates/local_control_classic.html').read_text(encoding="utf-8")
     tabs = re.findall(r'data-view="(home|devices|autopilot|settings)"', html)
     assert tabs == ['home', 'devices', 'autopilot', 'settings']
     assert html.count('data-view-panel="home"') == 1
@@ -27,7 +27,7 @@ def test_web_android_and_addon_are_source_synced():
 
 def test_protocol_version_offers_auto_in_add_and_edit_forms():
     """Users should not have to guess a Tuya protocol version by hand."""
-    html = (ROOT / 'templates/local_control.html').read_text(encoding='utf-8')
+    html = (ROOT / 'templates/local_control_classic.html').read_text(encoding='utf-8')
     assert '<option value="auto" selected>Auto (detect)</option>' in html
     source = (ROOT / 'static/js/features/local-control/main.js').read_text(encoding='utf-8')
     assert '<option value="auto"' in source

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0b1220">
-<title>Smart Pilot | Titanium Preview</title>
+<title>Smart Pilot | Titanium Live</title>
 <style>
 html, body { margin: 0; overflow-x: hidden; }
 #pilot-next-root { max-width: 100vw; overflow-x: hidden; }
@@ -13,13 +13,21 @@ html, body { margin: 0; overflow-x: hidden; }
   justify-content:space-between; align-items:center; position:relative; z-index:80; }
 .pilot-next-safety strong {color:#7dd3fc}
 .pilot-next-safety a {color:#7dd3fc;text-decoration:underline}
+/* Touch-layout target sizes for secondary text links inherited from the
+   pinned Lovable UI. Device buttons already use the 44px touch size. */
+@media (pointer: coarse) {
+  .pilot-next-safety a, header a, main a, a.sr-only {
+    display: inline-flex; align-items: center; min-height: 44px; min-width: 44px;
+  }
+  button { min-height: 44px; min-width: 44px; }
+}
 </style>
-  <script type="module" crossorigin src="static/pilot-next/assets/index-Gc5PqH-j.js"></script>
-  <link rel="stylesheet" crossorigin href="static/pilot-next/assets/index-lhkNRLjW.css">
+  <script type="module" crossorigin src="static/pilot-next/assets/index-BPJN-YVY.js"></script>
+  <link rel="stylesheet" crossorigin href="static/pilot-next/assets/index-d6_WCO8F.css">
 </head>
 <body>
 <div class="pilot-next-safety" role="status">
-  <span><strong>UI preview only.</strong> Device controls here do not reach hardware.</span>
+  <span><strong>Live local control.</strong> Verified reads only; critical devices need approval. Commands use your existing local backend.</span>
   <a href="local">Open existing live controls</a>
 </div>
 <div id="pilot-next-root"></div>

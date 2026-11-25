@@ -94,7 +94,7 @@ def test_dockerfile_has_home_assistant_labels_and_runtime_contract():
 
 
 def test_local_control_api_calls_work_behind_home_assistant_ingress():
-    page = (ROOT / "templates" / "local_control.html").read_text(encoding="utf-8")
+    page = (ROOT / "templates" / "local_control_classic.html").read_text(encoding="utf-8")
     api_js = (ROOT / "static" / "js" / "features" / "local-control" / "api.js").read_text(encoding="utf-8")
 
     # The template stays a thin shell; URL normalisation lives in the module.
