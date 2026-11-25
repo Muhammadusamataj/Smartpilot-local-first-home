@@ -42,12 +42,12 @@ import { AcSummaryCard } from "@/components/sp/AcControl";
 import { ConnectionPill, DeviceGlyph, Panel, PanelTitle } from "@/components/sp/primitives";
 import {
   getEvents,
+  getLocalDevices,
   getPreferences,
   getScenes,
   getUsage,
   messageOf,
   runScene,
-  savePreferences,
   type LocalPreferences,
 } from "@/lib/smartpilot/backend-api";
 import { AC_DEVICES, DEVICES, getDevice } from "@/lib/smartpilot/devices";
@@ -112,6 +112,7 @@ interface BackendEvent {
   body?: string;
 }
 
+const HOME_LAYOUT_KEY = "smartpilot:home-layout";
 const DEFAULT_TILES: HomeTile[] = [
   { id: "usage", label: "Live readings", visible: true, favorite: false },
   { id: "scenes", label: "Quick scenes", visible: true, favorite: false },
@@ -171,9 +172,9 @@ function parseEvents(raw: unknown): BackendEvent[] {
 }
 
 /**
- * `homes` carries the ordered tile list, `rooms` carries visibility and
- * `favorites` carries pinned tiles. All three are existing preference fields;
- * nothing here changes any device or backend contract.
+ * Home tile layout is local UI state only. It is kept in localStorage so it
+ * cannot overwrite the backend `homes`/`rooms`/`favorites` fields used by the
+ * Devices screen for device organization.
  */
 function applyPreferences(base: HomeTile[], prefs: LocalPreferences): HomeTile[] {
   const favorites = new Set(Array.isArray(prefs.favorites) ? prefs.favorites : []);
@@ -228,6 +229,7 @@ function Overview() {
   const [scenes, setScenes] = useState<SceneRow[]>([]);
   const [scenesError, setScenesError] = useState<string | null>(null);
   const [usage, setUsage] = useState<UsageResponse | null>(null);
+  const [backendNames, setBackendNames] = useState<Record<string, string>>({});
   const [usageLoading, setUsageLoading] = useState(true);
   const [usageError, setUsageError] = useState<string | null>(null);
   const [events, setEvents] = useState<BackendEvent[]>([]);
@@ -266,6 +268,18 @@ function Overview() {
 
   useEffect(() => {
     let alive = true;
+    try {
+      const saved = window.localStorage.getItem(HOME_LAYOUT_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as HomeTile[];
+        if (Array.isArray(parsed) && parsed.length === DEFAULT_TILES.length) {
+          setTiles(parsed);
+          return;
+        }
+      }
+    } catch {
+      // Corrupt local state must never break the dashboard.
+    }
     void getPreferences()
       .then((prefs) => {
         if (alive) setTiles(applyPreferences(DEFAULT_TILES, prefs));
@@ -282,6 +296,13 @@ function Overview() {
     void loadScenes();
     void loadUsage();
     void loadEvents();
+    void getLocalDevices()
+      .then((reply) => {
+        const map: Record<string, string> = {};
+        for (const row of reply.devices ?? []) map[row.id] = row.name;
+        setBackendNames(map);
+      })
+      .catch(() => { /* names are cosmetic; keep the raw id as fallback */ });
   }, [loadScenes, loadUsage, loadEvents]);
 
   useEffect(() => {
@@ -294,11 +315,7 @@ function Overview() {
     setSaving(true);
     setPrefsError(null);
     try {
-      const favorites = next.filter((tile) => tile.favorite).map((tile) => tile.id);
-      const rooms: Record<string, string> = {};
-      for (const tile of next) rooms[tile.id] = tile.visible ? "shown" : "hidden";
-      const homes = next.map((tile) => ({ id: tile.id, name: tile.label }));
-      await savePreferences({ favorites, rooms, homes });
+      window.localStorage.setItem(HOME_LAYOUT_KEY, JSON.stringify(next));
       setTiles(next.map((tile) => ({ ...tile })));
       setCustomizeOpen(false);
       toast("Home layout saved on this device");
@@ -382,7 +399,7 @@ function Overview() {
                 {usage.devices?.map((device) => (
                   <Reading
                     key={device.id}
-                    label={getDevice(device.id)?.name ?? device.id}
+                    label={backendNames[device.id] ?? getDevice(device.id)?.name ?? device.id}
                     value={kwhLabel(device.kwh)}
                   />
                 ))}
@@ -626,8 +643,7 @@ function Overview() {
                 <Badge variant="info">Live local</Badge>
               </p>
               <p className="text-sm text-muted-foreground">
-                Verified local reads only. Critical devices still need your explicit approval;
-                unverified devices cannot be commanded.
+                Verified local reads. Critical devices need approval before any command.
               </p>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">

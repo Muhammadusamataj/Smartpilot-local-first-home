@@ -2,7 +2,7 @@ import { DEVICES } from "./devices";
 import { adapter as liveAdapter } from "./local-backend-adapter";
 import type { CommandResult, Device, DeviceAdapter, DeviceCommand } from "./types";
 
-export const PREVIEW_MESSAGE = "Preview only — Not sent to device.";
+export const PREVIEW_MESSAGE = "Saved locally - no device command sent.";
 
 /** Kept for source-level tests: a harmless adapter that never touches hardware. */
 export class PreviewAdapter implements DeviceAdapter {

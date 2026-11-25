@@ -65,11 +65,13 @@ import {
   PanelTitle,
 } from "@/components/sp/primitives";
 import { AC_DEVICES, DEVICES } from "@/lib/smartpilot/devices";
+import { AcSetupDialog } from "@/components/sp/AcControl";
 import { adapter } from "@/lib/smartpilot/adapter";
 import { useSmartPilot } from "@/lib/smartpilot/store";
 import type { Language, ThemePref } from "@/lib/smartpilot/types";
 import { cn } from "@/lib/utils";
 import {
+  autoCheckUpdates,
   autoRenewHaierKeys,
   BACKUP_URL,
   checkUpdates,
@@ -116,7 +118,7 @@ export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
-const APP_VERSION = "0.9.0-prototype";
+const APP_VERSION = "local-live";
 const REPO = "https://github.com/Muhammadusamataj/Smartpilot-local-first-home";
 
 type Obj = Record<string, unknown>;
@@ -133,6 +135,10 @@ function str(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
 function timeLabel(value: unknown): string {
+  if (typeof value === "string" && value.trim()) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? "unknown" : parsed.toLocaleString();
+  }
   const seconds = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(seconds) || seconds <= 0) return "never";
   const date = new Date(seconds > 1e12 ? seconds : seconds * 1000);
@@ -426,6 +432,12 @@ function SettingsPage() {
     void getUpdates()
       .then((value) => { if (alive) setUpdateInfo(asObj(value)); })
       .catch(() => { /* keep the last known state */ });
+    void autoCheckUpdates()
+      .then((value) => {
+        if (alive && value) setUpdateInfo(asObj(value));
+      })
+      .catch(() => { /* background check is best-effort */ });
+    nativeCall("PilotNative", "checkUpdate");
     const previous = (window as unknown as Record<string, unknown>)["pilotUpdateResult"];
     registerUpdateCallback((result) => {
       setNativeUpdate((current) => ({ ...(current ?? {}), ...result }));
@@ -587,6 +599,7 @@ function SettingsPage() {
   // --- Haier cloud keys ------------------------------------------------------
   const cloudAction = useAction();
   const [cloudStatus, setCloudStatus] = useState<Obj | null>(null);
+  const [acSetupDevice, setAcSetupDevice] = useState<(typeof AC_DEVICES)[number] | null>(null);
   const [cloudUser, setCloudUser] = useState("");
   const [cloudPass, setCloudPass] = useState("");
   const [cloudZone, setCloudZone] = useState("");
@@ -1190,6 +1203,19 @@ function SettingsPage() {
 
         <Panel>
           <PanelTitle icon={Cloud}>Haier cloud keys <Badge variant="unknown">Optional</Badge></PanelTitle>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {AC_DEVICES.map((acDevice) => (
+              <Button
+                key={acDevice.id}
+                type="button"
+                size="touch"
+                variant="glass"
+                onClick={() => setAcSetupDevice(acDevice)}
+              >
+                <Cpu /> Setup {acDevice.name}
+              </Button>
+            ))}
+          </div>
           <div className="space-y-4">
             <div className="space-y-2">
               <PanelRow label="Cloud sign-in">
@@ -1363,7 +1389,7 @@ function SettingsPage() {
             />
             <ToggleRow
               title="Confirm AC power changes"
-              body="Ask before every AC power preview."
+              body="Ask before every AC power command."
               checked={p.confirmAcPower}
               onChange={(v) => setPrefs({ confirmAcPower: v })}
             />
@@ -1393,10 +1419,10 @@ function SettingsPage() {
             />
             <ToggleRow
               title="Hardware actuation"
-              body={adapter.isLive
+              body={connection.state === "live"
                 ? "Enabled for verified devices. Unverified writes are refused by the backend."
-                : "Disabled in this prototype. Nothing is ever sent to a device."}
-              checked={adapter.isLive}
+                : "Held until a fresh verified local read succeeds."}
+              checked={connection.state === "live"}
               locked
             />
           </div>
@@ -1459,7 +1485,7 @@ function SettingsPage() {
             </table>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            “Preview-enabled” follows the model profile; every capability must be verified on the
+            Capability labels follow each model profile. Every capability is verified on the
             real device before live use. {AC_DEVICES.length} ACs,{" "}
             {DEVICES.length - AC_DEVICES.length} Smart Life devices.
           </p>
@@ -1488,17 +1514,17 @@ function SettingsPage() {
         </Panel>
 
         <Panel>
-          <PanelTitle icon={RotateCcw}>Demo</PanelTitle>
+          <PanelTitle icon={RotateCcw}>Local UI state</PanelTitle>
           <p className="text-sm text-muted-foreground">
-            Restore AC previews, sample schedules, approvals and history. Your theme and language
+            Reset locally stored UI state, drafts and history. Your theme and language
             stay.
           </p>
           <ConfirmButton
             className="mt-4"
-            label="Reset demo"
+            label="Reset local UI state"
             icon={RotateCcw}
-            title="Reset the demo?"
-            body="Preview settings, automations, approvals, chat and history return to their defaults."
+            title="Reset local UI state?"
+            body="Local drafts, chat and history return to their defaults. No device is contacted."
             onConfirm={resetDemo}
           />
         </Panel>
@@ -1529,6 +1555,16 @@ function SettingsPage() {
             </a>
           </Button>
         </Panel>
+        {AC_DEVICES.map((acDevice) => (
+          <AcSetupDialog
+            key={acDevice.id}
+            device={acDevice}
+            slot={acDevice.name === "19HFAB T3 Pro" ? "pro" : "ff"}
+            open={acSetupDevice?.id === acDevice.id}
+            onOpenChange={(open) => { if (!open) setAcSetupDevice(null); }}
+            onSaved={() => void refreshDevices()}
+          />
+        ))}
       </div>
     </div>
   );

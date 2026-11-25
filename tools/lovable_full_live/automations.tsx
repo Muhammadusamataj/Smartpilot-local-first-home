@@ -161,6 +161,14 @@ function asArray(value: unknown): unknown[] {
 function asText(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
+function formatRunTime(value: string): string {
+  if (!value || value === "0") return "never";
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleString();
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0) return "never";
+  return new Date(seconds * 1000).toLocaleString();
+}
 function asBool(value: unknown): boolean {
   return value === true;
 }
@@ -944,7 +952,9 @@ function ScenesTab({
                 <CalendarClock className="size-3" aria-hidden />
                 {scene.schedule.enabled ? describeDays(scene.schedule.days) : "Manual"}
               </Badge>
-              {scene.last_run && <Badge variant="outline">Last run {scene.last_run}</Badge>}
+              {scene.last_run && scene.last_run !== "0" && (
+              <Badge variant="outline">Last run {formatRunTime(scene.last_run)}</Badge>
+            )}
             </div>
             <div className="mt-auto flex flex-wrap gap-2 pt-1">
               <Button

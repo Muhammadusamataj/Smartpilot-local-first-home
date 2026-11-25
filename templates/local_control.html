@@ -2,7 +2,7 @@
 {% include 'local_control_classic.html' %}
 {% else %}
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -26,17 +26,21 @@ html[data-theme="light"] body { background-color: rgb(237, 245, 252) !important;
   .pilot-next-safety a, header a, main a, a.sr-only {
     display: inline-flex; align-items: center; min-height: 44px; min-width: 44px;
   }
-  button { min-height: 44px; min-width: 44px; }
+  button, input, select, textarea { min-height: 44px; min-width: 44px; }
+
+  /* Readability on touch layouts: never clip device names, never shrink body
+     labels below 11px. Existing Tailwind classes are left untouched. */
+  @media (pointer: coarse) {
+    .truncate { white-space: normal !important; overflow: visible !important;
+                text-overflow: clip !important; overflow-wrap: anywhere; }
+    [class~="text-[10px]"] { font-size: 11px !important; }
+  }
 }
 </style>
-  <script type="module" crossorigin src="static/pilot-next/assets/index-BPJN-YVY.js"></script>
-  <link rel="stylesheet" crossorigin href="static/pilot-next/assets/index-d6_WCO8F.css">
+  <script type="module" crossorigin src="static/pilot-next/assets/index-DzpFs5Ut.js"></script>
+  <link rel="stylesheet" crossorigin href="static/pilot-next/assets/index-WRUbp16L.css">
 </head>
 <body>
-<div class="pilot-next-safety" role="status">
-  <span><strong>Live local control.</strong> Verified reads only; critical devices need approval. Commands use your existing local backend.</span>
-  <a href="local?classic=1">Open classic controls</a>
-</div>
 <div id="pilot-next-root"></div>
 
 </body>

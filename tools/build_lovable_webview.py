@@ -20,6 +20,11 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "android_offline/app/src/main/python/static/pilot-next"
+STATIC_TARGETS = [
+    TARGET,
+    ROOT / "static/pilot-next",
+    ROOT / "tuya_local_key/app/static/pilot-next",
+]
 SOURCE_URL = "https://github.com/Muhammadusamataj/pixel-perfect-portrait-616.git"
 SOURCE_COMMIT = "ef0f9f88a9c3621d919d25116dc4e14fa3b74f1a"
 
@@ -40,6 +45,7 @@ _OVERLAY_FILES = {
     "routes/settings.tsx": "settings.tsx",
     "lib/smartpilot/assistant.ts": "assistant.ts",
     "routes/assistant.tsx": "assistant.tsx",
+    "lib/smartpilot/i18n.ts": "i18n.ts",
 }
 
 # Deterministic visible-copy patches. Anchors are pinned to the audited source
@@ -103,7 +109,7 @@ createRoot(root).render(
 """
 
 SPA_HTML = """<!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -123,15 +129,19 @@ html, body { margin: 0; overflow-x: hidden; }
   .pilot-next-safety a, header a, main a, a.sr-only {
     display: inline-flex; align-items: center; min-height: 44px; min-width: 44px;
   }
-  button { min-height: 44px; min-width: 44px; }
+  button, input, select, textarea { min-height: 44px; min-width: 44px; }
+
+  /* Readability on touch layouts: never clip device names, never shrink body
+     labels below 11px. Existing Tailwind classes are left untouched. */
+  @media (pointer: coarse) {
+    .truncate { white-space: normal !important; overflow: visible !important;
+                text-overflow: clip !important; overflow-wrap: anywhere; }
+    [class~="text-[10px]"] { font-size: 11px !important; }
+  }
 }
 </style>
 </head>
 <body>
-<div class="pilot-next-safety" role="status">
-  <span><strong>Live local control.</strong> Verified reads only; critical devices need approval. Commands use your existing local backend.</span>
-  <a href="local">Open existing live controls</a>
-</div>
 <div id="pilot-next-root"></div>
 <script type="module" src="/src/pilot-spa.tsx"></script>
 </body>
@@ -282,6 +292,12 @@ def write_local_template(html: str) -> None:
     content = (source.read_text(encoding="utf-8")
                .replace("__JS_ASSET__", js_match.group(1))
                .replace("__CSS_ASSET__", css_match.group(1)))
+    for static_dir in STATIC_TARGETS:
+        for asset in (js_match.group(1), css_match.group(1)):
+            if not (static_dir / "assets" / asset).is_file():
+                raise SystemExit(
+                    f"Refusing to write /local template: {static_dir} is missing {asset}"
+                )
     destinations = [
         ROOT / "templates" / "local_control.html",
         ROOT / "android_offline/app/src/main/python/templates/local_control.html",
@@ -326,7 +342,11 @@ def main() -> None:
             SOURCE_COMMIT + "\n" + SOURCE_URL + "\n", encoding="utf-8")
         if TARGET.exists():
             shutil.rmtree(TARGET)
-        staging.rename(TARGET)
+        for static_dir in STATIC_TARGETS:
+            static_dir.parent.mkdir(parents=True, exist_ok=True)
+            if static_dir.exists():
+                shutil.rmtree(static_dir)
+            shutil.copytree(staging, static_dir)
         write_local_template(html)
         print("Offline, live Titanium bundle staged in", TARGET)
 

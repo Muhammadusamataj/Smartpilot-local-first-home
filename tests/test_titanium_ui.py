@@ -28,7 +28,7 @@ def test_missing_bundle_is_safe_and_keeps_old_controls(tmp_path, monkeypatch):
     response = client.get("/pilot-next")
     assert response.status_code == 503
     assert b"Titanium preview not bundled" in response.data
-    assert b'href="local"' in response.data
+    assert b'href="local"' not in response.data
     assert response.headers["Cache-Control"] == "no-store"
 
 
@@ -155,9 +155,9 @@ def test_offline_builder_rewrites_ssr_shell_for_live_webview(tmp_path):
     assert "fonts.googleapis.com" not in root
     assert "fonts.gstatic.com" not in root
     assert "/src/pilot-spa.tsx" in html
-    assert "Live local control" in html
+    assert "Titanium Live" in html
     assert "UI preview only" not in html
-    assert 'href="local"' in html
+    assert 'href="local"' not in html
     assert "@media (pointer: coarse)" in html
     assert "min-height: 44px" in html
     entry = (tmp_path / "src/pilot-spa.tsx").read_text(encoding="utf-8")

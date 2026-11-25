@@ -30,19 +30,22 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
     // Non-JSON replies are errors, never device state.
   }
   const data = (body && typeof body === "object" ? body : {}) as Json;
-  if (!response.ok || data.error) {
-    const code = text(data.code) || text(data.error) || `http_${response.status}`;
+  if (!response.ok || data["error"]) {
+    const code = text(data["code"]) || text(data["error"]) || `http_${response.status}`;
     throw new ApiError(code, code, response.status);
   }
   return body as T;
 }
 
 function json(method: string, url: string, body?: unknown): RequestInit {
-  return {
+  const init: RequestInit = {
     method,
     headers: { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
   };
+  // Omit the key entirely for bodyless requests: under exactOptionalPropertyTypes
+  // RequestInit.body cannot be explicitly undefined.
+  if (body !== undefined) init.body = JSON.stringify(body);
+  return init;
 }
 
 // --- Local preferences / home layout ---------------------------------------
@@ -52,6 +55,9 @@ export interface LocalPreferences {
   homes: Array<{ id: string; name: string }>;
   updated_at?: number;
 }
+
+export const getLocalDevices = () =>
+  request<{ devices: Array<{ id: string; name: string }> }>("/api/local/devices");
 
 export const getPreferences = () => request<LocalPreferences>("/api/local/preferences");
 export const savePreferences = (prefs: LocalPreferences) =>
@@ -126,6 +132,19 @@ export const restoreBackup = (file: File) => {
 export const getUpdates = () => request<Json>("/api/updates");
 export const checkUpdates = () =>
   request<Json>("/api/updates/check", json("POST", "/api/updates/check", {}));
+
+/** Background metadata check, throttled to once every 6 hours. Never installs. */
+export async function autoCheckUpdates(): Promise<Json | null> {
+  const key = "smartpilot:update-autocheck";
+  try {
+    const last = Number(window.localStorage.getItem(key) || 0);
+    if (last && Date.now() - last < 6 * 60 * 60 * 1000) return null;
+    window.localStorage.setItem(key, String(Date.now()));
+    return await checkUpdates();
+  } catch {
+    return null;
+  }
+}
 export const getSupportReport = (deviceId: string) =>
   request<Json>("/api/support-report", json("POST", "/api/support-report", { device_id: deviceId }));
 export const getAuthState = () => request<Json>("/api/state");
@@ -210,7 +229,7 @@ function native(name: string): NativeBridge | null {
 
 export function nativeUpdateState(): Json | null {
   try {
-    const raw = native("PilotNative")?.updateState?.();
+    const raw = native("PilotNative")?.["updateState"]?.();
     return raw ? (JSON.parse(String(raw)) as Json) : null;
   } catch {
     return null;
@@ -228,7 +247,7 @@ export function nativeCall(
   }
 }
 export function registerUpdateCallback(callback: (result: Json) => void): void {
-  (window as unknown as Record<string, unknown>).pilotUpdateResult = (raw: string) => {
+  (window as unknown as Record<string, unknown>)["pilotUpdateResult"] = (raw: string) => {
     try {
       callback(JSON.parse(raw) as Json);
     } catch {

@@ -12,7 +12,7 @@ import {
   PanelTitle,
   Stat,
 } from "@/components/sp/primitives";
-import { getUsage, messageOf } from "@/lib/smartpilot/backend-api";
+import { getLocalDevices, getUsage, messageOf } from "@/lib/smartpilot/backend-api";
 import { getDevice } from "@/lib/smartpilot/devices";
 
 export const Route = createFileRoute("/energy")({
@@ -85,6 +85,7 @@ function kwh(value: number | null | undefined): string {
 
 function EnergyPage() {
   const [usage, setUsage] = useState<UsageResponse | null>(null);
+  const [backendNames, setBackendNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,6 +103,13 @@ function EnergyPage() {
 
   useEffect(() => {
     void load();
+    void getLocalDevices()
+      .then((reply) => {
+        const map: Record<string, string> = {};
+        for (const row of reply.devices ?? []) map[row.id] = row.name;
+        setBackendNames(map);
+      })
+      .catch(() => { /* keep raw backend ids as fallback */ });
     const timer = window.setInterval(() => void load(), 30_000);
     return () => window.clearInterval(timer);
   }, [load]);

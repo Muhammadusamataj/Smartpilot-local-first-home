@@ -1,8 +1,7 @@
 // Presentation overlay for the Lovable /devices route.
-// Device writes stay inside DeviceSheet + useSmartPilot().sendDeviceCommand /
-// sendDpCommand. Only the management actions below call the existing Flask
-// endpoints through @/lib/smartpilot/backend-api. No device command is sent
-// from this file.
+// Quick power on the card and full controls in DeviceSheet both use
+// useSmartPilot().sendDeviceCommand / sendDpCommand. Management actions call
+// the existing Flask endpoints through @/lib/smartpilot/backend-api.
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createFileRoute, useRouterState } from "@tanstack/react-router";
 import {
@@ -13,6 +12,7 @@ import {
   Loader2,
   Pencil,
   PlugZap,
+  Power,
   Plus,
   Radar,
   RefreshCw,
@@ -45,10 +45,10 @@ import {
 } from "@/components/ui/select";
 import {
   ApprovalPill,
-  CapabilityPill,
   ConnectionPill,
   DeviceGlyph,
   EmptyState,
+  LiveBadge,
   PageHeader,
   Panel,
 } from "@/components/sp/primitives";
@@ -1193,6 +1193,76 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
+
+/** Quick power on the device card. Critical loads keep a two-tap arm gate. */
+function CardPowerToggle({ device }: { device: Device }) {
+  const { connection, sendDeviceCommand, log } = useSmartPilot();
+  const [busy, setBusy] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const timer = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+  }, []);
+
+  const target: "on" | "off" =
+    device.power.known && device.power.value === "on" ? "off" : "on";
+
+  const fire = async () => {
+    setBusy(true);
+    await sendDeviceCommand(
+      device.id,
+      { type: "power", value: target },
+      device.requiresApproval
+        ? { approvedBy: "local-user-two-tap", approvedAt: new Date().toISOString() }
+        : undefined,
+    );
+    setBusy(false);
+    setArmed(false);
+  };
+
+  const onClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (busy || connection.state === "refreshing" || device.connection !== "online") return;
+    if (device.requiresApproval && !armed) {
+      setArmed(true);
+      if (timer.current !== null) window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => setArmed(false), 4500);
+      log({
+        kind: "safety",
+        status: "warning",
+        title: `${device.name}: power ${target} armed — tap again to confirm`,
+        deviceId: device.id,
+      });
+      return;
+    }
+    void fire();
+  };
+
+  const label = armed
+    ? `Tap again to turn ${target}`
+    : device.power.known
+      ? `Turn ${device.power.value === "on" ? "off" : "on"}`
+      : "Set power";
+
+  return (
+    <button
+      type="button"
+      data-critical={device.requiresApproval ? "true" : undefined}
+      disabled={busy || connection.state === "refreshing" || device.connection !== "online"}
+      aria-label={`${label} ${device.name}`}
+      aria-busy={busy}
+      onClick={onClick}
+      onKeyDown={(event) => event.stopPropagation()}
+      className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl border border-glass-border bg-accent/40 px-3 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
+    >
+      <Power className="size-4" aria-hidden />
+      {armed ? "Confirm" : target === "on" ? "On" : "Off"}
+      {busy && <Loader2 className="size-3 animate-spin" aria-hidden />}
+    </button>
+  );
+}
+
 function DeviceCard({
   device,
   onOpen,
@@ -1215,10 +1285,17 @@ function DeviceCard({
   const { t } = useSmartPilot();
   return (
     <Panel pad="none" className="animate-rise overflow-hidden">
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onOpen}
-        className="flex w-full flex-col gap-4 p-4 text-left transition-colors hover:bg-accent/30"
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onOpen();
+          }
+        }}
+        className="flex w-full cursor-pointer flex-col gap-4 p-4 text-left transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`Open ${device.name} details`}
       >
         <div className="flex items-start gap-3">
@@ -1240,16 +1317,24 @@ function DeviceCard({
           </div>
           <div className="rounded-xl bg-muted/40 p-2">
             <p className="text-muted-foreground">{t("power")}</p>
-            <p className="mt-1 font-medium">{t("status_unknown")}</p>
+            <p className="mt-1 font-medium">
+              {device.power.known ? device.power.value.toUpperCase() : t("status_unknown")}
+            </p>
+            <div className="mt-2">
+              <CardPowerToggle device={device} />
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          {device.requiresApproval ? <ApprovalPill /> : <CapabilityPill status="supported" />}
+          {device.requiresApproval ? <ApprovalPill /> : <LiveBadge />}
           <span className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground">
-            <Clock className="size-3" aria-hidden /> never updated
+            <Clock className="size-3" aria-hidden />
+            {device.lastSeen.known
+              ? new Date(device.lastSeen.value).toLocaleTimeString()
+              : t("status_unknown")}
           </span>
         </div>
-      </button>
+      </div>
       <div className="flex flex-wrap items-center gap-1 border-t border-glass-border px-2 py-1.5">
         <Button
           variant="ghost"

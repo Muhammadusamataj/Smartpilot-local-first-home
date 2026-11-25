@@ -12,9 +12,11 @@ import { toast } from "sonner";
 
 import { AC_DEVICES, DEVICES, deviceLabel } from "./devices";
 import { defaultAcState } from "./climate";
-import { DEMO_APPROVALS, DEMO_AUTOMATIONS } from "./demo-data";
 import { translate, type I18nKey } from "./i18n";
-import { PREVIEW_MESSAGE, adapter as liveAdapter } from "./adapter";
+import { PREVIEW_MESSAGE } from "./adapter";
+// The live WebView uses the concrete adapter, which exposes the verified-read
+// and AC control methods the narrowed DeviceAdapter type does not declare.
+import { adapter as liveAdapter } from "./local-backend-adapter";
 import type { ChatMessage } from "./assistant";
 import type {
   AcPreviewState,
@@ -68,7 +70,7 @@ const STORAGE_KEY = "smartpilot:v1";
 export function initialState(): AppState {
   return {
     prefs: {
-      theme: "dark",
+      theme: "system",
       language: "en",
       overridePauseMin: 60,
       preferLocal: true,
@@ -77,8 +79,8 @@ export function initialState(): AppState {
       compactCards: false,
     },
     ac: Object.fromEntries(AC_DEVICES.map((d) => [d.id, defaultAcState()])),
-    automations: DEMO_AUTOMATIONS,
-    approvals: DEMO_APPROVALS,
+    automations: [],
+    approvals: [],
     activity: [],
     policies: { nightEco: true, noPumpGeyserOverlap: true, coolFloor24: true, ecoWhenAway: false },
     deviceAutomation: { "ac-pro": true, "ac-t3": true },
@@ -200,7 +202,7 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
         {
           id: uid(),
           at: new Date().toISOString(),
-          source: "preview" as const,
+          source: "system" as const,
           ...e,
         } as ActivityEvent,
         ...s.activity,

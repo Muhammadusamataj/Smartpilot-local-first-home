@@ -1287,3 +1287,25 @@ panel failures and zero uncaught page errors.
 - Physical device controls (power, scene run, scheduler tick) were NOT tapped on
   the phone; those paths were verified only with mocked /api/** responses
   (LOCAL_SWITCH_COMMAND_OK / HAIER_MODE_COMMAND_OK True, 0 unexpected writes).
+
+
+### CP9 deep audit fixes
+
+- Static + runtime + UX audits produced 24 UX/logic findings. Fixed:
+  name-mismatch mapping ("Ground Floor Breaker" / "Water Tank under ground"
+  now match the fixed UI labels), 7/7 verified count, stale `_isLive` latch,
+  hardcoded power/last-seen on device cards, Preview/demo strings in i18n and
+  settings, prototype version, raw backend ids in readings/energy, raw epoch in
+  Automations, optimistic AC temperature slider, Home layout vs device prefs
+  clobber, default theme now follows OS, duplicate safety banner removed,
+  44px inputs, name wrapping, 11px minimum labels, inline card power with
+  two-tap critical confirmation, AC setup consolidated into Settings, and
+  throttled automatic update check (no auto-install).
+- Builder now stages the hashed bundle into all three static mirrors and
+  refuses to write templates if an asset is missing from any mirror.
+- Strict `tsc --noEmit`: 88 errors -> 0 (one follow-up `alive` error also fixed).
+- `28 passed` guards, `52 passed` backend, `12/12` mocked browser checkpoints,
+  0 page errors, command payloads still correct.
+- Final APK installed successfully. Post-fix on-device screenshot was blocked
+  because the phone locked (no PIN available to this workflow); the previous
+  on-device screen review covers the earlier build.

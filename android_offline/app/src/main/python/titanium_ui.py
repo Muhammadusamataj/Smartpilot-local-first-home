@@ -20,8 +20,7 @@ def pilot_next_page():
             '<main style="font:16px system-ui;padding:24px;max-width:560px">'
             '<h1>Titanium preview not bundled</h1>'
             '<p>Offline Lovable assets are not installed yet. '
-            'Your current device controls are unaffected.</p>'
-            '<a href="local">Return to existing live controls</a></main></html>',
+            'Your current device controls are unaffected.</p></main></html>',
             status=503, mimetype="text/html",
             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
         )

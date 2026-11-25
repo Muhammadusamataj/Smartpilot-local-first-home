@@ -302,7 +302,7 @@ function FeatureRow({
  * discovery; the local key is masked, cleared immediately after save and never
  * rendered as text, logged or echoed in an error message.
  */
-function AcSetupDialog({
+export function AcSetupDialog({
   device,
   slot,
   open,
@@ -816,10 +816,9 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
   const caps = device.capabilities;
   const now = useNow(1000);
   // AC_DEVICES names are fixed by contract; this is the backend's slot id.
-  const slot: HaierSlot = HAIER_SLOT_BY_NAME[device.name] ?? "pro";
+  const slot: HaierSlot | undefined = HAIER_SLOT_BY_NAME[device.name];
   const [confirmPower, setConfirmPower] = useState<null | "on" | "off">(null);
   const [busy, setBusy] = useState(false);
-  const [setupOpen, setSetupOpen] = useState(false);
   const [diagnosticBusy, setDiagnosticBusy] = useState<null | "read" | "pause">(null);
   const [diagnosticError, setDiagnosticError] = useState("");
   const [diagnosticNotice, setDiagnosticNotice] = useState("");
@@ -904,6 +903,10 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
 
   /** Strict backend read: a failed read invalidates the cached verification. */
   const readNow = async () => {
+    if (!slot) {
+      setDiagnosticError("Unknown AC slot — controls are disabled.");
+      return;
+    }
     setDiagnosticBusy("read");
     setDiagnosticError("");
     setDiagnosticNotice("");
@@ -921,6 +924,10 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
 
   /** Server-side safety action: pauses Auto-Pilot for two hours on the backend. */
   const pauseAuto = async () => {
+    if (!slot) {
+      setDiagnosticError("Unknown AC slot — controls are disabled.");
+      return;
+    }
     setDiagnosticBusy("pause");
     setDiagnosticError("");
     setDiagnosticNotice("");
@@ -935,6 +942,7 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
     }
   };
 
+  const [tempDraft, setTempDraft] = useState<number | null>(null);
   const setTemp = (v: number) =>
     change({ targetTemp: clampTemp(v, caps) }, `target ${clampTemp(v, caps)}°C`);
   const timeFmt = (iso: string) =>
@@ -949,12 +957,17 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
           <h2 id={`${device.id}-title`} className="truncate text-lg font-semibold">
             {device.name}
           </h2>
-          <p className="truncate text-xs text-muted-foreground">
-            {device.model} · {t("room_not_set")}
+          <p className="break-words text-xs text-muted-foreground">
+            {device.model}
+            {device.roomTemperature.known
+              ? ` · ${device.roomTemperature.value}°C room`
+              : ""}
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             <ConnectionPill status={device.connection} />
-            <Badge variant="unknown">{t("power_unknown")}</Badge>
+            <Badge variant={device.power.known ? "info" : "unknown"}>
+              {device.power.known ? device.power.value.toUpperCase() : t("power_unknown")}
+            </Badge>
           </div>
         </div>
       </div>
@@ -1044,11 +1057,12 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
             min={caps.minTemp}
             max={caps.maxTemp}
             step={1}
-            value={[s.targetTemp]}
-            onValueCommit={(v) => setTemp(v[0] ?? s.targetTemp)}
-            onValueChange={(v) =>
-              updateAc(device.id, { targetTemp: clampTemp(v[0] ?? s.targetTemp, caps) })
-            }
+            value={[tempDraft ?? s.targetTemp]}
+            onValueCommit={(v) => {
+              setTempDraft(null);
+              setTemp(v[0] ?? s.targetTemp);
+            }}
+            onValueChange={(v) => setTempDraft(clampTemp(v[0] ?? s.targetTemp, caps))}
             aria-label={`${device.name} target temperature`}
           />
           <div className="mt-1 flex w-full max-w-xs justify-between text-[11px] text-muted-foreground tabular">
@@ -1163,23 +1177,10 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
           <Settings2 className="size-4 text-primary" aria-hidden /> Connection &amp; diagnostics
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Slot {slot.toUpperCase()} · identity and key details are stored encrypted on this phone.
+          Slot {slot ? slot.toUpperCase() : "unknown"} · setup lives in Settings.
           Every action below goes through the existing local backend; its safety gates are unchanged.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="touch"
-            variant="glass"
-            disabled={diagnosticBusy !== null || busy}
-            onClick={() => {
-              setDiagnosticError("");
-              setDiagnosticNotice("");
-              setSetupOpen(true);
-            }}
-          >
-            <Settings2 /> AC setup
-          </Button>
           <Button
             type="button"
             size="touch"
@@ -1244,18 +1245,6 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
           Off
         </Button>
       </div>
-
-      {/* Account-wide cloud panel is anchored to the fixed `pro` slot so it is
-          rendered once on the Climate page without needing a separate route. */}
-      {slot === "pro" && <HaierCloudPanel />}
-
-      <AcSetupDialog
-        device={device}
-        slot={slot}
-        open={setupOpen}
-        onOpenChange={setSetupOpen}
-        onSaved={() => void refreshDevices()}
-      />
 
       <AlertDialog open={confirmPower !== null} onOpenChange={(o) => !o && setConfirmPower(null)}>
         <AlertDialogContent>
