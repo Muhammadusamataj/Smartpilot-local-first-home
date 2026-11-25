@@ -419,6 +419,74 @@ still opens `/local` by default, per the safety contract. Making `/pilot-next`
 the default screen requires an explicit decision and a safe migration of the
 real command path; it is **not** done here.
 
+## CP8 — Lovable Titanium design ported onto /local `[VERIFIED]`
+
+### Applied
+Added section 10 to `static/css/pilot-premium-ui.css` (byte-mirrored to the
+Android and add-on source copies): a token-only reskin that maps the pinned
+Lovable "Midnight Titanium" design system onto the existing local-control DOM.
+No template, JS, backend, API, auth, protocol, device-command or data-attribute
+change. `--bg` is deliberately untouched.
+
+- Dark: cyan `#7dd3fc` primary, cobalt `#8b7cf6`, emerald `#5eead4`, amber `#fbbf24`, coral `#fb7185`; glass surface/border tokens and 14-20px radii.
+- Light and system-light: `#2563eb` primary with matching emerald/amber/danger tokens.
+- Token-only approach adds no new `!important` chains; existing rules read the overridden variables.
+- WebView-safe hex/rgba only — no `oklch()`, `color-mix()` or heavy blur.
+- Icon buttons no longer flex-shrink below 44px at tablet widths.
+
+### Evidence
+```powershell
+python -m pytest tests/test_ui.py -q -k "modular_frontend"
+```
+```text
+4 passed, 412 deselected in 9.08s   (includes exact body-background assertion in both themes)
+```
+
+```powershell
+python -m pytest tests/test_pilot_v07_static.py tests/test_titanium_ui.py tests/test_ui_power_capabilities.py tests/test_android_entry.py -q
+```
+```text
+18 passed in 0.41s
+```
+
+```powershell
+python -m pytest tests/test_ui.py -q -k "brand_exits_selection or setup_card_layouts or menu_button_is_as_tall" --tb=short
+```
+```text
+20 passed, 396 deselected in 75.09s
+```
+
+```powershell
+node tests/test_pilot_home_layout.mjs
+```
+```text
+Home layout state, reorder, hide, restore and escaping: PASS
+```
+
+Mocked read-only browser metrics (`UI_REVIEW_TEMP/check_titanium.py`), 320/390/768/1280 × dark/light:
+
+| theme | accent | ok | warn | body bg | overflow | page errors | small targets |
+|---|---|---|---|---|---|---|---|
+| dark | `#7dd3fc` | `#5eead4` | `#fbbf24` | `rgb(8,16,35)` | false | 0 | 0 |
+| light | `#2563eb` | `#0f9d76` | `#b45309` | `rgb(237,245,252)` | false | 0 | 0 |
+
+Five nav destinations remain exactly `home, devices, autopilot, scenes, settings`.
+
+Rebuilt signed v1.22 APK (contains the new CSS, verified by reading
+`assets/chaquopy/app.imy` → `static/css/pilot-premium-ui.css`; `#7dd3fc` and
+the Titanium header are present; the 6 `pilot-next` bundle entries are preserved):
+
+```text
+dist/SmartPilot-Local.apk   46,928,494 bytes
+SHA-256: 3D472C4321FED64E5782D269821C456B90D115780E6CAEE6576DFB72989A4B5E
+package: com.example.tuyalocalkey.offline.v2.debug
+versionCode: 23   versionName: 1.22
+signer SHA-256: bbe14afd137fa6617ade862ea53d6ab0c34ddbf23e1f582bd602651dd7adf00f
+APK Signature Scheme v2: Verified, 1 signer
+```
+
+Git: committed `9370425` and pushed to `origin/feature/smartpilot-premium-ui`.
+
 ## GitHub checkpoint log
 
 | Checkpoint | Milestone | Status |
@@ -430,7 +498,8 @@ real command path; it is **not** done here.
 | CP4 | Scenes and Settings | verified; committed `4993f25`, pushed |
 | CP5 | Micro-polish and final acceptance | verified; committed `27a1deb`, pushed |
 | CP6 | Lovable typed backend adapter + v1.22 preparation | verified; committed `b1a854f3aee0d884491f3bdd3de093b76388d7b7`, pushed to `feature/smartpilot-premium-ui` |
-| CP7 | Apply Lovable UI bundle to repository (3 mirrors) | verified; pending commit/push |
+| CP7 | Apply Lovable UI bundle to repository (3 mirrors) | verified; committed `957cafc11e36caa9a1bb410f14154da0da41208f`, pushed |
+| CP8 | Lovable Titanium design ported onto /local | verified; committed `9370425`, pushed; APK rebuilt and verified |
 
 All five UI batches plus CP6 are on `feature/smartpilot-premium-ui`. Normal fast-forward push to `origin feature/smartpilot-premium-ui` is the next step. No PR, merge, tag, release or deploy performed.
 
