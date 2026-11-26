@@ -1561,3 +1561,16 @@ change.
   `phase_a` uses the existing decoder; `clear_energy` stays a two-tap switch.
 - Localtuya itself has no configured devices in this HA instance; the mapping
   came from the existing Tuya entities, not from a guessed DP table.
+
+
+**v1.26 published:** https://github.com/Muhammadusamataj/Smartpilot-local-first-home/releases/tag/v1.26
+(tag `v1.26`, commit `b4cd1c6`, stable). APK SHA-256
+`41fad25d443a073a838d365186680e32d20179a7988f3101f7d4aceac0fc1919`,
+installed via `adb -s 10FF3H02QE0004Y install -r` -> Success;
+`versionCode=27`, `versionName=1.26` verified.
+
+**On-device evidence:** navigation-only screenshot
+`UI_REVIEW_TEMP/phone_v126_02.png` shows the Geyser "Verified data points"
+panel with `cur_current DP 18 ... 0 A`, `cur_power DP 19 ... 0 W` and
+`cur_voltage DP 20 ... 231.3 V`, each marked `read-only measurement` with no
+Set control. No device control was tapped.
