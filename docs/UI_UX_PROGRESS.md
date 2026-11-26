@@ -1412,3 +1412,21 @@ panel failures and zero uncaught page errors.
   were 0 control writes (only the two read-only Haier polls). Screenshot:
   `UI_REVIEW_TEMP/pilot_next_phase_readings.png`. Width/theme sweep 0/12 failed;
   guards 30/30; backend 52/52; three mirror asset hashes identical.
+
+
+### v1.24 stable release preparation (approved)
+
+- Bumped `android_offline/app/build.gradle` to `versionCode 25`,
+  `versionName '1.24'`; package identity and pinned signer are unchanged, so
+  the in-app updater can offer this build to a device on v1.23.
+- Verification recorded in `dist/TEST_RESULTS-v1.24.md`: guards 70/70, backend
+  52/52, both node checks PASS, py_compile PASS, strict `tsc` 0 errors,
+  mocked browser sweep 0/12 failed, phase/meter check 9/9 with 0 control
+  writes, command harness 0 unexpected writes, three mirror hashes identical.
+- APK: `dist/SmartPilot-Local-v1.24.apk`, 45,480,964 bytes, SHA-256
+  `c1f107f6aa05c94e3f13ed9d58a64aff3b22bd27d596118927a8b954af210bdd`,
+  signer `bbe14afd137fa6617ade862ea53d6ab0c34ddbf23e1f582bd602651dd7adf00f`,
+  `versionCode 25` / `versionName 1.24` verified with `aapt` and `apksigner`.
+- Release assets: APK, `.sha256`, `CHANGELOG-v1.24.md`, `TEST_RESULTS-v1.24.md`.
+  Only stable releases are published; no prerelease or draft is used, as both
+  the Python checker and the Android updater reject them.
