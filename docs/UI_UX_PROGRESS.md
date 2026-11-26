@@ -1477,3 +1477,87 @@ verified as `versionCode=26`, `versionName=1.25`. The automatic
 check+download+prompt path is covered by source/runtime guards and will run on
 a network with internet; it was not proven end-to-end over a stalled mobile
 connection.
+
+---
+
+## CP10 — Lovable UI clarity pass (on-device audit follow-up) `[VERIFIED]`
+
+Evidence basis: real device `10FF3H02QE0004Y` (USB + wireless ADB), installed
+package `com.example.tuyalocalkey.offline.v2.debug` `versionCode=26`,
+`versionName=1.25`. Read-only screenshots in `UI_REVIEW_TEMP/phone_screens/`
+(1080×2392). No power, temperature, scene or actuator command was sent; no
+install/uninstall was performed in this checkpoint.
+
+Audit finding addressed: the shipped bundle contained both live wording and
+stale preview/demo dictionary strings, and the installed APK still carried a
+three-line safety banner that current source had already removed.
+
+Presentation-only changes in `tools/lovable_full_live/`:
+- `i18n.ts`: replaced stale `overview_summary`, `assistant_sub`,
+  `automations_sub`, `energy_sub`, `activity_sub` in EN and Roman Urdu with
+  live, verified-read wording. No safety semantics removed.
+- `index.tsx`: default Home tiles reduced from 8 visible to 5; the three
+  secondary tiles remain reachable through Home layout customization.
+- `assistant.tsx`: shortened the advisory-only notice without changing its
+  meaning.
+- `local_control.template.html` + `build_lovable_webview.py`: added bottom
+  safe-area padding so the last card clears the fixed dock.
+
+Build and verification commands/results:
+
+```powershell
+python tools/build_lovable_webview.py
+```
+```text
+Updated /local template and mirrors with index-EdRhvyfN.js index-BSCgyXXK.css
+Offline, live Titanium bundle staged in ...
+```
+
+```powershell
+python -m pytest tests/test_titanium_ui.py tests/test_pilot_v07_static.py -q --tb=short
+```
+```text
+14 passed in 1.32s
+```
+
+```powershell
+python -m pytest tests/test_ui.py -q -k "modular_frontend" --tb=short
+```
+```text
+4 passed, 412 deselected in 10.34s
+```
+
+Stale-string check on the new bundle: all six stale phrases absent; new copy
+present. The new JS asset and both regenerated templates are byte-identical
+across root, Android and add-on mirrors (SHA-256
+`688F8496...D4FDA05` for the JS). No hardware command, install, push, merge or
+release was performed. The rebuilt bundle is **not yet installed on the
+phone**; the installed APK is still v1.25 and needs explicit install approval.
+
+Note: unrelated working-tree edits in `custom_components/mylocal_devices/*`,
+`tests/test_mylocal_integration_pure.py` and
+`tools/lovable_full_live/local-backend-adapter.ts` were present during this
+checkpoint and were not authored here; they must not be staged with this
+change.
+
+
+### Documented Tuya DP mapping (from HA entities)
+
+- Read-only inspection of the user's HA (logged in by the user in the browser)
+  exposed the real DP map on Tuya entities:
+  - Bore Motor / Geyser: `18 = cur_current`, `19 = cur_power`, `20 = cur_voltage`,
+    `22 = voltage_coe`, `24 = power_coe`.
+  - First Floor / Ground Floor Breaker / Water Tank: `6 = phase_a` (packed
+    base64), `1 = forward_energy_total`, `13 = balance_energy`,
+    `14 = energy_charge`, `15 = leakage_current`, `12 = clear_energy` switch.
+  - Example packed reports decode with the existing formula to 236.2 V /
+    15.622 A / 3.732 kW, 234.3 V / 1.975 A / 0.313 kW and 233.3 V / 0 / 0.
+- Wire scaling confirmed from the local reads themselves (2400 -> 240.0 V,
+  8393 -> 8.393 A, 18887 -> 1888.7 W; V x A matches W): current /1000,
+  voltage and power /10.
+- App adapter and HA `pure.py` now label only these documented numeric DPs,
+  only when the data itself shows the matching profile, and never overwrite a
+  code/unit the backend actually reported. Meter DPs are read-only with units;
+  `phase_a` uses the existing decoder; `clear_energy` stays a two-tap switch.
+- Localtuya itself has no configured devices in this HA instance; the mapping
+  came from the existing Tuya entities, not from a guessed DP table.

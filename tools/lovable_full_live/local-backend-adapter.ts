@@ -61,7 +61,7 @@ export interface DecodedPhase {
 const PHASE_CODE = /^phase_[abc]$/i;
 /** Measurement DPs Tuya reports but never accepts as a write target. */
 const METER_CODE =
-  /^(cur_power|cur_current|cur_voltage|add_ele\w*|total_energy|energy\w*|kwh\w*|power_consumption|phase_[abc])$/i;
+  /^(cur_power|cur_current|cur_voltage|add_ele\w*|total_energy|energy\w*|kwh\w*|power_consumption|phase_[abc]|forward_energy_total|balance_energy|energy_charge|leakage_current|voltage_coe|power_coe)$/i;
 
 export function isPhasePoint(point: { code?: string }): boolean {
   return PHASE_CODE.test(String(point.code ?? "").trim());
@@ -106,6 +106,32 @@ export const PHASE_READINGS = [
   { key: "power", label: "Power", unit: "kW", digits: 3 },
 ] as const;
 
+/**
+ * DP documentation read from the HA entities of these Tuya devices. It only
+ * labels DPs that the backend actually reports; it never creates a value.
+ * `cur_*` scaling is the documented Tuya wire scale (Vx10, mA, Wx10).
+ */
+interface DpDoc {
+  code: string;
+  unit?: string;
+  scale?: number;
+}
+const METER_DP: Record<string, DpDoc> = {
+  "18": { code: "cur_current", unit: "A", scale: 3 },
+  "19": { code: "cur_power", unit: "W", scale: 1 },
+  "20": { code: "cur_voltage", unit: "V", scale: 1 },
+  "22": { code: "voltage_coe" },
+  "24": { code: "power_coe" },
+};
+const PHASE_DP: Record<string, DpDoc> = {
+  "6": { code: "phase_a" },
+  "1": { code: "forward_energy_total" },
+  "13": { code: "balance_energy" },
+  "14": { code: "energy_charge" },
+  "15": { code: "leakage_current" },
+  "12": { code: "clear_energy" }, // documented HA reset switch, stays writable
+};
+
 /** A plain DP value formatted with the backend's own unit/scale, if any. */
 export function formatPointValue(point: LiveDpPoint): string {
   const value = point.value;
@@ -113,7 +139,8 @@ export function formatPointValue(point: LiveDpPoint): string {
   const scale = typeof point.scale === "number" ? point.scale : 0;
   if (typeof value === "number" && Number.isFinite(value)) {
     const scaled = scale > 0 ? value / 10 ** scale : value;
-    return `${Number.isInteger(scaled) ? scaled : scaled.toFixed(scaled < 1 ? 2 : 1)}${
+    const digits = scale > 0 ? Math.min(3, scale) : 1;
+    return `${Number.isInteger(scaled) ? scaled : scaled.toFixed(digits)}${
       point.unit ? ` ${point.unit}` : ""
     }`;
   }
@@ -211,6 +238,26 @@ function mergePoints(spec: JsonRecord[], values: JsonRecord[]): LiveDpPoint[] {
       type: meta.type || existing?.type || "",
       value: item["value"],
     });
+  }
+  // Two documented Tuya profiles on these devices. Apply only when the data
+  // itself shows the profile, and only to numeric-code DPs the backend left
+  // unnamed — never overwrite a real code/unit the backend reported.
+  const phaseProfile = byDp.has("6")
+    && (byDp.get("6")?.type.toLowerCase().includes("string") === true
+      || byDp.get("6")?.code.toLowerCase().includes("phase") === true);
+  const meterProfile = byDp.has("18") && byDp.has("19");
+  const docs = phaseProfile ? PHASE_DP : meterProfile ? METER_DP : undefined;
+  if (docs) {
+    for (const [dp, doc] of Object.entries(docs)) {
+      const point = byDp.get(dp);
+      if (!point || (point.code && !/^\d+$/.test(point.code))) continue;
+      byDp.set(dp, {
+        ...point,
+        code: doc.code,
+        ...(!point.unit && doc.unit ? { unit: doc.unit } : {}),
+        ...(point.scale === undefined && doc.scale !== undefined ? { scale: doc.scale } : {}),
+      });
+    }
   }
   return [...byDp.values()];
 }

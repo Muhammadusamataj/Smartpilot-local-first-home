@@ -92,6 +92,48 @@ ATTR_CURRENT = "current"
 ATTR_VOLTAGE = "voltage"
 ATTR_POWER = "power"
 
+# Documented DP map from the HA Tuya entities of these devices. Only labels
+# DPs that are actually reported; it never invents a value.
+_METER_DP = {
+    "18": ("cur_current", "A", 3),
+    "19": ("cur_power", "W", 1),
+    "20": ("cur_voltage", "V", 1),
+    "22": ("voltage_coe", "", 0),
+    "24": ("power_coe", "", 0),
+}
+_PHASE_DP = {
+    "6": ("phase_a", "", 0),
+    "1": ("forward_energy_total", "", 0),
+    "13": ("balance_energy", "", 0),
+    "14": ("energy_charge", "", 0),
+    "15": ("leakage_current", "", 0),
+    "12": ("clear_energy", "", 0),  # documented HA reset switch
+}
+
+
+def document_points(points: list[dict]) -> None:
+    """Label numeric-code DPs for the two documented Tuya meter profiles."""
+    by_dp = {str(point.get("dp") or ""): point for point in points if isinstance(point, dict)}
+    phase_dp = by_dp.get("6") or {}
+    phase_profile = (
+        "string" in str(phase_dp.get("type") or "").lower()
+        or "phase" in str(phase_dp.get("code") or "").lower()
+    )
+    meter_profile = "18" in by_dp and "19" in by_dp
+    docs = _PHASE_DP if phase_profile else _METER_DP if meter_profile else {}
+    for dp, (code, unit, scale) in docs.items():
+        point = by_dp.get(dp)
+        if not point:
+            continue
+        current = str(point.get("code") or "")
+        if current and not re.fullmatch(r"(?:DP\s*)?\d+", current, re.IGNORECASE):
+            continue  # never overwrite a real backend code
+        point["code"] = code
+        if unit and not point.get("unit"):
+            point["unit"] = unit
+        if scale and not point.get("scale"):
+            point["scale"] = scale
+
 
 def is_base64_dp(value) -> bool:
     """Recognise Tuya's packed three-phase/base64 DP payload."""
@@ -282,4 +324,5 @@ def merge_live_points(points: list[dict], values: list[dict]) -> list[dict]:
         point["cloud_value"] = value
         point["value"] = value
 
+    document_points(merged)
     return merged

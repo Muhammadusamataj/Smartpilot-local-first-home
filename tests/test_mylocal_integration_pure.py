@@ -39,6 +39,35 @@ def test_decode_ignores_non_phase_values():
     assert not pure.is_phase_code({"code": "switch_1"})
 
 
+def test_documented_dp_profiles_label_real_devices():
+    meter = pure.merge_live_points(
+        [{"dp": "18", "code": "18", "type": "integer"}],
+        [
+            {"dp": "18", "code": "18", "value": 8393},
+            {"dp": "19", "code": "19", "value": 18887},
+            {"dp": "20", "code": "20", "value": 2242},
+        ],
+    )
+    by_dp = {point["dp"]: point for point in meter}
+    assert by_dp["18"]["code"] == "cur_current"
+    assert (by_dp["18"]["unit"], by_dp["18"]["scale"]) == ("A", 3)
+    assert by_dp["19"]["code"] == "cur_power"
+    assert (by_dp["19"]["unit"], by_dp["19"]["scale"]) == ("W", 1)
+    assert by_dp["20"]["code"] == "cur_voltage"
+
+    phase = pure.merge_live_points(
+        [{"dp": "6", "code": "6", "type": "string"}],
+        [{"dp": "6", "code": "6", "value": "CToAPQYADpQ="}],
+    )
+    assert phase[0]["code"] == "phase_a"
+    # A real backend code must never be overwritten by the documentation map.
+    named = pure.merge_live_points(
+        [{"dp": "18", "code": "my_custom_code", "type": "integer"}],
+        [{"dp": "19", "code": "19", "value": 1}],
+    )
+    assert named[0]["code"] == "my_custom_code"
+
+
 def test_webview_decoder_uses_the_same_formula():
     """Source parity guard: the app must not invent a different scaling."""
     source = (
@@ -50,6 +79,10 @@ def test_webview_decoder_uses_the_same_formula():
     assert "byte(3) << 8) | byte(4)) / 1000" in source
     assert "byte(6) << 8) | byte(7)) / 1000" in source
     assert 'failure("read_only_measurement")' in source
+    assert 'code: "cur_current", unit: "A", scale: 3' in source
+    assert 'code: "cur_power", unit: "W", scale: 1' in source
+    assert 'code: "cur_voltage", unit: "V", scale: 1' in source
+    assert '"6": { code: "phase_a" }' in source
 
 
 def test_auto_download_never_installs_by_itself():

@@ -68,6 +68,16 @@ class MyLocalSensor(CoordinatorEntity, SensorEntity):
         self._dp = str(point.get("dp") or "")
         self._code = str(point.get("code") or self._dp)
         self._attr_name = name
+        raw_scale = point.get("scale")
+        self._scale = raw_scale if isinstance(raw_scale, int) and 0 <= raw_scale <= 6 else 0
+        unit = str(point.get("unit") or "")
+        if unit:
+            self._attr_native_unit_of_measurement = unit
+        device_class = {"W": SensorDeviceClass.POWER, "V": SensorDeviceClass.VOLTAGE,
+                        "A": SensorDeviceClass.CURRENT}.get(unit)
+        if device_class and self._scale:
+            self._attr_device_class = device_class
+            self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_unique_id = f"mylocal_devices_{self._device_id}_{self._dp}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._device_id)},
@@ -103,6 +113,8 @@ class MyLocalSensor(CoordinatorEntity, SensorEntity):
         value = point_value(device, point)
         if isinstance(value, (dict, list)):
             return str(value)
+        if self._scale and isinstance(value, (int, float)) and not isinstance(value, bool):
+            return round(value / 10 ** self._scale, 6)
         return value
 
     @property
