@@ -1308,7 +1308,7 @@ export function AcSummaryCard({ device }: { device: AcDevice }) {
           <p>
             {MODE_META[s.mode].label} · {FAN_LABEL[s.fan]}
           </p>
-          <p>Preview {s.power === "on" ? "On" : "Off"}</p>
+          <p>{s.power === "on" ? "On" : "Off"}</p>
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
