@@ -1335,3 +1335,15 @@ panel failures and zero uncaught page errors.
   "tailscaleUrl": ""}` (honest empty state when Tailscale is absent); classic
   route still 200 with all five `data-view` values.
 - Mocked browser: 12/12, 0 page errors; guards 28/28.
+
+
+### Tailscale direct-mode note
+
+- On-device: Tailscale installed, signed in and connected (`100.113.16.78` on
+  `tun0`), yet `tailscale_url` was empty because `LocalControlService.java:161`
+  passes the tailnet IP only when Direct mode is enabled. The UI chip saying
+  "Tailscale not connected" was inaccurate; changed to "Tailnet URL
+  unavailable" with guidance to enable Direct mode. Direct mode is deliberately
+  NOT enabled automatically (network exposure + credentials need explicit user
+  action). The native Remote panel defaults the username to `tuya` and generates
+  a random password if the field is empty (`LocalControlService.java:150-158`).
