@@ -1412,7 +1412,7 @@ function SettingsPage() {
           <PanelTitle icon={ShieldCheck}>Remote access</PanelTitle>
           <div className="flex flex-wrap gap-1.5">
             <Badge variant={tailnetUrl ? "ok" : "unknown"}>
-              <Lock className="size-3" aria-hidden /> {tailnetUrl ? "Tailnet address detected" : "Tailscale not connected"}
+              <Lock className="size-3" aria-hidden /> {tailnetUrl ? "Tailnet address detected" : "Tailnet URL unavailable"}
             </Badge>
             <Badge variant={directOn ? "ok" : "unknown"}>
               <ShieldCheck className="size-3" aria-hidden /> Direct access {directOn ? "on" : "off"}
@@ -1463,7 +1463,7 @@ function SettingsPage() {
             </div>
           ) : (
             <p className="mt-4 rounded-2xl border border-status-unknown/30 bg-status-unknown/8 p-3 text-sm" role="status">
-              No tailnet address detected on this phone. Install and sign in to Tailscale, then reopen this panel.
+              No tailnet address is exposed yet. Direct access is off — enable it below, then reopen this panel. Keep Tailscale connected on this phone.
             </p>
           )}
 
