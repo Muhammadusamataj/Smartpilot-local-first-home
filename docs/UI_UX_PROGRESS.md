@@ -1621,3 +1621,13 @@ root / Android / add-on mirrors. The installed v1.26 APK (published in
 parallel, commit `b4cd1c6`) does **not** include this UI work; it remains
 uncommitted in this checkpoint and requires a new release to reach the phone.
 No device command, install, tag or release was performed in CP11.
+
+### CP11 release
+
+**v1.27 published:** https://github.com/Muhammadusamataj/Smartpilot-local-first-home/releases/tag/v1.27
+(tag `v1.27`, target `c06df001afa9e57615fec009096561fcd2f56924`, stable,
+not draft/prerelease). Asset `SmartPilot-Local-v1.27.apk` digest
+`sha256:619fcc60c556bcdedec3b299a77bfbbee6fb1250d2893bf1ae40a5380446030a`
+matches the locally built APK; versionCode 28 / versionName 1.27 and pinned
+signer verified. No device install was performed for v1.27; the in-app updater
+must fetch it over an internet-connected network.
