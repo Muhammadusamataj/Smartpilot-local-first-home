@@ -1649,3 +1649,11 @@ must fetch it over an internet-connected network.
   app and the HA integration; a backend-reported code is never overwritten.
 - Source guards cover the history keys, the raw toggle and the Water Tank
   profile: 6/6 pure tests pass; strict `tsc` 0 errors.
+
+
+**v1.28 published:** https://github.com/Muhammadusamataj/Smartpilot-local-first-home/releases/tag/v1.28
+(tag `v1.28`, commit `d40715d`, stable). This ships the history/raw-toggle/
+Water Tank changes that were not in the separately published v1.27.
+APK SHA-256 `2a22f0948f0eb93b6768b01c34899f687eb2cf4a306c6702f21d2e9ad27c47c1`;
+installed with `adb -s 10FF3H02QE0004Y install -r` -> Success,
+`versionCode=29`, `versionName=1.28` verified. v1.27 was NOT overwritten.
