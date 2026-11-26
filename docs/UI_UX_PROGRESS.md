@@ -1694,7 +1694,7 @@ installed with `adb -s 10FF3H02QE0004Y install -r` -> Success,
 
 ---
 
-## Audit-fix pass — 2026-11-26 `[VERIFIED, not committed/pushed]`
+## Audit-fix pass — 2026-11-26 `[VERIFIED + RELEASED v1.32]`
 
 User-approved follow-up to the Apple-level audit. Presentation-only overlay
 changes, audited one file at a time against the pinned Lovable source
@@ -1741,8 +1741,25 @@ python UI_REVIEW_TEMP/check_dialog_targets.py
 Mirror hashes (all three copies identical): index.html `A5344546CB5A964D`,
 JS `0383358AC22A65AE`, CSS `0B99DB2D36AB1015`, template `9A0BA097B06F2A19`.
 
-Boundaries: no Python backend, API, protocol, key, auth, safety or Android
-source changed; no device command sent; no commit, push, tag, release, PR or
-install performed. The local mocked launcher was used only for a browser
-preview; real-app update and any preview APK install remain a separate,
-explicitly approved step.
+### Release checkpoint (explicit user approval)
+
+- Version bump: `android_offline/app/build.gradle` `versionCode 32 -> 33`,
+  `versionName '1.31' -> '1.32'`; package identity and pinned signer unchanged.
+  `pyproject.toml` deliberately unchanged (different update path).
+- Commit `15d9cac` ("release(ui): ship audited single-banner UI pass as v1.32")
+  pushed normally: `571fe7f..15d9cac feature/smartpilot-premium-ui`.
+- Signed APK: `dist/SmartPilot-Local.apk` / `dist/SmartPilot-Local-v1.32.apk`,
+  45,745,428 bytes, SHA-256
+  `0a3c308aa3ab3bb4f3214c2a57f097ac161aa631c06abb4d45218decc22d1608`,
+  signer `bbe14afd137fa6617ade862ea53d6ab0c34ddbf23e1f582bd602651dd7adf00f`.
+  `aapt2 dump badging`: package `com.example.tuyalocalkey.offline.v2.debug`,
+  `versionCode 33`, `versionName 1.32`. `app.imy` contains the new
+  `index-C203VIqW.js` / `index-Rzdt56VB.css` and not the old bundle.
+- Stable release published:
+  https://github.com/Muhammadusamataj/Smartpilot-local-first-home/releases/tag/v1.32
+  `isDraft=false`, `isPrerelease=false`, four assets (APK, `.sha256`, changelog,
+  test results). `/releases/latest` returns `v1.32`; the uploaded APK digest
+  matches the local SHA-256. No EXE asset.
+- Boundaries: no Python backend, API, protocol, key, auth, safety or device
+  command changed or sent. No device install performed; install remains an
+  explicit user action. No PR, merge, stable-branch change or deploy.
