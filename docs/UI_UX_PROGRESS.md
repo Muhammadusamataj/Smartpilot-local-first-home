@@ -1631,3 +1631,21 @@ not draft/prerelease). Asset `SmartPilot-Local-v1.27.apk` digest
 matches the locally built APK; versionCode 28 / versionName 1.27 and pinned
 signer verified. No device install was performed for v1.27; the in-app updater
 must fetch it over an internet-connected network.
+
+
+### Verified data points cleanup + local device history
+
+- `DeviceSheet` now shows only useful/labelled data points by default:
+  switch/relay controls, documented metering DPs and decoded phase readings.
+  Unlabelled numeric DPs are behind a `Show raw data points (N)` / `Hide raw
+  data points` toggle, so nothing is permanently unreachable.
+- A new `Device history` panel records, from verified local reads sampled every
+  30 s and stored locally: last ON, last OFF, kWh today (sampled), number of
+  runs and the last five runs with start/end/kWh. It is explicitly labelled
+  "Not a billing meter; gaps while the app is closed are not counted". No
+  Python backend or device-control logic changed.
+- Profile detection was widened so Water Tank (no dp6/dp18, but numeric dp1 +
+  dp13 alongside a boolean dp16) is labelled as an energy profile in both the
+  app and the HA integration; a backend-reported code is never overwritten.
+- Source guards cover the history keys, the raw toggle and the Water Tank
+  profile: 6/6 pure tests pass; strict `tsc` 0 errors.

@@ -126,11 +126,12 @@ export function DeviceSheet({
   device: Device | null;
   onOpenChange: (o: boolean) => void;
 }) {
-  const { t, connection, sendDeviceCommand, sendDpCommand, points, log } = useSmartPilot();
+  const { t, connection, sendDeviceCommand, sendDpCommand, points, deviceHistory, log } = useSmartPilot();
   const [pending, setPending] = useState<null | "on" | "off">(null);
   const [busy, setBusy] = useState(false);
   const [armed, setArmed] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [showRaw, setShowRaw] = useState(false);
   const armTimer = useRef<number | null>(null);
 
   useEffect(() => () => {
@@ -192,6 +193,15 @@ export function DeviceSheet({
   const devicePoints = device ? (points[device.id] ?? []) : [];
   const phasePoints = devicePoints.filter((point) => isPhasePoint(point));
   const controlPoints = devicePoints.filter((point) => !isPhasePoint(point));
+  const usefulPoints = controlPoints.filter(
+    (point) =>
+      isMeterPoint(point)
+      || /switch|relay|onoff|power|clear_energy/i.test(point.code)
+      || /bool/i.test(point.type),
+  );
+  const rawCount = controlPoints.length - usefulPoints.length;
+  const visiblePoints = showRaw ? controlPoints : usefulPoints;
+  const history = device ? deviceHistory[device.id] ?? null : null;
 
   return (
     <Sheet open={!!device} onOpenChange={onOpenChange}>
@@ -348,7 +358,7 @@ export function DeviceSheet({
                 )}
 
                 <div className="divide-y divide-border">
-                  {controlPoints.map((point) => {
+                  {visiblePoints.map((point) => {
                     const isBool = /bool/i.test(point.type);
                     const isNum = /int|number/i.test(point.type);
                     const readOnly = isMeterPoint(point);
@@ -419,6 +429,73 @@ export function DeviceSheet({
                     );
                   })}
                 </div>
+                {rawCount > 0 && (
+                  <Button
+                    type="button"
+                    variant="glass"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => setShowRaw((value) => !value)}
+                    aria-expanded={showRaw}
+                  >
+                    {showRaw ? "Hide raw data points" : `Show raw data points (${rawCount})`}
+                  </Button>
+                )}
+              </section>
+            )}
+
+            {device && device.kind !== "air_conditioner" && (
+              <section
+                className="mt-4 rounded-2xl border border-glass-border bg-muted/30 p-4"
+                aria-labelledby="history-h"
+              >
+                <h3 id="history-h" className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                  <Clock className="size-4 text-primary" aria-hidden /> Device history
+                </h3>
+                {history ? (
+                  <div className="divide-y divide-border text-sm">
+                    <div className="flex items-center justify-between gap-3 py-2">
+                      <span className="text-muted-foreground">Last ON</span>
+                      <span className="text-right">
+                        {history.lastOnAt ? new Date(history.lastOnAt).toLocaleString() : "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 py-2">
+                      <span className="text-muted-foreground">Last OFF</span>
+                      <span className="text-right">
+                        {history.lastOffAt ? new Date(history.lastOffAt).toLocaleString() : "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 py-2">
+                      <span className="text-muted-foreground">Units today (sampled)</span>
+                      <span className="font-display tabular">{history.todayKwh.toFixed(3)} kWh</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 py-2">
+                      <span className="text-muted-foreground">Runs recorded</span>
+                      <span className="tabular">{history.sessions.length}</span>
+                    </div>
+                    {history.sessions.slice(0, 5).map((session, index) => (
+                      <div key={`${session.start}-${index}`} className="py-2 text-xs">
+                        <span className="font-medium">
+                          {new Date(session.start).toLocaleTimeString()}
+                          {" → "}
+                          {session.end ? new Date(session.end).toLocaleTimeString() : "running"}
+                        </span>
+                        <span className="ml-2 text-muted-foreground">
+                          {session.kwh.toFixed(3)} kWh
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No local samples yet. History appears after a verified local read.
+                  </p>
+                )}
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Recorded on this phone from verified local reads every 30 s. Not a billing meter;
+                  gaps while the app is closed are not counted.
+                </p>
               </section>
             )}
 

@@ -242,10 +242,13 @@ function mergePoints(spec: JsonRecord[], values: JsonRecord[]): LiveDpPoint[] {
   // Two documented Tuya profiles on these devices. Apply only when the data
   // itself shows the profile, and only to numeric-code DPs the backend left
   // unnamed — never overwrite a real code/unit the backend reported.
+  const switchOnDp1 = byDp.get("1")?.type.toLowerCase().includes("bool") === true;
   const phaseProfile = byDp.has("6")
     && (byDp.get("6")?.type.toLowerCase().includes("string") === true
-      || byDp.get("6")?.code.toLowerCase().includes("phase") === true);
-  const meterProfile = byDp.has("18") && byDp.has("19");
+      || byDp.get("6")?.code.toLowerCase().includes("phase") === true)
+    || (!switchOnDp1 && byDp.has("1")
+      && (byDp.has("13") || byDp.has("14") || byDp.has("15")));
+  const meterProfile = (byDp.has("18") && byDp.has("19")) || (byDp.has("19") && byDp.has("20"));
   const docs = phaseProfile ? PHASE_DP : meterProfile ? METER_DP : undefined;
   if (docs) {
     for (const [dp, doc] of Object.entries(docs)) {

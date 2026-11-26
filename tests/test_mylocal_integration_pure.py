@@ -67,6 +67,20 @@ def test_documented_dp_profiles_label_real_devices():
     )
     assert named[0]["code"] == "my_custom_code"
 
+    # Water Tank: no phase DP and no dp18, but numeric dp1 + dp13 - still an
+    # energy profile, not a switch profile.
+    tank = pure.merge_live_points(
+        [
+            {"dp": "1", "code": "1", "type": "integer"},
+            {"dp": "13", "code": "13", "type": "integer"},
+            {"dp": "16", "code": "switch_16", "type": "boolean"},
+        ],
+        [{"dp": "1", "code": "1", "value": 12476}],
+    )
+    tank_codes = {point["dp"]: point["code"] for point in tank}
+    assert tank_codes["1"] == "forward_energy_total"
+    assert tank_codes["13"] == "balance_energy"
+
 
 def test_webview_decoder_uses_the_same_formula():
     """Source parity guard: the app must not invent a different scaling."""
@@ -83,6 +97,20 @@ def test_webview_decoder_uses_the_same_formula():
     assert 'code: "cur_power", unit: "W", scale: 1' in source
     assert 'code: "cur_voltage", unit: "V", scale: 1' in source
     assert '"6": { code: "phase_a" }' in source
+
+
+def test_device_history_presentation():
+    root = Path(__file__).resolve().parents[1]
+    store = (root / "tools/lovable_full_live/store.tsx").read_text(encoding="utf-8")
+    sheet = (root / "tools/lovable_full_live/DeviceSheet.tsx").read_text(encoding="utf-8")
+    assert "function sampleHistory(" in store
+    assert "HISTORY_KEY" in store
+    assert "deviceHistory" in store
+    assert "Show raw data points" in sheet
+    assert "Hide raw data points" in sheet
+    assert "Device history" in sheet
+    assert "Last ON" in sheet and "Last OFF" in sheet
+    assert "Not a billing meter" in sheet
 
 
 def test_auto_download_never_installs_by_itself():

@@ -70,6 +70,24 @@ export interface LiveConnection {
   refreshedAt: string | null;
 }
 
+/** Locally sampled from verified reads; never a billing-grade meter. */
+export interface DeviceSession {
+  start: string;
+  end: string | null;
+  kwh: number;
+}
+export interface DeviceHistory {
+  day: string;
+  running: boolean;
+  lastOnAt: string | null;
+  lastOffAt: string | null;
+  lastSampleAt: string | null;
+  lastPowerW: number | null;
+  todayKwh: number;
+  sessions: DeviceSession[];
+}
+const HISTORY_KEY = "smartpilot:device-history:v1";
+
 export interface AppState {
   prefs: Prefs;
   ac: Record<string, AcPreviewState>;
@@ -106,6 +124,71 @@ export function initialState(): AppState {
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
+const emptyHistory = (day: string): DeviceHistory => ({
+  day,
+  running: false,
+  lastOnAt: null,
+  lastOffAt: null,
+  lastSampleAt: null,
+  lastPowerW: null,
+  todayKwh: 0,
+  sessions: [],
+});
+
+/** Derive ON/OFF times and sampled kWh from verified local reads only. */
+function sampleHistory(
+  previous: Record<string, DeviceHistory>,
+  devices: Device[],
+  points: Record<string, import("./local-backend-adapter").LiveDpPoint[]>,
+  nowMs: number,
+): Record<string, DeviceHistory> {
+  const next: Record<string, DeviceHistory> = { ...previous };
+  const day = new Date(nowMs).toLocaleDateString("en-CA");
+  const at = new Date(nowMs).toISOString();
+  for (const device of devices) {
+    if (device.kind === "air_conditioner" || !device.power.known) continue;
+    const point = (points[device.id] ?? []).find(
+      (item) => item.code === "cur_power" && typeof item.value === "number",
+    );
+    const watts = point
+      ? Number(point.value) / 10 ** (typeof point.scale === "number" ? point.scale : 1)
+      : null;
+    const on = device.power.value === "on";
+    const old = next[device.id] ?? emptyHistory(day);
+    const entry: DeviceHistory = old.day === day
+      ? { ...old, sessions: [...old.sessions] }
+      : { ...emptyHistory(day), sessions: [] };
+    if (on && !entry.running) {
+      entry.sessions = [{ start: at, end: null, kwh: 0 }, ...entry.sessions].slice(0, 50);
+      entry.lastOnAt = at;
+    } else if (!on && entry.running) {
+      entry.lastOffAt = at;
+      if (entry.sessions[0] && entry.sessions[0].end === null) {
+        entry.sessions[0] = { ...entry.sessions[0], end: at };
+      }
+    }
+    if (entry.running && entry.lastPowerW !== null && entry.lastPowerW > 0
+      && entry.lastSampleAt) {
+      const elapsed = nowMs - Date.parse(entry.lastSampleAt);
+      if (elapsed > 0 && elapsed < 10 * 60 * 1000) {
+        const kwh = (entry.lastPowerW / 1000) * (elapsed / 3_600_000);
+        entry.todayKwh = Math.round((entry.todayKwh + kwh) * 1e6) / 1e6;
+        if (entry.sessions[0] && entry.sessions[0].end === null) {
+          entry.sessions[0] = {
+            ...entry.sessions[0],
+            kwh: Math.round((entry.sessions[0].kwh + kwh) * 1e6) / 1e6,
+          };
+        }
+      }
+    }
+    entry.running = on;
+    entry.lastPowerW = watts;
+    entry.lastSampleAt = at;
+    next[device.id] = entry;
+  }
+  return next;
+}
+
 interface Ctx {
   state: AppState;
   hydrated: boolean;
@@ -118,6 +201,7 @@ interface Ctx {
     approval?: { approvedBy: string; approvedAt: string },
   ) => Promise<CommandResult>;
   points: Record<string, import("./local-backend-adapter").LiveDpPoint[]>;
+  deviceHistory: Record<string, DeviceHistory>;
   sendDpCommand: (
     deviceId: string,
     dp: string,
@@ -164,6 +248,15 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
   const [points, setPoints] = useState<
     Record<string, import("./local-backend-adapter").LiveDpPoint[]>
   >({});
+  const [deviceHistory, setDeviceHistory] = useState<Record<string, DeviceHistory>>(() => {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      const saved = raw ? JSON.parse(raw) : null;
+      return saved && typeof saved === "object" ? saved as Record<string, DeviceHistory> : {};
+    } catch {
+      return {};
+    }
+  });
   const [connection, setConnection] = useState<LiveConnection>({
     state: "idle",
     message: "Local backend not checked yet",
@@ -200,6 +293,14 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
       /* storage full or blocked */
     }
   }, [state]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(deviceHistory));
+    } catch {
+      /* storage full or blocked — history stays in memory */
+    }
+  }, [deviceHistory]);
 
   useEffect(() => {
     applyTheme(state.prefs.theme);
@@ -239,6 +340,11 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
       // fixed demo devices used only for the first paint.
       setDevices(liveAdapter.liveDevices.map((device) => ({ ...device }) as Device));
       setPoints({ ...liveAdapter.localPoints });
+      if (result.verifiedDevices > 0) {
+        setDeviceHistory((previous) =>
+          sampleHistory(previous, liveAdapter.liveDevices, liveAdapter.localPoints, Date.now()),
+        );
+      }
       setState((current) => {
         const ac = { ...current.ac };
         for (const device of liveAdapter.liveDevices) {
@@ -385,6 +491,7 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
       refreshDevices,
       sendDeviceCommand,
       points,
+      deviceHistory,
       sendDpCommand,
       setAcControlMode,
       resumeAuto,
@@ -475,6 +582,7 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
     refreshDevices,
     sendDeviceCommand,
     points,
+    deviceHistory,
     sendDpCommand,
     setAcControlMode,
     resumeAuto,

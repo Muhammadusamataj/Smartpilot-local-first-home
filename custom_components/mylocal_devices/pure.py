@@ -115,11 +115,19 @@ def document_points(points: list[dict]) -> None:
     """Label numeric-code DPs for the two documented Tuya meter profiles."""
     by_dp = {str(point.get("dp") or ""): point for point in points if isinstance(point, dict)}
     phase_dp = by_dp.get("6") or {}
+    dp1 = by_dp.get("1") or {}
     phase_profile = (
         "string" in str(phase_dp.get("type") or "").lower()
         or "phase" in str(phase_dp.get("code") or "").lower()
+        or (
+            "bool" not in str(dp1.get("type") or "").lower()
+            and "1" in by_dp
+            and any(key in by_dp for key in ("13", "14", "15"))
+        )
     )
-    meter_profile = "18" in by_dp and "19" in by_dp
+    meter_profile = (("18" in by_dp) and ("19" in by_dp)) or (
+        ("19" in by_dp) and ("20" in by_dp)
+    )
     docs = _PHASE_DP if phase_profile else _METER_DP if meter_profile else {}
     for dp, (code, unit, scale) in docs.items():
         point = by_dp.get(dp)
