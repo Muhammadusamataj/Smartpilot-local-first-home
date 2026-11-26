@@ -1309,3 +1309,29 @@ panel failures and zero uncaught page errors.
 - Final APK installed successfully. Post-fix on-device screenshot was blocked
   because the phone locked (no PIN available to this workflow); the previous
   on-device screen review covers the earlier build.
+
+
+### Remote access audit and UI-only enhancement
+
+- Audit: header "Remote"/"Phone" are panel toggles, not URL switches; WebView
+  stays locked to `http://127.0.0.1:8000/local` (`OfflineActivity.java:52,356-362`).
+  Tailnet URL is display/copy-only (`updateRemoteUrl()` `:421-441`), direct mode
+  is opt-in and binds `0.0.0.0:8000` with Basic Auth
+  (`LocalControlService.java:159-163`, `android_entry.py:69-83`). The Lovable
+  remote panel was static text with no actionable controls; there are no CORS
+  headers, so cross-origin browser API reads are impossible.
+- Root causes ranked: Tailscale not installed/signed in; direct mode off by
+  default; tailnet port unreachable; Basic Auth not configured/copied; no HA
+  Supervisor ingress; loopback-only WebView. Remote UI access still requires
+  the phone to reach the device LAN; only HA ingress gives real remote control.
+- UI-only fix: `tools/lovable_full_live/local_control.template.html` exposes the
+  already-computed `tailscale_url`/`home_assistant` via a JSON script block;
+  `settings.tsx` Remote access panel now shows honest status chips, detected
+  tailnet URL with Copy/Open/Test links, "Open direct-mode settings" via the
+  existing `PilotNative.openDirectSettings()` bridge, numbered setup steps and
+  the standing warning that remote device control needs HA ingress. No backend,
+  auth, network or native code was changed; no port was exposed automatically.
+- Flask render check: `/local` 200 with `{"homeAssistant": false,
+  "tailscaleUrl": ""}` (honest empty state when Tailscale is absent); classic
+  route still 200 with all five `data-view` values.
+- Mocked browser: 12/12, 0 page errors; guards 28/28.

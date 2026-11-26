@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Cloud,
+  Copy,
   Cpu,
   Download,
   ExternalLink,
@@ -15,6 +16,7 @@ import {
   Link2,
   Lock,
   MonitorSmartphone,
+  Settings2,
   Moon,
   Network,
   Palette,
@@ -96,6 +98,44 @@ import {
   registerUpdateCallback,
   restoreBackup,
 } from "@/lib/smartpilot/backend-api";
+
+
+interface RemoteConfig {
+  tailscaleUrl?: string;
+  homeAssistant?: boolean;
+}
+
+function readRemoteConfig(): RemoteConfig {
+  try {
+    const element = document.getElementById("pilot-remote-config");
+    const parsed = element ? (JSON.parse(element.textContent || "{}") as RemoteConfig) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function copyRemoteUrl(value: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    try {
+      const input = document.createElement("textarea");
+      input.value = value;
+      input.setAttribute("readonly", "");
+      input.style.position = "fixed";
+      input.style.opacity = "0";
+      document.body.appendChild(input);
+      input.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(input);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -386,8 +426,25 @@ const INTEGRATIONS = [
 ];
 
 function SettingsPage() {
+  const [remoteConfig] = useState<RemoteConfig>(() => readRemoteConfig());
+  const [remoteFamily, setRemoteFamily] = useState<Obj | null>(null);
+  const [remoteCopied, setRemoteCopied] = useState(false);
+
   const { t, state, connection, refreshDevices, setPrefs, resetDemo } = useSmartPilot();
+  useEffect(() => {
+    let alive = true;
+    void familyStatus()
+      .then((value) => { if (alive) setRemoteFamily(asObj(value)); })
+      .catch(() => { if (alive) setRemoteFamily(null); });
+    return () => { alive = false; };
+  }, []);
   const p = state.prefs;
+  const tailnetUrl =
+    typeof remoteConfig["tailscaleUrl"] === "string" ? remoteConfig["tailscaleUrl"] : "";
+  const directOn = remoteFamily?.["direct_mode"] === true;
+  const haAvailable = remoteConfig["homeAssistant"] === true;
+  const lanIp =
+    typeof remoteFamily?.["lan_ip"] === "string" ? remoteFamily["lan_ip"] : "";
 
   // --- Network / diagnostics -------------------------------------------------
   const networkAction = useAction();
@@ -1352,23 +1409,89 @@ function SettingsPage() {
         </Panel>
 
         <Panel>
-          <PanelTitle icon={ShieldCheck}>Remote access (read-only)</PanelTitle>
-          <ul className="space-y-3 text-sm text-muted-foreground">
-            <li className="flex items-start gap-2">
-              <Lock className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-              <span>Outside your home Wi-Fi, reach this phone through a VPN such as Tailscale. Do not expose the local port directly.</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <Cloud className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-              <span>Home Assistant users can add the local integration through HACS or the add-on; Supervisor ingress handles authentication.</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <Users className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-              <span>Family Hub works only on the same Wi-Fi. Outside the home, use your vendor cloud app or a VPN.</span>
-            </li>
-          </ul>
-          <p className="mt-4 text-xs text-muted-foreground">
-            This panel is informational; remote access is configured in the Android app or your router.
+          <PanelTitle icon={ShieldCheck}>Remote access</PanelTitle>
+          <div className="flex flex-wrap gap-1.5">
+            <Badge variant={tailnetUrl ? "ok" : "unknown"}>
+              <Lock className="size-3" aria-hidden /> {tailnetUrl ? "Tailnet address detected" : "Tailscale not connected"}
+            </Badge>
+            <Badge variant={directOn ? "ok" : "unknown"}>
+              <ShieldCheck className="size-3" aria-hidden /> Direct access {directOn ? "on" : "off"}
+            </Badge>
+            <Badge variant={haAvailable ? "ok" : "unknown"}>
+              <Cloud className="size-3" aria-hidden /> HA ingress {haAvailable ? "available" : "not detected"}
+            </Badge>
+          </div>
+
+          {tailnetUrl ? (
+            <div className="mt-4 rounded-2xl border border-glass-border bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground">Remote address (no credentials embedded)</p>
+              <code className="mt-1 block break-all text-sm" data-testid="remote-url">{tailnetUrl}</code>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="touch"
+                  variant="glass"
+                  onClick={() => {
+                    void copyRemoteUrl(tailnetUrl).then((ok) => {
+                      setRemoteCopied(ok);
+                      window.setTimeout(() => setRemoteCopied(false), 2000);
+                    });
+                  }}
+                >
+                  <Copy /> {remoteCopied ? "Copied" : "Copy URL"}
+                </Button>
+                <a
+                  href={tailnetUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-glass-border px-3 text-sm"
+                >
+                  <ExternalLink /> Open in browser
+                </a>
+                <a
+                  href={`${tailnetUrl.replace(/\/local\/?$/, "")}/api/state`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-glass-border px-3 text-sm"
+                >
+                  <CheckCircle2 /> Test in browser
+                </a>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground" role="status">
+                "Open in browser" leaves this app by design; the built-in WebView stays on 127.0.0.1.
+              </p>
+            </div>
+          ) : (
+            <p className="mt-4 rounded-2xl border border-status-unknown/30 bg-status-unknown/8 p-3 text-sm" role="status">
+              No tailnet address detected on this phone. Install and sign in to Tailscale, then reopen this panel.
+            </p>
+          )}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="touch"
+              variant="glass"
+              onClick={() => nativeCall("PilotNative", "openDirectSettings")}
+            >
+              <Settings2 /> Open direct-mode settings
+            </Button>
+          </div>
+          {lanIp && (
+            <p className="mt-2 text-xs text-muted-foreground">Local address: {lanIp}</p>
+          )}
+
+          <ol className="mt-4 list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+            <li>Install and sign in to Tailscale on this phone and on the remote device.</li>
+            <li>Tap "Open direct-mode settings", enable direct access, set a username and password, then Apply.</li>
+            <li>Keep this phone on the devices' Wi-Fi and the app running.</li>
+            <li>Copy the URL above and open it on the other tailnet device; sign in with those credentials.</li>
+            <li>Use "Test in browser" to confirm reachability.</li>
+          </ol>
+          <p className="mt-3 flex items-start gap-2 text-xs text-status-preview" role="note">
+            <Lock className="mt-px size-3.5 shrink-0" aria-hidden />
+            Remote UI access does not mean remote device control: the phone still needs to reach the device LAN.
+            For full remote control, use Home Assistant Supervisor ingress. Do not expose port 8000 to the public internet.
           </p>
         </Panel>
 
