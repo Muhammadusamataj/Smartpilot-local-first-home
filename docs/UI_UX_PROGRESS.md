@@ -1574,3 +1574,50 @@ installed via `adb -s 10FF3H02QE0004Y install -r` -> Success;
 panel with `cur_current DP 18 ... 0 A`, `cur_power DP 19 ... 0 W` and
 `cur_voltage DP 20 ... 231.3 V`, each marked `read-only measurement` with no
 Set control. No device control was tapped.
+
+---
+
+## CP11 — Iterative Lovable audit / Apple comparison `[VERIFIED]`
+
+Three audit → fix → re-audit cycles were run against mocked `/api/**` responses
+(`python UI_REVIEW_TEMP/audit_capture.py`: 96 shots, 6 widths × 2 themes × 8
+routes). Every cycle reported **0 horizontal overflow, 0 page errors, 0 small
+font rows, 0 small tap targets, 0 command POSTs**. The 248 "clipped" rows are
+benign: decorative `.ambient`, the `sr-only` skip link and intentionally
+horizontal-scroll chip rows.
+
+Cycle 1: removed duplicate three-line safety banner (already in source but
+never shipped), stale preview/demo dictionary copy, long Assistant notice;
+collapsed Devices' LAN scan / Homes & rooms into a "Manage" menu; added bottom
+safe-area padding. Re-audit found Home still rendered all 8 sections because
+`applyPreferences()` forced `visible=true` when no saved preference existed.
+
+Cycle 2: `applyPreferences()` now preserves each tile's default visibility
+unless an explicit saved choice exists. Re-audit showed 5 Home sections and a
+clean end-of-list gap above the dock.
+
+Cycle 3: reordered Home defaults so the two Haier AC cards lead, followed by
+Device groups, Quick scenes, Live readings and Suggested actions — matching
+Apple's "primary action first" hierarchy.
+
+Verification after the final rebuild:
+
+```powershell
+python -m pytest tests/test_titanium_ui.py tests/test_pilot_v07_static.py -q --tb=short
+```
+```text
+14 passed in 0.37s
+```
+
+```powershell
+python -m pytest tests/test_ui.py -q -k "modular_frontend" --tb=short
+```
+```text
+4 passed, 412 deselected in 8.61s
+```
+
+Final bundle: `index-D2Zj6aNn.js` + `index-CZPQnL5R.css`, byte-identical across
+root / Android / add-on mirrors. The installed v1.26 APK (published in
+parallel, commit `b4cd1c6`) does **not** include this UI work; it remains
+uncommitted in this checkpoint and requires a new release to reach the phone.
+No device command, install, tag or release was performed in CP11.

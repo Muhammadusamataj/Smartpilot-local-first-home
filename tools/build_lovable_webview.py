@@ -118,6 +118,8 @@ SPA_HTML = """<!doctype html>
 <style>
 html, body { margin: 0; overflow-x: hidden; }
 #pilot-next-root { max-width: 100vw; overflow-x: hidden; }
+/* Keep the last card clear of the fixed bottom dock on tall touch screens. */
+#pilot-next-root main { padding-bottom: calc(8rem + env(safe-area-inset-bottom)); }
 .pilot-next-safety { background:#0b1220; color:#cbd5e1; font:12px/1.6 system-ui,sans-serif;
   padding:9px 14px; border-bottom:1px solid #30445d; display:flex; flex-wrap:wrap; gap:12px;
   justify-content:space-between; align-items:center; position:relative; z-index:80; }

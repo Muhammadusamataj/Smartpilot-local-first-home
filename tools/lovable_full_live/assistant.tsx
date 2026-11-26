@@ -280,9 +280,8 @@ function AssistantPage() {
       >
         <ShieldCheck className="mt-px size-4 shrink-0 text-primary" aria-hidden />
         <p>
-          Advisory only. This chat never sends device commands or runs scenes/rules. Plans are drafts
-          you create and run on <Link to="/automations" className="text-primary underline">Automations</Link>{" "}
-          after explicit confirmation.
+          Advisory only — no commands from chat. Review drafts on{" "}
+          <Link to="/automations" className="text-primary underline">Automations</Link>.
         </p>
       </div>
 

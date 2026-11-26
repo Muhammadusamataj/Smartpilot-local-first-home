@@ -725,12 +725,32 @@ function DevicesPage() {
             >
               <Plus /> Add device
             </Button>
-            <Button variant="glass" size="touch" onClick={() => setScanOpen(true)}>
-              <Radar /> LAN scan
-            </Button>
-            <Button variant="glass" size="touch" onClick={() => void openOrganize()}>
-              <LayoutGrid /> Homes &amp; rooms
-            </Button>
+            <details className="group relative">
+              <summary
+                aria-label="More device management options"
+                className="glass flex h-11 cursor-pointer list-none items-center rounded-full px-4 text-sm font-medium [&::-webkit-details-marker]:hidden"
+              >
+                Manage
+              </summary>
+              <div className="absolute right-0 z-30 mt-2 flex w-48 flex-col gap-2 rounded-2xl border border-glass-border bg-card p-2 shadow-glass">
+                <Button
+                  variant="glass"
+                  size="touch"
+                  className="w-full justify-start"
+                  onClick={() => setScanOpen(true)}
+                >
+                  <Radar /> LAN scan
+                </Button>
+                <Button
+                  variant="glass"
+                  size="touch"
+                  className="w-full justify-start"
+                  onClick={() => void openOrganize()}
+                >
+                  <LayoutGrid /> Homes &amp; rooms
+                </Button>
+              </div>
+            </details>
             <Button
               variant="glass"
               size="icon-touch"

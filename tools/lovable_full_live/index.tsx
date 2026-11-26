@@ -114,14 +114,14 @@ interface BackendEvent {
 
 const HOME_LAYOUT_KEY = "smartpilot:home-layout";
 const DEFAULT_TILES: HomeTile[] = [
-  { id: "usage", label: "Live readings", visible: true, favorite: false },
-  { id: "scenes", label: "Quick scenes", visible: true, favorite: false },
   { id: "ac-cards", label: "AC cards", visible: true, favorite: true },
   { id: "device-groups", label: "Device groups", visible: true, favorite: false },
+  { id: "scenes", label: "Quick scenes", visible: true, favorite: false },
+  { id: "usage", label: "Live readings", visible: true, favorite: false },
   { id: "safe-actions", label: "Suggested actions", visible: true, favorite: false },
-  { id: "freshness", label: "Data freshness", visible: true, favorite: false },
-  { id: "activity", label: "Recent events", visible: true, favorite: false },
-  { id: "quick-nav", label: "Quick access", visible: true, favorite: false },
+  { id: "freshness", label: "Data freshness", visible: false, favorite: false },
+  { id: "activity", label: "Recent events", visible: false, favorite: false },
+  { id: "quick-nav", label: "Quick access", visible: false, favorite: false },
 ];
 
 function asText(value: unknown): string {
@@ -183,11 +183,16 @@ function applyPreferences(base: HomeTile[], prefs: LocalPreferences): HomeTile[]
   const homes = Array.isArray(prefs.homes) ? prefs.homes : [];
   const byId = new Map<string, HomeTile>(base.map((tile) => [tile.id, { ...tile }]));
   const ordered: HomeTile[] = [];
-  const decorate = (tile: HomeTile): HomeTile => ({
-    ...tile,
-    favorite: favorites.has(tile.id),
-    visible: rooms[tile.id] !== "hidden",
-  });
+  const decorate = (tile: HomeTile): HomeTile => {
+    const saved = rooms[tile.id];
+    return {
+      ...tile,
+      favorite: favorites.has(tile.id),
+      // An explicit saved choice wins; otherwise keep the default visibility
+      // so new installs start with a calm five-tile Home.
+      visible: saved === "hidden" ? false : saved === "visible" ? true : tile.visible,
+    };
+  };
   for (const home of homes) {
     const tile = byId.get(home.id);
     if (!tile) continue;
