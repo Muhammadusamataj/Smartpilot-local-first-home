@@ -1675,3 +1675,19 @@ installed with `adb -s 10FF3H02QE0004Y install -r` -> Success,
 - After renewal, `/api/haier/devices` reports both slots `verified=true` with
   fresh `last_read`; a read-only `pro` status read succeeded (power off,
   24 C target, 24 C room, mode auto). No physical AC command was sent.
+
+
+### Permanent fix: rotation-triggered Haier key renewal
+
+- `autoRenewHaierKeys(force)` now accepts a force flag that bypasses the 12 h
+  localStorage throttle while still recording the attempt timestamp. No
+  username/password is sent by the UI; the backend's saved refresh token is
+  the only credential used.
+- `store.tsx` inspects each refresh result: if any Haier error matches
+  `/key rotated/i`, it performs exactly one forced renewal per app session,
+  shows a toast ("Haier key renewed" / failure reason), and re-reads once.
+  This removes the multi-hour gap that made the `pro` AC unverifiable.
+- Source guards check the error matcher, forced call and `force = false`
+  signature. A mocked runtime check injects a `v513 -> v514` rotation error,
+  verifies a passwordless `/api/haier/cloud/login`, confirms a successful
+  re-read afterwards and records 0 control writes.

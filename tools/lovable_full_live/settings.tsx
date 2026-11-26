@@ -15,6 +15,7 @@ import {
   Languages,
   Link2,
   Lock,
+  Loader2,
   MonitorSmartphone,
   Settings2,
   Moon,
@@ -500,6 +501,7 @@ function SettingsPage() {
   const updateAction = useAction();
   const [updateInfo, setUpdateInfo] = useState<Obj | null>(null);
   const [nativeUpdate, setNativeUpdate] = useState<Obj | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -514,6 +516,7 @@ function SettingsPage() {
     const previous = (window as unknown as Record<string, unknown>)["pilotUpdateResult"];
     registerUpdateCallback((result) => {
       setNativeUpdate((current) => ({ ...(current ?? {}), ...result }));
+      setCheckingUpdate(false);
     });
     nativeCall("PilotNative", "checkUpdate");
     setNativeUpdate(nativeUpdateState());
@@ -534,8 +537,11 @@ function SettingsPage() {
 
   const checkForUpdate = async () => {
     if (hasNativeMethod("checkUpdate")) {
+      setCheckingUpdate(true);
       nativeCall("PilotNative", "checkUpdate");
-      updateAction.notify("Update check started in the Android app.");
+      updateAction.notify("Checking GitHub Releases…");
+      // Safety net: never leave the button spinning if a native callback is lost.
+      window.setTimeout(() => setCheckingUpdate(false), 15000);
       await refreshUpdates();
       return;
     }
@@ -1201,8 +1207,15 @@ function SettingsPage() {
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button variant="glass" size="touch" disabled={updateAction.busy} onClick={() => void checkForUpdate()}>
-              <RefreshCw /> Check now
+            <Button
+              variant="glass"
+              size="touch"
+              disabled={updateAction.busy || checkingUpdate}
+              aria-busy={checkingUpdate}
+              onClick={() => void checkForUpdate()}
+            >
+              {checkingUpdate ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+              {checkingUpdate ? "Checking…" : "Check now"}
             </Button>
             {nativeReady && !canInstall && (
               <Button variant="glass" size="touch" onClick={openInstallPermission}>
@@ -1234,6 +1247,16 @@ function SettingsPage() {
               />
             )}
           </div>
+          {checkingUpdate && (
+            <p role="status" className="mt-2 text-xs text-muted-foreground">
+              Checking GitHub Releases for a stable update…
+            </p>
+          )}
+          {nativeBusy && (
+            <p role="status" className="mt-2 text-xs text-muted-foreground">
+              Downloading the signed APK (~45 MB) — keep the app open.
+            </p>
+          )}
           <StateNote action={updateAction} />
           <p className="mt-3 text-xs text-muted-foreground">
             Updates are installed by the Android app only. This screen never changes the update channel,

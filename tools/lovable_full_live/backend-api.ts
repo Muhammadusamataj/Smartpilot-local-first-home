@@ -174,7 +174,7 @@ export const haierCloudLogout = () =>
  * refresh token. No username/password is stored or sent by the UI.
  * Safe to call on startup; the backend decides whether renewal is needed.
  */
-export async function autoRenewHaierKeys(): Promise<{
+export async function autoRenewHaierKeys(force = false): Promise<{
   attempted: boolean;
   ok: boolean;
   message: string;
@@ -183,7 +183,7 @@ export async function autoRenewHaierKeys(): Promise<{
   const now = Date.now();
   try {
     const last = Number(window.localStorage.getItem(throttleKey) || 0);
-    if (last && now - last < 12 * 60 * 60 * 1000) {
+    if (!force && last && now - last < 12 * 60 * 60 * 1000) {
       return { attempted: false, ok: true, message: "Checked recently" };
     }
     window.localStorage.setItem(throttleKey, String(now));

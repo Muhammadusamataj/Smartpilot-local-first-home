@@ -111,6 +111,10 @@ def test_device_history_presentation():
     assert "Device history" in sheet
     assert "Last ON" in sheet and "Last OFF" in sheet
     assert "Not a billing meter" in sheet
+    api = (root / "tools/lovable_full_live/backend-api.ts").read_text(encoding="utf-8")
+    assert "/key rotated/i.test(error)" in store
+    assert "autoRenewHaierKeys(true)" in store
+    assert "autoRenewHaierKeys(force = false)" in api
 
 
 def test_auto_download_never_installs_by_itself():

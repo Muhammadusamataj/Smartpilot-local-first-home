@@ -26,6 +26,7 @@ import { translate, type I18nKey } from "./i18n";
 import { PREVIEW_MESSAGE } from "./adapter";
 import {
   autoCheckUpdates,
+  autoRenewHaierKeys,
   nativeCall,
   nativeUpdateState,
   registerUpdateCallback,
@@ -263,6 +264,7 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
     refreshedAt: null,
   });
   const loaded = useRef(false);
+  const haierRenewTried = useRef(false);
 
   useEffect(() => {
     try {
@@ -375,6 +377,18 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
             : `No fresh verified reads${result.errors.length ? ` — ${result.errors[0]}` : ""}`,
         refreshedAt: result.at,
       });
+      // A rotated Haier key makes the AC unverifiable. Renew immediately via
+      // the saved refresh token instead of waiting for the 12-hour background
+      // check, then re-read once. At most one attempt per app session.
+      if (result.errors.some((error) => /key rotated/i.test(error)) && !haierRenewTried.current) {
+        haierRenewTried.current = true;
+        void autoRenewHaierKeys(true).then((outcome) => {
+          toast(outcome.ok ? "Haier key renewed" : "Haier key renewal failed", {
+            description: outcome.message,
+          });
+          if (outcome.ok) void refreshDevices();
+        });
+      }
     } catch (error) {
       setConnection({
         state: "degraded",

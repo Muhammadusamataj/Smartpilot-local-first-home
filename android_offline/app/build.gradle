@@ -16,8 +16,8 @@ android {
         applicationId 'com.example.tuyalocalkey.offline.v2'
         minSdk 24
         targetSdk 34
-        versionCode 29
-        versionName '1.28'
+        versionCode 30
+        versionName '1.29'
 
         ndk {
             // Chaquopy needs explicit ABIs. These match the Android wheels
