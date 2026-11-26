@@ -37,3 +37,16 @@ def test_decode_ignores_non_phase_values():
     assert pure.decode_base64_dp("") == {}
     assert pure.is_phase_code({"code": "phase_a"})
     assert not pure.is_phase_code({"code": "switch_1"})
+
+
+def test_webview_decoder_uses_the_same_formula():
+    """Source parity guard: the app must not invent a different scaling."""
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "tools/lovable_full_live/local-backend-adapter.ts"
+    ).read_text(encoding="utf-8")
+    assert "export function decodePhaseDp" in source
+    assert "byte(0) << 8) | byte(1)) / 10" in source
+    assert "byte(3) << 8) | byte(4)) / 1000" in source
+    assert "byte(6) << 8) | byte(7)) / 1000" in source
+    assert 'failure("read_only_measurement")' in source

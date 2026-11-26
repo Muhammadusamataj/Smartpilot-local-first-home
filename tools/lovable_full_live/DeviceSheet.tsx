@@ -22,6 +22,13 @@ import {
 } from "@/components/ui/dialog";
 import { useSmartPilot } from "@/lib/smartpilot/store";
 import { adapter } from "@/lib/smartpilot/adapter";
+import {
+  decodePhaseDp,
+  formatPointValue,
+  isMeterPoint,
+  isPhasePoint,
+  PHASE_READINGS,
+} from "@/lib/smartpilot/local-backend-adapter";
 import { evaluateDeviceAction } from "@/lib/smartpilot/climate";
 import type { Device } from "@/lib/smartpilot/types";
 import {
@@ -182,6 +189,10 @@ export function DeviceSheet({
     setArmed(null);
   };
 
+  const devicePoints = device ? (points[device.id] ?? []) : [];
+  const phasePoints = devicePoints.filter((point) => isPhasePoint(point));
+  const controlPoints = devicePoints.filter((point) => !isPhasePoint(point));
+
   return (
     <Sheet open={!!device} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full border-glass-border sm:max-w-md">
@@ -288,7 +299,7 @@ export function DeviceSheet({
               <LiveNotice className="mt-3" />
             </section>
 
-            {device.kind !== "air_conditioner" && (points[device.id] ?? []).length > 0 && (
+            {device.kind !== "air_conditioner" && devicePoints.length > 0 && (
               <section
                 className="mt-4 rounded-2xl border border-glass-border bg-muted/30 p-4"
                 aria-labelledby="dps-h"
@@ -296,10 +307,51 @@ export function DeviceSheet({
                 <h3 id="dps-h" className="mb-3 flex items-center gap-2 text-sm font-semibold">
                   <Power className="size-4 text-primary" aria-hidden /> Verified data points
                 </h3>
+
+                {phasePoints.length > 0 && (
+                  <div className="mb-3 space-y-2">
+                    {phasePoints.map((point) => {
+                      const decoded = decodePhaseDp(point.value);
+                      return (
+                        <div
+                          key={`phase-${point.dp}`}
+                          className="rounded-xl border border-glass-border bg-muted/20 p-3"
+                        >
+                          <p className="text-xs text-muted-foreground">
+                            {point.code || `DP ${point.dp}`} · DP {point.dp} · read-only
+                          </p>
+                          {decoded ? (
+                            <dl className="mt-2 grid grid-cols-3 gap-2">
+                              {PHASE_READINGS.map((reading) => (
+                                <div key={reading.key} className="min-w-0">
+                                  <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                    {reading.label}
+                                  </dt>
+                                  <dd className="font-display tabular text-sm">
+                                    {decoded[reading.key].toFixed(reading.digits)}{" "}
+                                    <span className="text-xs text-muted-foreground">
+                                      {reading.unit}
+                                    </span>
+                                  </dd>
+                                </div>
+                              ))}
+                            </dl>
+                          ) : (
+                            <p className="mt-1 break-words text-xs text-muted-foreground">
+                              Packed payload could not be decoded, so no value is shown.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <div className="divide-y divide-border">
-                  {(points[device.id] ?? []).map((point) => {
+                  {controlPoints.map((point) => {
                     const isBool = /bool/i.test(point.type);
                     const isNum = /int|number/i.test(point.type);
+                    const readOnly = isMeterPoint(point);
                     const current =
                       draft[point.dp] ??
                       (point.value === undefined ? "" : String(point.value));
@@ -312,7 +364,14 @@ export function DeviceSheet({
                               DP {point.dp} · {point.type || "unknown"}
                             </span>
                           </span>
-                          {isBool ? (
+                          {readOnly ? (
+                            <span className="shrink-0 text-right font-display tabular text-sm">
+                              {formatPointValue(point)}
+                              <span className="ml-1 block text-[11px] font-normal text-muted-foreground">
+                                read-only measurement
+                              </span>
+                            </span>
+                          ) : isBool ? (
                             <Switch
                               checked={
                                 point.value === true || point.value === 1 || point.value === "1"

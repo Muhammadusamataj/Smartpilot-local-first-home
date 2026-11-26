@@ -288,11 +288,14 @@ def make_webview_build(folder: Path) -> None:
         raise SystemExit("Unknown remote font reference. Re-audit offline resources.")
     content = content.replace(remote_font_link, "")
     # The original SSR shell renders html/head/body. The offline SPA already
-    # has those tags in index.html and must not nest a second document.
-    shell = "  shellComponent: RootShell,"
+    # has those tags in index.html and must not nest a second document, so the
+    # custom shellComponent is dropped entirely (the router then uses its
+    # default document shell). Assigning `undefined` is not allowed under
+    # exactOptionalPropertyTypes, so remove the property line.
+    shell = "  shellComponent: RootShell,\n"
     if shell not in content:
         raise SystemExit("Unknown SSR shell structure: re-audit before bundling.")
-    content = content.replace(shell, "  shellComponent: undefined,")
+    content = content.replace(shell, "")
     css_import = 'import appCss from "../styles.css?url";' + "\n"
     css_link = ('      {\n        rel: "stylesheet",\n        href: appCss,\n      },\n')
     if css_import not in content or css_link not in content:

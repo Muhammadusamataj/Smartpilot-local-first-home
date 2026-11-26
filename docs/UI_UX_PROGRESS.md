@@ -1389,3 +1389,26 @@ panel failures and zero uncaught page errors.
   status must actually contain the phase DP for these sensors to report values.
 - HA operator must copy `custom_components/mylocal_devices/` into the HA config
   folder and restart HA for these changes to take effect.
+
+
+### Phase/meter readings in the Android app
+
+- Same documented packed-DP decoder now runs in the WebView (`local-backend-adapter.ts`):
+  `decodePhaseDp` reads bytes 0-1 volts /10, 3-4 amps /1000, 6-7 kW /1000 for
+  `phase_a/b/c`; undecodable payloads stay blank rather than guessing.
+- `DeviceSheet` shows Voltage (V), Current (A), Power (kW) as read-only values,
+  with no Set control for the packed DP. Meter DPs (`cur_power`, `cur_current`,
+  `cur_voltage`, `add_ele*`, `energy*`, `kwh*`, `power_consumption`) are rendered
+  read-only using the backend's own `unit`/`scale`; adapter now merges those
+  fields from the cached DP spec into the live status read.
+- `sendDp()` refuses phase/meter DPs before any write, so no UI path can send a
+  meaningless measurement command; the backend gate remains final.
+- Builder no longer assigns `shellComponent: undefined` (invalid under
+  `exactOptionalPropertyTypes`); it removes the property instead. Guard test
+  updated accordingly; strict `tsc --noEmit` is 0 errors.
+- Verification: mocked browser reads a `phase_a` report `CVwABdwAAlg=` and a
+  `cur_power=1234` DP with `unit=W, scale=1`; all 9 checks pass (239.6 V,
+  1.5 A, 0.6 kW, 123.4 W, read-only, no phase input, no page errors) and there
+  were 0 control writes (only the two read-only Haier polls). Screenshot:
+  `UI_REVIEW_TEMP/pilot_next_phase_readings.png`. Width/theme sweep 0/12 failed;
+  guards 30/30; backend 52/52; three mirror asset hashes identical.

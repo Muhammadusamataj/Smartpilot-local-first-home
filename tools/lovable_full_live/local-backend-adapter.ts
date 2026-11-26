@@ -46,6 +46,78 @@ export interface LiveDpPoint {
   code: string;
   type: string;
   value?: unknown;
+  /** Optional metadata the backend already reports for this DP. */
+  unit?: string;
+  scale?: number;
+}
+
+export interface DecodedPhase {
+  voltage: number;
+  current: number;
+  power: number;
+}
+
+/** Same packed-DP code localtuya documents for Tuya `phase_a/b/c` reports. */
+const PHASE_CODE = /^phase_[abc]$/i;
+/** Measurement DPs Tuya reports but never accepts as a write target. */
+const METER_CODE =
+  /^(cur_power|cur_current|cur_voltage|add_ele\w*|total_energy|energy\w*|kwh\w*|power_consumption|phase_[abc])$/i;
+
+export function isPhasePoint(point: { code?: string }): boolean {
+  return PHASE_CODE.test(String(point.code ?? "").trim());
+}
+
+export function isMeterPoint(point: { code?: string; type?: string }): boolean {
+  const code = String(point.code ?? "").trim();
+  return METER_CODE.test(code);
+}
+
+/**
+ * Decode the packed base64 payload Tuya sends for a phase DP.
+ * Bytes 0-1 volts /10, 3-4 amps /1000, 6-7 kW /1000. No scaling is guessed:
+ * an unrecognised payload returns null and the UI shows it as undecodable.
+ */
+export function decodePhaseDp(value: unknown): DecodedPhase | null {
+  if (typeof value !== "string") return null;
+  const raw = value.trim();
+  if (!raw || raw.length % 4 !== 0) return null;
+  let binary: string;
+  try {
+    binary = atob(raw);
+  } catch {
+    return null;
+  }
+  if (binary.length < 8) return null;
+  const byte = (index: number) => binary.charCodeAt(index) & 0xff;
+  const round = (value: number, digits: number) => {
+    const factor = 10 ** digits;
+    return Math.round(value * factor) / factor;
+  };
+  return {
+    voltage: round((((byte(0) << 8) | byte(1)) / 10), 1),
+    current: round((((byte(3) << 8) | byte(4)) / 1000), 3),
+    power: round((((byte(6) << 8) | byte(7)) / 1000), 3),
+  };
+}
+
+export const PHASE_READINGS = [
+  { key: "voltage", label: "Voltage", unit: "V", digits: 1 },
+  { key: "current", label: "Current", unit: "A", digits: 3 },
+  { key: "power", label: "Power", unit: "kW", digits: 3 },
+] as const;
+
+/** A plain DP value formatted with the backend's own unit/scale, if any. */
+export function formatPointValue(point: LiveDpPoint): string {
+  const value = point.value;
+  if (value === undefined || value === null || value === "") return "—";
+  const scale = typeof point.scale === "number" ? point.scale : 0;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const scaled = scale > 0 ? value / 10 ** scale : value;
+    return `${Number.isInteger(scaled) ? scaled : scaled.toFixed(scaled < 1 ? 2 : 1)}${
+      point.unit ? ` ${point.unit}` : ""
+    }`;
+  }
+  return point.unit ? `${String(value)} ${point.unit}` : String(value);
 }
 
 export interface HaierLiveStatus {
@@ -102,6 +174,45 @@ function isOnish(value: unknown): boolean | null {
 function pointsOf(row: JsonRecord | null): JsonRecord[] {
   if (!row || !Array.isArray(row["points"])) return [];
   return row["points"].map(record).filter((point): point is JsonRecord => point !== null);
+}
+
+function pointMeta(point: JsonRecord): Omit<LiveDpPoint, "value"> {
+  const unit = text(point["unit"]);
+  const rawScale = point["scale"];
+  const scale = typeof rawScale === "number" && Number.isFinite(rawScale) ? rawScale : undefined;
+  return {
+    dp: text(point["dp"]),
+    code: text(point["code"]),
+    type: text(point["type"]),
+    ...(unit ? { unit } : {}),
+    ...(scale === undefined ? {} : { scale }),
+  };
+}
+
+/**
+ * Merge the cached DP specification with a fresh status read. The spec carries
+ * unit/scale/type, the read carries values. A DP that only appears in the live
+ * read is still listed instead of being dropped silently.
+ */
+function mergePoints(spec: JsonRecord[], values: JsonRecord[]): LiveDpPoint[] {
+  const byDp = new Map<string, LiveDpPoint>();
+  for (const point of spec) {
+    const meta = pointMeta(point);
+    if (meta.dp) byDp.set(meta.dp, meta);
+  }
+  for (const item of values) {
+    const meta = pointMeta(item);
+    if (!meta.dp) continue;
+    const existing = byDp.get(meta.dp);
+    byDp.set(meta.dp, {
+      ...existing,
+      ...meta,
+      code: meta.code || existing?.code || "",
+      type: meta.type || existing?.type || "",
+      value: item["value"],
+    });
+  }
+  return [...byDp.values()];
 }
 
 /**
@@ -301,6 +412,11 @@ export class LocalBackendAdapter implements DeviceAdapter {
     if (!row) return failure("unknown_device");
     const point = this.pointsFor(deviceId).find((item) => item.dp === String(dp));
     if (!point) return failure("unknown_dp");
+    // Measurement DPs (packed phase reports, meter counters) are read-only in
+    // Tuya. Refuse them here so no UI path can ever send a meaningless write.
+    if (isPhasePoint(point) || isMeterPoint(point)) {
+      return failure("read_only_measurement");
+    }
     let coerced: unknown = value;
     if (/bool/i.test(point.type)) coerced = value === true || value === "true" || value === "1";
     else if (/int|number/i.test(point.type)) coerced = Number(value);
@@ -391,9 +507,7 @@ export class LocalBackendAdapter implements DeviceAdapter {
         const status = await requestJson(`${LOCAL}/status?id=${encodeURIComponent(id)}`);
         if (status["status"] !== "ok") {
           errors.push(`${name}: ${messageOf(status, "read_failed")}`);
-          nextPoints[id] = pointsOf(row).map((item) => ({
-            dp: text(item["dp"]), code: text(item["code"]), type: text(item["type"]),
-          }));
+          nextPoints[id] = mergePoints(pointsOf(row), []);
           continue;
         }
         device.lastSeen = reportedString(status["read_at"] ?? row["checked_at"]);
@@ -402,9 +516,7 @@ export class LocalBackendAdapter implements DeviceAdapter {
         const values = Array.isArray(status["values"])
           ? status["values"].map(record).filter((item): item is JsonRecord => item !== null)
           : [];
-        nextPoints[id] = values.map((item) => ({
-          dp: text(item["dp"]), code: text(item["code"]), type: text(item["type"]), value: item["value"],
-        }));
+        nextPoints[id] = mergePoints(pointsOf(row), values);
         const dp = switchDp(row);
         if (dp) {
           const point = values.find((item) => text(item["dp"]) === dp);
@@ -415,9 +527,7 @@ export class LocalBackendAdapter implements DeviceAdapter {
         }
       } catch (error) {
         errors.push(`${name}: ${(error as Error).message}`);
-        nextPoints[id] = pointsOf(row).map((item) => ({
-          dp: text(item["dp"]), code: text(item["code"]), type: text(item["type"]),
-        }));
+        nextPoints[id] = mergePoints(pointsOf(row), []);
       }
     }
     this._localPoints = nextPoints;

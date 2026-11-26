@@ -150,7 +150,7 @@ def test_offline_builder_rewrites_ssr_shell_for_live_webview(tmp_path):
     html = (tmp_path / "index.html").read_text(encoding="utf-8")
 
     assert "createHashHistory()" in router
-    assert "shellComponent: undefined" in root
+    assert "shellComponent" not in root
     assert "appCss" not in root
     assert "fonts.googleapis.com" not in root
     assert "fonts.gstatic.com" not in root
