@@ -1440,3 +1440,23 @@ matches the locally built checksum. In-app path: Settings -> Updates ->
 `Check now` -> `Install update` (explicit confirmation plus the Android install
 prompt); download/install is never automatic. The phone was disconnected from
 ADB at release time, so on-device tapping of that flow was not performed here.
+
+
+### Auto-download with explicit install (v1.25)
+
+- Native `UpdateManager.prepare()` downloads and verifies the stable APK into
+  the app-private `files/updates/` folder without launching an installer;
+  `OfflineActivity.prepareUpdate()` exposes it to the WebView. `state()` now
+  reports `stagedVersion` and `downloaded`, and `install()` reuses the staged
+  file instead of re-downloading it.
+- `store.tsx` checks metadata on launch (shared 6h throttle), triggers the
+  download-only bridge, and shows a global "Update ready — Install now? /
+  Later" dialog. `Later` is remembered per version. The Settings card shows
+  "Downloaded update" and prefers the native version over the stale HTTP
+  cache. Update callbacks are chained so both surfaces receive results.
+- Guards 71/71, backend 52/52, node checks PASS, strict tsc 0 errors, mocked
+  sweep 0/12 failed, phase check 9/9, command harness 0 unexpected writes.
+  New guard confirms `prepare()` never calls `launchInstall`.
+- APK: `versionCode 26`, `versionName 1.25`, 45,726,724 bytes, SHA-256
+  `469a322a33d5c62fee42f34dc954a8761709b217af49626f3db8f5b0a458ff22`, pinned
+  signer unchanged. Full evidence: `dist/TEST_RESULTS-v1.25.md`.

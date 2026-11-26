@@ -246,13 +246,21 @@ export function nativeCall(
     return null;
   }
 }
+/** Chain listeners instead of clobbering the provider's global update callback. */
 export function registerUpdateCallback(callback: (result: Json) => void): void {
-  (window as unknown as Record<string, unknown>)["pilotUpdateResult"] = (raw: string) => {
+  const w = window as unknown as Record<string, unknown>;
+  const previous = w["pilotUpdateResult"];
+  w["pilotUpdateResult"] = (raw: string) => {
+    let result: Json;
     try {
-      callback(JSON.parse(raw) as Json);
+      result = JSON.parse(raw) as Json;
     } catch {
-      callback({ ok: false, error: "invalid_native_result" });
+      result = { ok: false, error: "invalid_native_result" };
     }
+    if (typeof previous === "function") {
+      try { (previous as (value: string) => void)(raw); } catch { /* isolated */ }
+    }
+    callback(result);
   };
 }
 

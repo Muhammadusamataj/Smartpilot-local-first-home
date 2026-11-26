@@ -50,3 +50,23 @@ def test_webview_decoder_uses_the_same_formula():
     assert "byte(3) << 8) | byte(4)) / 1000" in source
     assert "byte(6) << 8) | byte(7)) / 1000" in source
     assert 'failure("read_only_measurement")' in source
+
+
+def test_auto_download_never_installs_by_itself():
+    root = Path(__file__).resolve().parents[1]
+    store = (root / "tools/lovable_full_live/store.tsx").read_text(encoding="utf-8")
+    settings = (root / "tools/lovable_full_live/settings.tsx").read_text(encoding="utf-8")
+    bridge = (
+        root / "android_offline/app/src/main/java/com/example/tuyalocalkey/offline/OfflineActivity.java"
+    ).read_text(encoding="utf-8")
+    manager = (
+        root / "android_offline/app/src/main/java/com/example/tuyalocalkey/offline/UpdateManager.java"
+    ).read_text(encoding="utf-8")
+    prepare = manager.split("public static void prepare(", 1)[1].split(
+        "public static void install(", 1)[0]
+    assert 'nativeCall("PilotNative", "prepareUpdate")' in store
+    assert "is ready" in store
+    assert "Downloaded update" in settings
+    assert "UpdateManager.prepare" in bridge
+    assert "launchInstall" not in prepare
+    assert "launchInstall" in manager.split("public static void install(", 1)[1]

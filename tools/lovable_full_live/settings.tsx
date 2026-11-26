@@ -511,11 +511,11 @@ function SettingsPage() {
         if (alive && value) setUpdateInfo(asObj(value));
       })
       .catch(() => { /* background check is best-effort */ });
-    nativeCall("PilotNative", "checkUpdate");
     const previous = (window as unknown as Record<string, unknown>)["pilotUpdateResult"];
     registerUpdateCallback((result) => {
       setNativeUpdate((current) => ({ ...(current ?? {}), ...result }));
     });
+    nativeCall("PilotNative", "checkUpdate");
     setNativeUpdate(nativeUpdateState());
     return () => {
       alive = false;
@@ -589,7 +589,10 @@ function SettingsPage() {
   const updateUrl = str(info["update_url"]) || str(info["release_url"]);
   const waitingForRelease = info["waiting_for_release"] === true;
   const updateAvailable = nativeReady ? nativeAvailable : httpAvailable;
-  const latestLabel = httpLatest || nativeLatest || (httpAvailable ? "available" : "up to date");
+  const latestLabel = nativeReady
+    ? (nativeLatest || httpLatest || (httpAvailable ? "available" : "up to date"))
+    : (httpLatest || nativeLatest || (httpAvailable ? "available" : "up to date"));
+  const updateReady = nativeReady && native["downloaded"] === true;
 
   // --- Family Hub ------------------------------------------------------------
   const familyAction = useAction();
@@ -1171,6 +1174,13 @@ function SettingsPage() {
                 </Badge>
               </PanelRow>
               <PanelRow label="Install source">{str(info["installation"]) || (nativeReady ? "android" : "browser")}</PanelRow>
+              <PanelRow label="Downloaded update">
+                <Badge variant={updateReady ? "ok" : "preview"}>
+                  {updateReady
+                    ? `${str(native["stagedVersion"]) || nativeLatest} ready to install`
+                    : nativeReady ? "downloads automatically" : "not applicable"}
+                </Badge>
+              </PanelRow>
               {nativeError && (
                 <p role="alert" className="flex items-start gap-1.5 text-xs text-status-offline">
                   <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden /> {nativeError}

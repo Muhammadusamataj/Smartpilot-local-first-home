@@ -10,10 +10,26 @@ import {
 } from "react";
 import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
 import { AC_DEVICES, DEVICES, deviceLabel } from "./devices";
 import { defaultAcState } from "./climate";
 import { translate, type I18nKey } from "./i18n";
 import { PREVIEW_MESSAGE } from "./adapter";
+import {
+  autoCheckUpdates,
+  nativeCall,
+  nativeUpdateState,
+  registerUpdateCallback,
+} from "./backend-api";
 // The live WebView uses the concrete adapter, which exposes the verified-read
 // and AC control methods the narrowed DeviceAdapter type does not declare.
 import { adapter as liveAdapter } from "./local-backend-adapter";
@@ -466,7 +482,86 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
     previewAction,
   ]);
 
-  return <SmartPilotContext.Provider value={value}>{children}</SmartPilotContext.Provider>;
+  // --- Proactive update: check + background download, install stays explicit --
+  const [nativeUpdate, setNativeUpdate] = useState<Record<string, unknown> | null>(null);
+  const [updatePrompt, setUpdatePrompt] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const bridge = (window as unknown as Record<string, unknown>)["PilotNative"];
+    if (!bridge || typeof bridge !== "object") return;
+    registerUpdateCallback((result) => {
+      setNativeUpdate((current) => ({ ...(current ?? {}), ...result }));
+    });
+    setNativeUpdate(nativeUpdateState() as Record<string, unknown> | null);
+    // The shared 6h throttle avoids a GitHub call on every screen render.
+    void autoCheckUpdates()
+      .then((value) => { if (value) nativeCall("PilotNative", "checkUpdate"); })
+      .catch(() => { /* metadata check is best effort */ });
+  }, []);
+
+  const updateAvailable = nativeUpdate?.["available"] === true;
+  const updateDownloaded = nativeUpdate?.["downloaded"] === true;
+  const updateBusy = nativeUpdate?.["busy"] === true;
+  const updateLatest = String(nativeUpdate?.["latest"] ?? "");
+  const updateError = String(nativeUpdate?.["error"] ?? "");
+
+  useEffect(() => {
+    if (!updateAvailable || updateBusy) return;
+    if (updateDownloaded) {
+      if (!updateLatest) return;
+      const key = `smartpilot:update-prompted:${updateLatest}`;
+      try {
+        if (window.localStorage.getItem(key) !== "1") setUpdatePrompt(updateLatest);
+      } catch {
+        setUpdatePrompt(updateLatest);
+      }
+      return;
+    }
+    if (updateError) return;
+    // Download-only bridge: no install prompt is launched from here.
+    nativeCall("PilotNative", "prepareUpdate");
+  }, [updateAvailable, updateDownloaded, updateBusy, updateLatest, updateError]);
+
+  const dismissUpdate = useCallback((version: string | null) => {
+    if (version) {
+      try {
+        window.localStorage.setItem(`smartpilot:update-prompted:${version}`, "1");
+      } catch { /* non-persistent dismissal is still fine */ }
+    }
+    setUpdatePrompt(null);
+  }, []);
+
+  return (
+    <>
+      <SmartPilotContext.Provider value={value}>{children}</SmartPilotContext.Provider>
+      <Dialog open={!!updatePrompt} onOpenChange={(open) => { if (!open) dismissUpdate(updatePrompt); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update {updatePrompt} is ready</DialogTitle>
+            <DialogDescription>
+              The signed APK was downloaded in the background. Installing still requires your
+              confirmation and the Android install prompt. Nothing is installed automatically.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="glass" size="touch" onClick={() => dismissUpdate(updatePrompt)}>
+              Later
+            </Button>
+            <Button
+              size="touch"
+              onClick={() => {
+                dismissUpdate(updatePrompt);
+                nativeCall("PilotNative", "installUpdate");
+              }}
+            >
+              Install now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 export function useSmartPilot(): Ctx {

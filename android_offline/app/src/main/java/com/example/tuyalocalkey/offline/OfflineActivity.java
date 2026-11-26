@@ -544,6 +544,12 @@ public class OfflineActivity extends Activity {
             if (trusted()) callback(done -> UpdateManager.check(OfflineActivity.this, done));
         }
 
+        /** Background download only; the install still needs user confirmation. */
+        @JavascriptInterface
+        public void prepareUpdate() {
+            if (trusted()) callback(done -> UpdateManager.prepare(OfflineActivity.this, done));
+        }
+
         @JavascriptInterface
         public void installUpdate() {
             if (trusted()) callback(done -> UpdateManager.install(OfflineActivity.this, done));

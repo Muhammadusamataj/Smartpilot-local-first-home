@@ -30,6 +30,7 @@ public final class UpdateManager {
     private static final String PREFS = "smartpilot_updates";
     private static final String KEY_VERSION = "latest_version";
     private static final String KEY_URL = "latest_apk";
+    private static final String KEY_STAGED = "staged_version";
     private static final String KEY_ERROR = "last_error";
     private static final long MAX_APK = 80L * 1024 * 1024;
     private static final ExecutorService POOL = Executors.newSingleThreadExecutor();
@@ -88,6 +89,14 @@ public final class UpdateManager {
                 || context.getPackageManager().canRequestPackageInstalls();
     }
 
+    /** The verified, fully downloaded APK for a version, or null if absent. */
+    private static File staged(Context context, String version) {
+        if (version == null || version.isEmpty()) return null;
+        File file = new File(folder(context), "update-" + version + ".apk");
+        if (!file.isFile() || file.length() < 100 * 1024 || file.length() > MAX_APK) return null;
+        return file;
+    }
+
     /** Synchronous, tiny state read used by the Settings UI. */
     public static String state(Context context) {
         JSONObject out = new JSONObject();
@@ -101,6 +110,10 @@ public final class UpdateManager {
             out.put("available", latest != null && newer(latest, current));
             out.put("canInstall", canInstall(context));
             out.put("hasBackup", new File(folder(context), "previous.apk").isFile());
+            String staged = saved.getString(KEY_STAGED, null);
+            out.put("stagedVersion", staged == null ? "" : staged);
+            out.put("downloaded", staged != null && staged.equals(latest)
+                    && staged(context, staged) != null);
             out.put("busy", BUSY.get());
             String error = saved.getString(KEY_ERROR, null);
             if (error != null) out.put("error", error);
@@ -149,6 +162,49 @@ public final class UpdateManager {
         });
     }
 
+    /**
+     * Download and verify the latest APK without launching an install prompt.
+     * Safe to call repeatedly: a verified staged copy is reused. Nothing is
+     * installed here — the user still has to confirm in the app and in Android.
+     */
+    public static void prepare(final Context context, final Callback callback) {
+        if (!BUSY.compareAndSet(false, true)) {
+            finish(callback, staleState(context, "busy"));
+            return;
+        }
+        POOL.execute(() -> {
+            JSONObject result;
+            try {
+                SharedPreferences saved = prefs(context);
+                String url = saved.getString(KEY_URL, null);
+                String version = saved.getString(KEY_VERSION, null);
+                if (url == null || version == null) {
+                    JSONObject release = fetchRelease();
+                    url = release.optString("apk");
+                    version = release.optString("version");
+                    saved.edit().putString(KEY_URL, url).putString(KEY_VERSION, version).apply();
+                }
+                File ready = staged(context, version);
+                if (ready == null) {
+                    File apk = download(context, url, "update.apk");
+                    verifyApk(apk);
+                    ready = new File(folder(context), "update-" + version + ".apk");
+                    if ((ready.exists() && !ready.delete())
+                            || !apk.renameTo(ready)) {
+                        throw new IllegalStateException("could_not_stage_update");
+                    }
+                }
+                saved.edit().putString(KEY_STAGED, version).putString(KEY_ERROR, null).apply();
+                result = stateJson(context, "Update downloaded for " + version + "; install when ready");
+            } catch (Exception e) {
+                prefs(context).edit().putString(KEY_ERROR, safeError(e)).apply();
+                result = staleState(context, safeError(e));
+            }
+            BUSY.set(false);
+            finish(callback, result);
+        });
+    }
+
     public static void install(final Context context, final Callback callback) {
         if (!BUSY.compareAndSet(false, true)) {
             finish(callback, staleState(context, "busy"));
@@ -171,12 +227,18 @@ public final class UpdateManager {
                         saved.edit().putString(KEY_URL, url).putString(KEY_VERSION, version).apply();
                     }
                     keepBackup(context);
-                    File apk = download(context, url, "update.apk");
-                    verifyApk(apk);
-                    File installed = new File(folder(context), "update-" + version + ".apk");
-                    if (installed.exists()) installed.delete();
-                    if (!apk.renameTo(installed)) throw new IllegalStateException("could_not_stage_update");
-                    launchInstall(context, installed);
+                    File apk = staged(context, version);
+                    if (apk == null) {
+                        apk = download(context, url, "update.apk");
+                        verifyApk(apk);
+                        File installed = new File(folder(context), "update-" + version + ".apk");
+                        if ((installed.exists() && !installed.delete())
+                                || !apk.renameTo(installed)) {
+                            throw new IllegalStateException("could_not_stage_update");
+                        }
+                        apk = installed;
+                    }
+                    launchInstall(context, apk);
                     saved.edit().putString(KEY_ERROR, null).apply();
                     result = stateJson(context, "Install prompt opened for " + version);
                 }
