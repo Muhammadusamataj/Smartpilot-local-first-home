@@ -1657,3 +1657,21 @@ Water Tank changes that were not in the separately published v1.27.
 APK SHA-256 `2a22f0948f0eb93b6768b01c34899f687eb2cf4a306c6702f21d2e9ad27c47c1`;
 installed with `adb -s 10FF3H02QE0004Y install -r` -> Success,
 `versionCode=29`, `versionName=1.28` verified. v1.27 was NOT overwritten.
+
+
+### Haier AC `pro` key rotation (diagnosed and fixed)
+
+- Read-only check: `19HFAB T3 Pro` was `verified=false`, `last_read=null` while
+  `FF Haier 19HFAB T3` was healthy. A read-only `/api/haier/read` for `pro`
+  returned: `Haier local key rotated: the appliance uses v514 but the saved
+  key is v513`.
+- Cloud status showed `logged_in=true`, `last_renew=2026-11-26 16:26:37`,
+  `pro key_version=513`. The frontend auto-renew is throttled to 12 h, so it
+  had not attempted again after the appliance rotated to v514.
+- Renewal was triggered through the existing `/api/haier/cloud/login` endpoint
+  using only the backend's saved refresh token (no password in the UI, no key
+  value logged). Result: `renewed: {pro:514, ff:756}`, no errors; `last_renew`
+  advanced to `19:59:29`. No backend/auth/protocol code was changed.
+- After renewal, `/api/haier/devices` reports both slots `verified=true` with
+  fresh `last_read`; a read-only `pro` status read succeeded (power off,
+  24 C target, 24 C room, mode auto). No physical AC command was sent.
