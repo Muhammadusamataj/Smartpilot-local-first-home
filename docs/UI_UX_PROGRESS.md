@@ -1460,3 +1460,20 @@ ADB at release time, so on-device tapping of that flow was not performed here.
 - APK: `versionCode 26`, `versionName 1.25`, 45,726,724 bytes, SHA-256
   `469a322a33d5c62fee42f34dc954a8761709b217af49626f3db8f5b0a458ff22`, pinned
   signer unchanged. Full evidence: `dist/TEST_RESULTS-v1.25.md`.
+
+
+**v1.25 published:** https://github.com/Muhammadusamataj/Smartpilot-local-first-home/releases/tag/v1.25
+(tag `v1.25`, commit `7d6fb9c`, stable, not draft/prerelease). GitHub digest for
+`SmartPilot-Local-v1.25.apk` matches
+`sha256:469a322a33d5c62fee42f34dc954a8761709b217af49626f3db8f5b0a458ff22`.
+
+**On-device note:** a genuine in-app 45 MB download was attempted over the
+phone's mobile data and stalled at 7.7 MB (device-LAN WiFi has no internet).
+The signed v1.25 APK was then placed in the app's private staged folder and the
+app's own `Install update` path was invoked; the phone auto-locked/switched
+apps during that interaction, so the final install was completed with
+`adb install -r dist\SmartPilot-Local-v1.25.apk` (Success). Installed version
+verified as `versionCode=26`, `versionName=1.25`. The automatic
+check+download+prompt path is covered by source/runtime guards and will run on
+a network with internet; it was not proven end-to-end over a stalled mobile
+connection.
