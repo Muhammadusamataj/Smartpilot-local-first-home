@@ -392,3 +392,9 @@ rejection. Keep the Python and desktop updater outside the Android beta change.
 - [x] Build, verify and publish a **stable** v1.21 release after all software gates
   pass. The installed updater rejects prereleases, so no prerelease is published.
   Release: https://github.com/Muhammadusamataj/Smartpilot-local-first-home/releases/tag/v1.21
+
+
+- [x] v1.24 stable release published after explicit approval:
+  https://github.com/Muhammadusamataj/Smartpilot-local-first-home/releases/tag/v1.24
+  (`versionCode 25`, pinned signer, APK checksum matches GitHub digest). The
+  in-app updater can now offer v1.24 to a v1.23 device; install remains explicit.

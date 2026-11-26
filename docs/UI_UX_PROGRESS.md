@@ -1430,3 +1430,13 @@ panel failures and zero uncaught page errors.
 - Release assets: APK, `.sha256`, `CHANGELOG-v1.24.md`, `TEST_RESULTS-v1.24.md`.
   Only stable releases are published; no prerelease or draft is used, as both
   the Python checker and the Android updater reject them.
+
+
+**Published:** https://github.com/Muhammadusamataj/Smartpilot-local-first-home/releases/tag/v1.24
+(tag `v1.24`, commit `4fb83a4`, stable, not draft/prerelease). GitHub reports
+`releases/latest` = `v1.24`; the uploaded APK's GitHub digest
+`sha256:c1f107f6aa05c94e3f13ed9d58a64aff3b22bd27d596118927a8b954af210bdd`
+matches the locally built checksum. In-app path: Settings -> Updates ->
+`Check now` -> `Install update` (explicit confirmation plus the Android install
+prompt); download/install is never automatic. The phone was disconnected from
+ADB at release time, so on-device tapping of that flow was not performed here.
