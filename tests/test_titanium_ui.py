@@ -180,7 +180,8 @@ def test_offline_builder_rewrites_ssr_shell_for_live_webview(tmp_path):
     shell = (tmp_path / "src/components/sp/AppShell.tsx").read_text(encoding="utf-8")
     assert "No hardware is connected" not in shell
     assert "Live local control · verified reads only" in shell
-    assert "explicit approval" in shell
+    # Approval is now a short context hint on the affected cards, not a
+    # second global banner.
     climate = (tmp_path / "src/routes/climate.tsx").read_text(encoding="utf-8")
     assert "LiveBadge" in climate and "PreviewBadge" not in climate
     settings = (tmp_path / "src/routes/settings.tsx").read_text(encoding="utf-8")

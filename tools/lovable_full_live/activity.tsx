@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { format, isToday, isYesterday } from "date-fns";
+import { format, isToday, isValid, isYesterday } from "date-fns";
 import {
   Ban,
   Bot,
@@ -15,6 +15,7 @@ import {
   Settings2,
   ShieldAlert,
   TriangleAlert,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -57,20 +58,36 @@ const KIND_META: Record<ActivityKind, { label: string; icon: LucideIcon }> = {
   system: { label: "System", icon: Settings2 },
 };
 
+const KIND_KEYS = ["all", ...(Object.keys(KIND_META) as ActivityKind[])] as const;
+
 const STATUS_META: Record<ActivityStatus, { icon: LucideIcon; cls: string; label: string }> = {
-  info: { icon: Info, cls: "bg-primary/14 text-primary", label: "Info" },
-  success: { icon: CheckCircle2, cls: "bg-status-ok/14 text-status-ok", label: "Success" },
+  info: { icon: Info, cls: "bg-primary/12 text-primary ring-1 ring-primary/20", label: "Info" },
+  success: {
+    icon: CheckCircle2,
+    cls: "bg-status-ok/12 text-status-ok ring-1 ring-status-ok/20",
+    label: "Success",
+  },
   warning: {
     icon: TriangleAlert,
-    cls: "bg-warning/14 text-warning",
+    cls: "bg-warning/12 text-warning ring-1 ring-warning/20",
     label: "Warning",
   },
-  blocked: { icon: Ban, cls: "bg-status-offline/14 text-status-offline", label: "Blocked" },
+  blocked: {
+    icon: Ban,
+    cls: "bg-status-offline/12 text-status-offline ring-1 ring-status-offline/20",
+    label: "Blocked",
+  },
 };
 
 type Origin = "local" | "backend";
-type TimelineEvent = ActivityEvent & { origin: Origin };
+type TimelineEvent = ActivityEvent & { origin: Origin; timestamp: number };
 type OriginFilter = "all" | Origin;
+
+const ORIGIN_OPTIONS: ReadonlyArray<{ value: OriginFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "local", label: "Commands" },
+  { value: "backend", label: "Backend" },
+];
 
 interface BackendEvent {
   id: number;
@@ -94,9 +111,9 @@ function parseBackendEvents(raw: unknown): BackendEvent[] {
     const item = row as Record<string, unknown>;
     const id = Number(item["id"]);
     const at = Number(item["at"]);
-    const title = asText(item["title"]);
+    const title = asText(item["title"]).trim();
     if (!Number.isFinite(id) || !Number.isFinite(at) || !title) continue;
-    const body = asText(item["body"]);
+    const body = asText(item["body"]).trim();
     out.push({
       id,
       at,
@@ -127,188 +144,314 @@ function mapStatus(text: string): ActivityStatus {
 
 function toTimeline(event: BackendEvent): TimelineEvent | null {
   const stamp = event.at * 1000;
-  if (!Number.isFinite(stamp)) return null;
+  const date = new Date(stamp);
+  if (!isValid(date)) return null;
   const text = `${event.title} ${event.body ?? ""}`;
-  const detail = event.body;
   return {
     id: `be-${event.id}`,
-    at: new Date(stamp).toISOString(),
+    at: date.toISOString(),
+    timestamp: stamp,
     kind: mapKind(event.kind),
     source: "system",
     status: mapStatus(text),
     title: event.title,
-    ...(detail ? { detail } : {}),
+    ...(event.body ? { detail: event.body } : {}),
     origin: "backend",
   };
 }
 
-function dayLabel(d: Date) {
+function dayLabel(timestamp: number): string {
+  const d = new Date(timestamp);
+  if (!isValid(d)) return "Unknown date";
   if (isToday(d)) return "Today";
   if (isYesterday(d)) return "Yesterday";
-  return format(d, "EEE, d MMM");
+  return format(d, "EEEE, d MMM");
+}
+
+function formatTime(timestamp: number): string {
+  const d = new Date(timestamp);
+  return isValid(d) ? format(d, "HH:mm") : "—";
 }
 
 function ActivityPage() {
   const { t, state, hydrated } = useSmartPilot();
   const [backendEvents, setBackendEvents] = useState<BackendEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<ActivityKind | "all">("all");
   const [origin, setOrigin] = useState<OriginFilter>("all");
 
-  const load = useCallback(async () => {
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const load = useCallback(async (manual = false) => {
+    if (manual) setRefreshing(true);
     try {
-      setBackendEvents(parseBackendEvents(await getEvents(0)));
+      const parsed = parseBackendEvents(await getEvents(0));
+      if (!mountedRef.current) return;
+      setBackendEvents(parsed);
+      setLastSyncedAt(Date.now());
       setError(null);
     } catch (cause) {
+      if (!mountedRef.current) return;
       setError(messageOf(cause));
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    void load();
-    const timer = window.setInterval(() => void load(), 30_000);
+    void load(false);
+    const timer = window.setInterval(() => void load(false), 30_000);
     return () => window.clearInterval(timer);
   }, [load]);
 
-  const events = useMemo(() => {
-    const local: TimelineEvent[] = state.activity.map((event) => ({ ...event, origin: "local" }));
-    const remote: TimelineEvent[] = backendEvents.flatMap((event) => {
+  // Step 1: Normalize & sort only when raw data changes
+  const allEvents = useMemo<TimelineEvent[]>(() => {
+    const local: TimelineEvent[] = [];
+    for (const event of state.activity) {
+      const ts = Date.parse(event.at);
+      if (!Number.isFinite(ts)) continue;
+      local.push({ ...event, origin: "local", timestamp: ts });
+    }
+    const remote: TimelineEvent[] = [];
+    for (const event of backendEvents) {
       const mapped = toTimeline(event);
-      return mapped ? [mapped] : [];
-    });
-    const all = [...local, ...remote].sort((a, b) => b.at.localeCompare(a.at));
+      if (mapped) remote.push(mapped);
+    }
+    return [...local, ...remote].sort((a, b) => b.timestamp - a.timestamp);
+  }, [state.activity, backendEvents]);
+
+  // Step 2: Filter cheaply on search/filter interactions
+  const filteredEvents = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return all.filter(
+    return allEvents.filter(
       (event) =>
         (kind === "all" || event.kind === kind) &&
         (origin === "all" || event.origin === origin) &&
         (!needle || `${event.title} ${event.detail ?? ""}`.toLowerCase().includes(needle)),
     );
-  }, [state.activity, backendEvents, q, kind, origin]);
+  }, [allEvents, q, kind, origin]);
 
+  // Step 3: O(n) grouping by day
   const grouped = useMemo(() => {
     const map = new Map<string, TimelineEvent[]>();
-    for (const event of events) {
-      const key = dayLabel(new Date(event.at));
-      map.set(key, [...(map.get(key) ?? []), event]);
+    for (const event of filteredEvents) {
+      const key = dayLabel(event.timestamp);
+      const bucket = map.get(key);
+      if (bucket) {
+        bucket.push(event);
+      } else {
+        map.set(key, [event]);
+      }
     }
     return [...map.entries()];
-  }, [events]);
+  }, [filteredEvents]);
+
+  const hasActiveFilters = Boolean(q.trim()) || kind !== "all" || origin !== "all";
+  const resetFilters = () => {
+    setQ("");
+    setKind("all");
+    setOrigin("all");
+  };
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title={t("activity_title")}
         sub="Real events from the local backend, merged with commands confirmed in this app."
-        eyebrow={<LiveBadge />}
+        eyebrow={
+          <div className="flex items-center gap-2">
+            <LiveBadge />
+            {lastSyncedAt && (
+              <span className="text-[11px] text-muted-foreground tabular">
+                Synced {formatTime(lastSyncedAt)}
+              </span>
+            )}
+          </div>
+        }
         actions={
-          <Button variant="glass" size="touch" onClick={() => void load()}>
-            <RefreshCw /> Refresh
+          <Button
+            variant="glass"
+            size="touch"
+            disabled={refreshing}
+            onClick={() => void load(true)}
+            aria-label="Refresh activity"
+          >
+            <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
+            {refreshing ? "Syncing…" : "Refresh"}
           </Button>
         }
       />
+
       {error && (
-        <p role="alert" className="mb-4 text-sm text-status-offline">
-          Could not load backend events: {error}
-        </p>
-      )}
-      <div className="mb-6 space-y-3">
-        <div className="relative">
-          <Search
-            className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden
-          />
-          <Input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={`${t("search")} events…`}
-            aria-label="Search events"
-            className="glass h-12 rounded-2xl pl-10"
-          />
-        </div>
         <div
-          className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-none sm:mx-0 sm:flex-wrap sm:px-0"
+          role="alert"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-status-offline/25 bg-status-offline/10 px-4 py-3 text-sm text-status-offline"
+        >
+          <div className="flex items-center gap-2.5">
+            <TriangleAlert className="size-4 shrink-0" aria-hidden />
+            <span>Could not load backend events: {error}</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void load(true)}
+            className="shrink-0 text-status-offline hover:bg-status-offline/15"
+          >
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {/* Filter Bar */}
+      <div className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search
+              className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={`${t("search")} events…`}
+              aria-label="Search events"
+              className="glass h-11 rounded-2xl pl-10 pr-10"
+            />
+            {q && (
+              <button
+                type="button"
+                onClick={() => setQ("")}
+                aria-label="Clear search"
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Apple-style Segmented Control for Origin */}
+          <div
+            className="inline-flex shrink-0 items-center rounded-2xl bg-muted/60 p-1 ring-1 ring-border/50"
+            role="group"
+            aria-label="Filter by source"
+          >
+            {ORIGIN_OPTIONS.map((option) => {
+              const active = origin === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setOrigin(option.value)}
+                  className={cn(
+                    "min-h-11 rounded-xl px-3.5 text-xs font-medium transition-all",
+                    active
+                      ? "bg-background text-foreground shadow-sm ring-1 ring-border/60"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Category Chips */}
+        <div
+          className="-mx-4 flex items-center gap-1.5 overflow-x-auto px-4 pb-1 scrollbar-none sm:mx-0 sm:flex-wrap sm:px-0"
           role="group"
           aria-label="Filter by type"
         >
-          {(["all", ...Object.keys(KIND_META)] as (ActivityKind | "all")[]).map((key) => (
-            <Button
-              key={key}
-              variant="chip"
-              size="touch"
-              aria-pressed={kind === key}
-              onClick={() => setKind(key)}
-              className={cn(
-                "shrink-0",
-                kind === key && "border-primary/60 bg-primary/15 text-primary",
-              )}
-            >
-              {key === "all" ? t("all") : KIND_META[key].label}
-            </Button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by source">
-          {(
-            [
-              { value: "all", label: "All sources" },
-              { value: "local", label: "Command log" },
-              { value: "backend", label: "Backend events" },
-            ] as Array<{ value: OriginFilter; label: string }>
-          ).map((option) => (
-            <Button
-              key={option.value}
-              variant="ghost"
-              size="touch"
-              aria-pressed={origin === option.value}
-              onClick={() => setOrigin(option.value)}
-              className={cn(origin === option.value && "bg-accent text-accent-foreground")}
-            >
-              {option.label}
-            </Button>
-          ))}
+          {KIND_KEYS.map((key) => {
+            const active = kind === key;
+            const Icon = key === "all" ? null : KIND_META[key].icon;
+            return (
+              <Button
+                key={key}
+                variant="chip"
+                size="touch"
+                aria-pressed={active}
+                onClick={() => setKind(key)}
+                className={cn(
+                  "h-11 shrink-0 rounded-full px-3.5 text-xs transition-all",
+                  active && "border-primary/50 bg-primary/12 text-primary shadow-xs",
+                )}
+              >
+                {Icon && <Icon className="size-3.5 opacity-80" aria-hidden />}
+                {key === "all" ? t("all") : KIND_META[key].label}
+              </Button>
+            );
+          })}
         </div>
       </div>
 
+      {/* Timeline Content */}
       {!hydrated || loading ? (
         <div className="space-y-3" aria-busy="true" aria-label="Loading activity">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-20 rounded-3xl" />
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-[4.5rem] rounded-3xl" />
           ))}
         </div>
       ) : grouped.length === 0 ? (
-        <EmptyState
-          icon={q || kind !== "all" || origin !== "all" ? SearchX : History}
-          title={q || kind !== "all" || origin !== "all" ? t("noResults") : "No events yet"}
-          body="Real backend events and confirmed commands appear here as soon as they are recorded."
-        />
+        <div className="space-y-4">
+          <EmptyState
+            icon={hasActiveFilters ? SearchX : History}
+            title={hasActiveFilters ? t("noResults") : "No events yet"}
+            body={
+              hasActiveFilters
+                ? "Try adjusting your search or clearing active filters."
+                : "Real backend events and confirmed commands appear here as soon as they are recorded."
+            }
+          />
+          {hasActiveFilters && (
+            <div className="flex justify-center">
+              <Button variant="glass" size="touch" onClick={resetFilters}>
+                Reset filters
+              </Button>
+            </div>
+          )}
+        </div>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-7" aria-live="polite">
           {grouped.map(([day, list]) => (
             <section key={day} aria-label={day}>
-              <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {day}
-              </h2>
-              <Panel pad="sm">
-                <ol className="relative space-y-1">
-                  {list.map((event, i) => {
+              <div className="mb-2.5 flex items-baseline justify-between px-1">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  {day}
+                </h2>
+                <span className="text-[11px] text-muted-foreground/75 tabular">
+                  {list.length} {list.length === 1 ? "event" : "events"}
+                </span>
+              </div>
+
+              <Panel pad="sm" className="overflow-hidden">
+                <ol className="divide-y divide-border/50">
+                  {list.map((event) => {
                     const status = STATUS_META[event.status];
                     const kindMeta = KIND_META[event.kind];
                     return (
-                      <li key={event.id} className="relative flex gap-3 rounded-2xl p-2">
-                        {i < list.length - 1 && (
-                          <span
-                            className="absolute bottom-[-0.25rem] left-[1.6rem] top-12 w-px bg-border"
-                            aria-hidden
-                          />
-                        )}
+                      <li
+                        key={event.id}
+                        className="group flex items-start gap-3.5 rounded-2xl px-2.5 py-3 transition-colors hover:bg-accent/40"
+                      >
                         <span
                           className={cn(
-                            "relative grid size-9 shrink-0 place-items-center rounded-xl",
+                            "mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl transition-transform group-hover:scale-[1.03]",
                             status.cls,
                           )}
                           title={status.label}
@@ -316,25 +459,34 @@ function ActivityPage() {
                           <status.icon className="size-4" aria-hidden />
                           <span className="sr-only">{status.label}</span>
                         </span>
+
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium leading-snug">{event.title}</p>
-                          {event.detail && (
-                            <p className="text-xs text-muted-foreground">{event.detail}</p>
-                          )}
-                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                            <Badge variant="outline">
-                              <kindMeta.icon className="size-3" aria-hidden /> {kindMeta.label}
-                            </Badge>
-                            <LiveBadge />
-                            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                              {event.origin === "backend" ? "Backend event" : "Command log"}
-                            </span>
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="text-sm font-medium leading-snug text-foreground">
+                              {event.title}
+                            </p>
                             <time
                               dateTime={event.at}
-                              className="text-[11px] text-muted-foreground tabular"
+                              className="shrink-0 pt-0.5 text-xs text-muted-foreground tabular"
                             >
-                              {format(new Date(event.at), "HH:mm")}
+                              {formatTime(event.timestamp)}
                             </time>
+                          </div>
+
+                          {event.detail && (
+                            <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                              {event.detail}
+                            </p>
+                          )}
+
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className="h-5 gap-1 px-2 text-[11px] font-normal">
+                              <kindMeta.icon className="size-3 opacity-75" aria-hidden />
+                              {kindMeta.label}
+                            </Badge>
+                            <span className="text-[11px] text-muted-foreground/80">
+                              {event.origin === "backend" ? "Backend" : "Command"}
+                            </span>
                           </div>
                         </div>
                       </li>

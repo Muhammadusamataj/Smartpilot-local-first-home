@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
@@ -50,9 +50,10 @@ import {
   runScene,
   type LocalPreferences,
 } from "@/lib/smartpilot/backend-api";
-import { AC_DEVICES, DEVICES, getDevice } from "@/lib/smartpilot/devices";
+import { AC_DEVICES, getDevice } from "@/lib/smartpilot/devices";
 import { useSmartPilot } from "@/lib/smartpilot/store";
 import { useNow } from "@/hooks/use-now";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -171,11 +172,6 @@ function parseEvents(raw: unknown): BackendEvent[] {
   return out;
 }
 
-/**
- * Home tile layout is local UI state only. It is kept in localStorage so it
- * cannot overwrite the backend `homes`/`rooms`/`favorites` fields used by the
- * Devices screen for device organization.
- */
 function applyPreferences(base: HomeTile[], prefs: LocalPreferences): HomeTile[] {
   const favorites = new Set(Array.isArray(prefs.favorites) ? prefs.favorites : []);
   const rooms =
@@ -188,8 +184,6 @@ function applyPreferences(base: HomeTile[], prefs: LocalPreferences): HomeTile[]
     return {
       ...tile,
       favorite: favorites.has(tile.id),
-      // An explicit saved choice wins; otherwise keep the default visibility
-      // so new installs start with a calm five-tile Home.
       visible: saved === "hidden" ? false : saved === "visible" ? true : tile.visible,
     };
   };
@@ -211,17 +205,26 @@ function Overview() {
     hour < 12 ? t("greeting_morning") : hour < 17 ? t("greeting_afternoon") : t("greeting_evening");
   const connected = devices.filter((d) => d.connection === "online").length;
   const pending = state.approvals.filter((a) => a.status === "pending").length;
+  // Empty rooms are presentation noise; hide them, never invent or drop devices.
   const groups = [
     { name: "Porch", devices: devices.filter((d) => d.location === "Porch") },
     { name: "Terrace", devices: devices.filter((d) => d.location === "Terrace") },
     { name: t("room_not_set"), devices: devices.filter((d) => d.location === null) },
-  ];
+  ].filter((g) => g.devices.length > 0);
   const backendLabel =
     connection.state === "live"
       ? "Local backend verified"
       : connection.state === "refreshing"
         ? "Checking local backend"
         : "Local backend unavailable";
+
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // --- Home customization (local state + saved preferences) ----------------
   const [tiles, setTiles] = useState<HomeTile[]>(DEFAULT_TILES);
@@ -236,6 +239,7 @@ function Overview() {
   const [usage, setUsage] = useState<UsageResponse | null>(null);
   const [backendNames, setBackendNames] = useState<Record<string, string>>({});
   const [usageLoading, setUsageLoading] = useState(true);
+  const [usageRefreshing, setUsageRefreshing] = useState(false);
   const [usageError, setUsageError] = useState<string | null>(null);
   const [events, setEvents] = useState<BackendEvent[]>([]);
   const [confirmScene, setConfirmScene] = useState<SceneRow | null>(null);
@@ -244,70 +248,87 @@ function Overview() {
 
   const loadScenes = useCallback(async () => {
     try {
-      setScenes(parseScenes(await getScenes()));
+      const parsed = parseScenes(await getScenes());
+      if (!mountedRef.current) return;
+      setScenes(parsed);
       setScenesError(null);
     } catch (error) {
+      if (!mountedRef.current) return;
       setScenesError(messageOf(error));
     }
   }, []);
 
-  const loadUsage = useCallback(async () => {
-    setUsageLoading(true);
+  const loadUsage = useCallback(async (manual = false) => {
+    if (manual) setUsageRefreshing(true);
     try {
-      setUsage((await getUsage()) as unknown as UsageResponse);
+      const next = (await getUsage()) as unknown as UsageResponse;
+      if (!mountedRef.current) return;
+      setUsage(next);
       setUsageError(null);
     } catch (error) {
+      if (!mountedRef.current) return;
       setUsageError(messageOf(error));
     } finally {
-      setUsageLoading(false);
+      if (mountedRef.current) {
+        setUsageLoading(false);
+        setUsageRefreshing(false);
+      }
     }
   }, []);
 
   const loadEvents = useCallback(async () => {
     try {
-      setEvents(parseEvents(await getEvents(0)));
+      const parsed = parseEvents(await getEvents(0));
+      if (!mountedRef.current) return;
+      setEvents(parsed);
     } catch {
       // Recent events are optional here; the Activity screen reports errors.
     }
   }, []);
 
+  const refreshOverview = useCallback(async () => {
+    await Promise.allSettled([refreshDevices(), loadUsage(true), loadEvents()]);
+  }, [refreshDevices, loadUsage, loadEvents]);
+
   useEffect(() => {
-    let alive = true;
+    let loadedFromStorage = false;
     try {
       const saved = window.localStorage.getItem(HOME_LAYOUT_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as HomeTile[];
         if (Array.isArray(parsed) && parsed.length === DEFAULT_TILES.length) {
           setTiles(parsed);
-          return;
+          loadedFromStorage = true;
         }
       }
     } catch {
       // Corrupt local state must never break the dashboard.
     }
+    if (loadedFromStorage) return;
+
     void getPreferences()
       .then((prefs) => {
-        if (alive) setTiles(applyPreferences(DEFAULT_TILES, prefs));
+        if (mountedRef.current) setTiles(applyPreferences(DEFAULT_TILES, prefs));
       })
       .catch(() => {
         // Keep the default layout when preferences are unavailable.
       });
-    return () => {
-      alive = false;
-    };
   }, []);
 
   useEffect(() => {
     void loadScenes();
-    void loadUsage();
+    void loadUsage(false);
     void loadEvents();
     void getLocalDevices()
       .then((reply) => {
+        if (!mountedRef.current) return;
         const map: Record<string, string> = {};
         for (const row of reply.devices ?? []) map[row.id] = row.name;
         setBackendNames(map);
       })
-      .catch(() => { /* names are cosmetic; keep the raw id as fallback */ });
+      .catch(() => {
+        // Names are cosmetic; keep the raw id as fallback.
+      });
   }, [loadScenes, loadUsage, loadEvents]);
 
   useEffect(() => {
@@ -321,13 +342,14 @@ function Overview() {
     setPrefsError(null);
     try {
       window.localStorage.setItem(HOME_LAYOUT_KEY, JSON.stringify(next));
+      if (!mountedRef.current) return;
       setTiles(next.map((tile) => ({ ...tile })));
       setCustomizeOpen(false);
       toast("Home layout saved on this device");
     } catch (error) {
-      setPrefsError(messageOf(error));
+      if (mountedRef.current) setPrefsError(messageOf(error));
     } finally {
-      setSaving(false);
+      if (mountedRef.current) setSaving(false);
     }
   }, []);
 
@@ -362,13 +384,13 @@ function Overview() {
         description: "Real commands were sent by the local backend. Refreshing verified status.",
       });
       setConfirmScene(null);
-      await Promise.allSettled([loadScenes(), loadUsage(), loadEvents(), refreshDevices()]);
+      await Promise.allSettled([loadScenes(), loadUsage(false), loadEvents(), refreshDevices()]);
     } catch (error) {
       const message = messageOf(error);
       setSceneError(message);
       toast.error(`Could not run “${scene.name}”`, { description: message });
     } finally {
-      setRunningSceneId(null);
+      if (mountedRef.current) setRunningSceneId(null);
     }
   };
 
@@ -383,12 +405,18 @@ function Overview() {
             <PanelTitle
               icon={Zap}
               action={
-                <Button variant="ghost" size="sm" onClick={() => void loadUsage()}>
-                  <RefreshCw /> Refresh
+                <Button
+                  variant="ghost"
+                  size="touch"
+                  disabled={usageRefreshing}
+                  onClick={() => void loadUsage(true)}
+                >
+                  <RefreshCw className={cn("size-3.5", usageRefreshing && "animate-spin")} />
+                  Refresh
                 </Button>
               }
             >
-              Live readings · {usage?.today ?? "today"}
+              Live readings · <span className="tabular">{usage?.today ?? "today"}</span>
             </PanelTitle>
             {usageLoading ? (
               <p className="text-sm text-muted-foreground" role="status">
@@ -423,9 +451,9 @@ function Overview() {
             <PanelTitle
               icon={Play}
               action={
-                <Button asChild variant="ghost" size="sm">
+                <Button asChild variant="ghost" size="touch">
                   <Link to="/automations">
-                    {t("viewAll")} <ArrowRight />
+                    {t("viewAll")} <ArrowRight className="size-4" aria-hidden />
                   </Link>
                 </Button>
               }
@@ -448,12 +476,13 @@ function Overview() {
                     variant="chip"
                     size="touch"
                     disabled={runningSceneId !== null}
+                    className="rounded-full active:scale-[0.98]"
                     onClick={() => {
                       setSceneError(null);
                       setConfirmScene(scene);
                     }}
                   >
-                    <Play /> {scene.name}
+                    <Play className="size-3.5" aria-hidden /> {scene.name}
                   </Button>
                 ))}
               </div>
@@ -474,36 +503,42 @@ function Overview() {
             <PanelTitle
               icon={Cpu}
               action={
-                <Button asChild variant="ghost" size="sm">
+                <Button asChild variant="ghost" size="touch">
                   <Link to="/devices">
-                    {t("viewAll")} <ArrowRight />
+                    {t("viewAll")} <ArrowRight className="size-4" aria-hidden />
                   </Link>
                 </Button>
               }
             >
               {t("device_groups")}
             </PanelTitle>
-            <div className="space-y-4">
-              {groups.map((g) => (
-                <div key={g.name}>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    {g.name} · {g.devices.length}
-                  </p>
-                  <ul className="grid gap-2 sm:grid-cols-2">
-                    {g.devices.map((d) => (
-                      <li
-                        key={d.id}
-                        className="flex items-center gap-3 rounded-2xl border border-glass-border bg-muted/30 p-2.5"
-                      >
-                        <DeviceGlyph device={d} size="sm" />
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium">{d.name}</span>
-                        <ConnectionPill status={d.connection} />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
+            {groups.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No rooms assigned yet. Devices appear here once a local read reports them.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {groups.map((g) => (
+                  <div key={g.name}>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground tabular">
+                      {g.name} · {g.devices.length}
+                    </p>
+                    <ul className="grid gap-2 sm:grid-cols-2">
+                      {g.devices.map((d) => (
+                        <li
+                          key={d.id}
+                          className="flex items-center gap-3 rounded-2xl border border-glass-border bg-muted/30 p-2.5"
+                        >
+                          <DeviceGlyph device={d} size="sm" />
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium">{d.name}</span>
+                          <ConnectionPill status={d.connection} />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
           </Panel>
         );
       case "safe-actions":
@@ -537,12 +572,12 @@ function Overview() {
               {devices.map((d) => (
                 <li key={d.id} className="flex items-center justify-between gap-2">
                   <span className="min-w-0 truncate">{d.name}</span>
-                  <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground tabular">
                     <span
-                      className={
-                        "size-1.5 rounded-full " +
-                        (d.connection === "online" ? "bg-status-ok" : "bg-status-unknown")
-                      }
+                      className={cn(
+                        "size-1.5 rounded-full",
+                        d.connection === "online" ? "bg-status-ok" : "bg-status-unknown",
+                      )}
                       aria-hidden
                     />
                     {d.lastSeen.known
@@ -552,7 +587,7 @@ function Overview() {
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-xs text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground tabular">
               {connection.message}. Last checked:{" "}
               {connection.refreshedAt ? new Date(connection.refreshedAt).toLocaleTimeString() : "—"}.
             </p>
@@ -564,9 +599,9 @@ function Overview() {
             <PanelTitle
               icon={History}
               action={
-                <Button asChild variant="ghost" size="sm">
+                <Button asChild variant="ghost" size="touch">
                   <Link to="/activity">
-                    {t("viewAll")} <ArrowRight />
+                    {t("viewAll")} <ArrowRight className="size-4" aria-hidden />
                   </Link>
                 </Button>
               }
@@ -587,7 +622,7 @@ function Overview() {
                     <span className="min-w-0 truncate text-sm">{event.title}</span>
                     <time
                       dateTime={new Date(event.at * 1000).toISOString()}
-                      className="shrink-0 text-xs text-muted-foreground"
+                      className="shrink-0 text-xs text-muted-foreground tabular"
                     >
                       {new Date(event.at * 1000).toLocaleTimeString()}
                     </time>
@@ -600,7 +635,7 @@ function Overview() {
       case "quick-nav":
         return (
           <nav aria-label={t("quick_nav")}>
-            <h2 className="mb-3 text-base font-semibold">{t("quick_nav")}</h2>
+            <h2 className="mb-3 text-base font-semibold tracking-tight">{t("quick_nav")}</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {(
                 [
@@ -613,13 +648,13 @@ function Overview() {
                 <Link
                   key={q.to}
                   to={q.to}
-                  className="glass group flex h-24 flex-col justify-between rounded-3xl p-4 transition-colors hover:border-primary/40"
+                  className="glass group flex h-24 flex-col justify-between rounded-3xl p-4 transition-all hover:border-primary/40 active:scale-[0.98]"
                 >
                   <q.icon className="size-5 text-primary" aria-hidden />
                   <span className="flex items-center justify-between text-sm font-medium">
                     {q.label}{" "}
                     <ArrowRight
-                      className="size-4 opacity-0 transition-opacity group-hover:opacity-100"
+                      className="size-4 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
                       aria-hidden
                     />
                   </span>
@@ -639,41 +674,50 @@ function Overview() {
         <div className="relative z-10 grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-center">
           <div>
             <p className="text-sm text-muted-foreground">{greet}</p>
-            <h1 className="mt-1 text-3xl font-semibold sm:text-4xl">
-              <span className="text-gradient">Titanium Control</span>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+              Titanium Control
             </h1>
-            <div className="mt-4 rounded-2xl border border-glass-border bg-background/40 p-4">
+            <div className="mt-4 rounded-2xl border border-glass-border bg-background/45 p-4">
               <p className="mb-1 flex flex-wrap items-center gap-2 text-sm font-semibold">
-                <Sparkles className="size-4 text-primary" aria-hidden /> {t("overview_summary_title")}
+                <Sparkles className="size-4 text-primary" aria-hidden />
+                <span>{t("overview_summary_title")}</span>
                 <Badge variant="info">Live local</Badge>
               </p>
               <p className="text-sm text-muted-foreground">
-                Verified local reads. Critical devices need approval before any command.
+                Live status of your devices, rooms and local backend.
               </p>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button asChild variant="hero" size="touch">
+              <Button asChild variant="hero" size="touch" className="rounded-full">
                 <Link to="/assistant">
-                  <Bot /> Ask Smart Pilot
+                  <Bot className="size-4" aria-hidden /> Ask Smart Pilot
                 </Link>
               </Button>
-              <Button asChild variant="glass" size="touch">
+              <Button asChild variant="glass" size="touch" className="rounded-full">
                 <Link to="/climate">
-                  <Thermometer /> {t("nav_climate")}
+                  <Thermometer className="size-4" aria-hidden /> {t("nav_climate")}
                 </Link>
               </Button>
               <Button
                 variant="glass"
                 size="touch"
-                disabled={connection.state === "refreshing"}
-                onClick={() => void refreshDevices()}
+                className="rounded-full"
+                disabled={connection.state === "refreshing" || usageRefreshing}
+                onClick={() => void refreshOverview()}
               >
-                <Activity /> Refresh status
+                <Activity
+                  className={cn(
+                    "size-4",
+                    (connection.state === "refreshing" || usageRefreshing) && "animate-spin",
+                  )}
+                  aria-hidden
+                />
+                Refresh status
               </Button>
               <Dialog open={customizeOpen} onOpenChange={setCustomizeOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="glass" size="touch">
-                    <SlidersHorizontal /> Customize
+                  <Button variant="glass" size="touch" className="rounded-full">
+                    <SlidersHorizontal className="size-4" aria-hidden /> Customize
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="glass max-h-[85vh] overflow-y-auto sm:max-w-lg">
@@ -701,7 +745,7 @@ function Overview() {
                           disabled={index === 0}
                           onClick={() => moveDraft(index, -1)}
                         >
-                          <ArrowUp />
+                          <ArrowUp className="size-4" />
                         </Button>
                         <Button
                           type="button"
@@ -711,7 +755,7 @@ function Overview() {
                           disabled={index === draft.length - 1}
                           onClick={() => moveDraft(index, 1)}
                         >
-                          <ArrowDown />
+                          <ArrowDown className="size-4" />
                         </Button>
                         <Button
                           type="button"
@@ -721,7 +765,7 @@ function Overview() {
                           aria-pressed={!tile.visible}
                           onClick={() => toggleDraft(index, "visible")}
                         >
-                          {tile.visible ? <EyeOff /> : <Eye />}
+                          {tile.visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                         </Button>
                         <Button
                           type="button"
@@ -731,7 +775,9 @@ function Overview() {
                           aria-pressed={tile.favorite}
                           onClick={() => toggleDraft(index, "favorite")}
                         >
-                          <Star className={tile.favorite ? "fill-warning text-warning" : ""} />
+                          <Star
+                            className={cn("size-4", tile.favorite && "fill-warning text-warning")}
+                          />
                         </Button>
                       </li>
                     ))}
@@ -747,11 +793,9 @@ function Overview() {
                       variant="ghost"
                       size="touch"
                       disabled={saving}
-                      onClick={() => {
-                        setDraft(DEFAULT_TILES.map((tile) => ({ ...tile })));
-                      }}
+                      onClick={() => setDraft(DEFAULT_TILES.map((tile) => ({ ...tile })))}
                     >
-                      <RotateCcw /> Reset
+                      <RotateCcw className="size-4" /> Reset
                     </Button>
                     <Button
                       type="button"
@@ -808,7 +852,7 @@ function Overview() {
       {favoriteTiles.length > 0 && (
         <div className="flex flex-wrap items-center gap-2" aria-label="Favorite sections">
           <Star className="size-4 fill-warning text-warning" aria-hidden />
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             Favorites
           </span>
           {favoriteTiles.map((tile) => (
@@ -816,6 +860,7 @@ function Overview() {
               key={tile.id}
               variant="chip"
               size="touch"
+              className="rounded-full"
               onClick={() =>
                 document.getElementById(`tile-${tile.id}`)?.scrollIntoView({ block: "start" })
               }
@@ -880,7 +925,8 @@ function Overview() {
               disabled={runningSceneId !== null}
               onClick={() => void runConfirmedScene()}
             >
-              <Play /> {runningSceneId === null ? "Run scene · send commands" : "Sending…"}
+              <Play className="size-4" aria-hidden />{" "}
+              {runningSceneId === null ? "Run scene · send commands" : "Sending…"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -891,7 +937,7 @@ function Overview() {
 
 function Reading({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-glass-border bg-background/40 p-3">
+    <div className="rounded-2xl border border-glass-border bg-background/45 p-3">
       <p className="min-w-0 truncate text-xs text-muted-foreground" title={label}>
         {label}
       </p>
@@ -918,10 +964,12 @@ function HealthTile({
         ? "text-status-preview"
         : "text-status-unknown";
   return (
-    <div className="rounded-2xl border border-glass-border bg-background/40 p-3">
-      <Icon className={`size-4 ${toneCls}`} aria-hidden />
-      <p className="mt-2 text-[11px] uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="text-sm font-semibold leading-snug">{value}</p>
+    <div className="rounded-2xl border border-glass-border bg-background/45 p-3">
+      <Icon className={cn("size-4", toneCls)} aria-hidden />
+      <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="text-sm font-semibold leading-snug tabular">{value}</p>
     </div>
   );
 }
@@ -939,7 +987,7 @@ function SafeAction({
     <li>
       <Link
         to={to}
-        className="flex items-center gap-3 rounded-2xl border border-glass-border bg-muted/30 p-3 transition-colors hover:border-primary/40"
+        className="flex items-center gap-3 rounded-2xl border border-glass-border bg-muted/30 p-3 transition-colors hover:border-primary/40 active:scale-[0.99]"
       >
         <ShieldCheck className="size-4 shrink-0 text-emerald" aria-hidden />
         <span className="min-w-0 flex-1">

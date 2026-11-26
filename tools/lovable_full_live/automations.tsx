@@ -1,9 +1,4 @@
-// Live automations route backed by the EXISTING Flask endpoints.
-// Nothing here invents device data: scenes, DPs, rules, events and usage all
-// come from the local backend. Every write is gated by an explicit user action
-// and every operator action (run / tick) is confirmed in a dialog first.
-
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
@@ -13,6 +8,7 @@ import {
   Check,
   Clock,
   Inbox,
+  Loader2,
   Play,
   Plus,
   RefreshCw,
@@ -92,8 +88,6 @@ export const Route = createFileRoute("/automations")({
 });
 
 // --- Narrowing helpers: backend payloads are plain JSON ---------------------
-// Explicit optional keys keep dot access valid under the pinned tsconfig's
-// `noPropertyAccessFromIndexSignature` without weakening strict mode.
 interface JsonRecord {
   id?: unknown;
   name?: unknown;
@@ -162,11 +156,11 @@ function asText(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
 function formatRunTime(value: string): string {
-  if (!value || value === "0") return "never";
+  if (!value || value === "0") return "Never";
   const parsed = new Date(value);
   if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleString();
   const seconds = Number(value);
-  if (!Number.isFinite(seconds) || seconds <= 0) return "never";
+  if (!Number.isFinite(seconds) || seconds <= 0) return "Never";
   return new Date(seconds * 1000).toLocaleString();
 }
 function asBool(value: unknown): boolean {
@@ -184,7 +178,6 @@ function asDays(value: unknown): number[] {
       (item): item is number =>
         typeof item === "number" && Number.isInteger(item) && item >= 0 && item <= 6,
     )
-    .map((item) => item)
     .sort((a, b) => a - b);
 }
 function formatValue(value: unknown): string {
@@ -418,8 +411,8 @@ async function fetchDeviceCatalogue(): Promise<DeviceOption[]> {
 function scheduleLabel(schedule: SceneView["schedule"]): string {
   if (!schedule.enabled || !schedule.time) return "Manual";
   const days = [...schedule.days].sort((a, b) => a - b);
-  if (days.length === 0 || days.length === 7) return `Daily ${schedule.time}`;
-  return `${days.map((day) => DAY_SHORT[day] ?? "").join(", ")} ${schedule.time}`;
+  if (days.length === 0 || days.length === 7) return `Daily · ${schedule.time}`;
+  return `${days.map((day) => DAY_SHORT[day] ?? "").join(", ")} · ${schedule.time}`;
 }
 
 // --- Page ------------------------------------------------------------------
@@ -441,54 +434,82 @@ function AutomationsPage() {
   const [deleteSceneTarget, setDeleteSceneTarget] = useState<SceneView | null>(null);
   const [deleteRuleTarget, setDeleteRuleTarget] = useState<RuleView | null>(null);
   const [tickOpen, setTickOpen] = useState(false);
-  const [busy, setBusy] = useState("");
+  const [busyAction, setBusyAction] = useState<string>("");
+
+  const mountedRef = useRef(true);
+  const refreshSeqRef = useRef(0);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const refreshAll = useCallback(async () => {
+    const seq = ++refreshSeqRef.current;
     setLoading(true);
     const errors: string[] = [];
-    try {
-      const data = asRecord(await getScenes());
+
+    const [scenesRes, schedRes, rulesRes, eventsRes, usageRes, catRes] = await Promise.allSettled([
+      getScenes(),
+      getScheduler(),
+      getRules(),
+      getEvents(),
+      getUsage(),
+      fetchDeviceCatalogue(),
+    ]);
+
+    if (!mountedRef.current || seq !== refreshSeqRef.current) return;
+
+    if (scenesRes.status === "fulfilled") {
       setScenes(
-        asArray(data.scenes)
+        asArray(asRecord(scenesRes.value).scenes)
           .map(parseScene)
           .filter((scene): scene is SceneView => scene !== null),
       );
-    } catch (error) {
-      errors.push(`scenes: ${messageOf(error)}`);
+    } else {
+      errors.push(`scenes: ${messageOf(scenesRes.reason)}`);
     }
-    try {
-      setScheduler(parseScheduler(await getScheduler()));
-    } catch (error) {
-      errors.push(`scheduler: ${messageOf(error)}`);
+
+    if (schedRes.status === "fulfilled") {
+      setScheduler(parseScheduler(schedRes.value));
+    } else {
+      errors.push(`scheduler: ${messageOf(schedRes.reason)}`);
     }
-    try {
+
+    if (rulesRes.status === "fulfilled") {
       setRules(
-        asArray(asRecord(await getRules()).rules)
+        asArray(asRecord(rulesRes.value).rules)
           .map(parseRule)
           .filter((rule): rule is RuleView => rule !== null),
       );
-    } catch (error) {
-      errors.push(`rules: ${messageOf(error)}`);
+    } else {
+      errors.push(`rules: ${messageOf(rulesRes.reason)}`);
     }
-    try {
+
+    if (eventsRes.status === "fulfilled") {
       setEvents(
-        asArray(asRecord(await getEvents()).events)
+        asArray(asRecord(eventsRes.value).events)
           .map(parseEvent)
           .filter((event): event is EventView => event !== null),
       );
-    } catch (error) {
-      errors.push(`events: ${messageOf(error)}`);
+    } else {
+      errors.push(`events: ${messageOf(eventsRes.reason)}`);
     }
-    try {
-      setUsage(parseUsage(await getUsage()));
-    } catch (error) {
-      errors.push(`usage: ${messageOf(error)}`);
+
+    if (usageRes.status === "fulfilled") {
+      setUsage(parseUsage(usageRes.value));
+    } else {
+      errors.push(`usage: ${messageOf(usageRes.reason)}`);
     }
-    try {
-      setCatalogue(await fetchDeviceCatalogue());
-    } catch (error) {
-      errors.push(`devices: ${messageOf(error)}`);
+
+    if (catRes.status === "fulfilled") {
+      setCatalogue(catRes.value);
+    } else {
+      errors.push(`devices: ${messageOf(catRes.reason)}`);
     }
+
     setLoadError(errors.join(" · "));
     setLoading(false);
   }, []);
@@ -497,9 +518,6 @@ function AutomationsPage() {
     void refreshAll();
   }, [refreshAll]);
 
-  // The store's `points` are keyed by the Lovable device ID; the backend scene
-  // API needs the real device ID. Match by exact device name (the names are a
-  // fixed contract) and use the verified store points for live values/types.
   const deviceOptions = useMemo<DeviceOption[]>(() => {
     return catalogue.map((device) => {
       const local = devices.find((item) => item.name === device.name);
@@ -530,6 +548,7 @@ function AutomationsPage() {
   const reloadScenes = useCallback(async () => {
     try {
       const data = asRecord(await getScenes());
+      if (!mountedRef.current) return;
       setScenes(
         asArray(data.scenes)
           .map(parseScene)
@@ -539,16 +558,17 @@ function AutomationsPage() {
       toast.error(messageOf(error));
     }
     try {
-      setScheduler(parseScheduler(await getScheduler()));
+      const sched = parseScheduler(await getScheduler());
+      if (mountedRef.current) setScheduler(sched);
     } catch {
-      // Scheduler status is informational; keep the last known value.
+      // Scheduler status is informational; keep last known value.
     }
   }, []);
 
   const confirmRunScene = async () => {
     if (!runTarget) return;
     const scene = runTarget;
-    setBusy("run");
+    setBusyAction(`run:${scene.id}`);
     try {
       const result = asRecord(await runScene(scene.id));
       const succeeded = asNumber(result.succeeded);
@@ -571,7 +591,7 @@ function AutomationsPage() {
         kind: "automation",
         status: failed > 0 ? "warning" : "success",
         title: `Scene run: ${scene.name}`,
-        detail: `${succeeded} succeeded, ${failed} failed — real commands were sent through the local backend.`,
+        detail: `${succeeded} succeeded, ${failed} failed — commands sent through local backend.`,
       });
       setRunTarget(null);
       await reloadScenes();
@@ -584,14 +604,14 @@ function AutomationsPage() {
         detail: messageOf(error),
       });
     } finally {
-      setBusy("");
+      if (mountedRef.current) setBusyAction("");
     }
   };
 
   const confirmDeleteScene = async () => {
     if (!deleteSceneTarget) return;
     const scene = deleteSceneTarget;
-    setBusy("delete-scene");
+    setBusyAction(`delete-scene:${scene.id}`);
     try {
       await deleteScene(scene.id);
       toast.success(`Scene deleted: ${scene.name}`);
@@ -601,123 +621,141 @@ function AutomationsPage() {
     } catch (error) {
       toast.error(messageOf(error));
     } finally {
-      setBusy("");
+      if (mountedRef.current) setBusyAction("");
     }
   };
 
   const confirmTick = async () => {
-    setBusy("tick");
+    setBusyAction("tick");
     try {
       const result = asRecord(await tickScheduler());
       const ran = asArray(result.ran).map(asRecord);
       const failed = ran.reduce((total, row) => total + (asNumber(row.failed) > 0 ? 1 : 0), 0);
-      const names = ran.map((row) => `${asText(row.name) || asText(row.id)} (${asBool(row.ok) ? "ok" : "failed"})`);
+      const names = ran.map(
+        (row) => `${asText(row.name) || asText(row.id)} (${asBool(row.ok) ? "ok" : "failed"})`,
+      );
       setRunSummary(
         ran.length
-          ? `Due scenes run: ${ran.length}, scenes with failures: ${failed}. ${names.join(" · ")}`
-          : "No scenes were due.",
+          ? `Due scenes run: ${ran.length}, with failures: ${failed}. ${names.join(" · ")}`
+          : "No due scenes right now.",
       );
       if (failed > 0) toast.warning(`${ran.length} due scene(s) run — ${failed} with failures.`);
       else if (ran.length) toast.success(`${ran.length} due scene(s) run.`);
-      else toast.info("No scenes were due.");
+      else toast.info("No due scenes right now.");
       log({
         kind: "automation",
         status: failed > 0 ? "warning" : "success",
         title: "Scheduler tick requested",
-        detail: names.length ? names.join(" · ") : "No scenes were due.",
+        detail: names.length ? names.join(" · ") : "No due scenes.",
       });
       setTickOpen(false);
       await reloadScenes();
     } catch (error) {
       toast.error(messageOf(error));
     } finally {
-      setBusy("");
+      if (mountedRef.current) setBusyAction("");
     }
   };
 
   const confirmDeleteRule = async () => {
     if (!deleteRuleTarget) return;
     const rule = deleteRuleTarget;
-    setBusy("delete-rule");
+    setBusyAction(`delete-rule:${rule.id}`);
     try {
       await deleteRule(rule.id);
-      setRules((current) => current.filter((item) => item.id !== rule.id));
+      if (mountedRef.current) {
+        setRules((current) => current.filter((item) => item.id !== rule.id));
+        setDeleteRuleTarget(null);
+      }
       toast.success(`Rule deleted: ${rule.name}`);
       log({ kind: "safety", status: "info", title: `Rule deleted: ${rule.name}` });
-      setDeleteRuleTarget(null);
     } catch (error) {
       toast.error(messageOf(error));
     } finally {
-      setBusy("");
+      if (mountedRef.current) setBusyAction("");
     }
   };
 
   return (
-    <div>
+    <div className="space-y-5">
       <PageHeader
         title={t("automations_title")}
-        sub="Scenes, schedules and rules stored by the local backend. Running a scene sends real device commands."
+        sub="Scenes, schedules, safety rules, and backend activity."
         eyebrow={<LiveBadge />}
         actions={
-          <>
-            <Button variant="glass" size="touch" onClick={() => void refreshAll()} disabled={loading}>
-              <RefreshCw /> Refresh
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="glass"
+              size="touch"
+              onClick={() => void refreshAll()}
+              disabled={loading}
+              aria-label="Refresh automations"
+            >
+              <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+              Refresh
             </Button>
             <Button variant="hero" size="touch" onClick={() => setCreateSceneOpen(true)}>
               <Plus /> New scene
             </Button>
-          </>
+          </div>
         }
       />
 
       {loadError && (
-        <p
-          className="mb-4 flex flex-wrap items-start gap-2 rounded-2xl border border-status-preview/30 bg-status-preview/8 p-3 text-xs text-status-preview"
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-status-preview/30 bg-status-preview/8 px-4 py-3 text-xs text-status-preview"
           role="status"
         >
-          <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
-          Some backend panels could not be loaded: {loadError}
-        </p>
+          <span className="flex items-start gap-2">
+            <AlertTriangle className="mt-px size-4 shrink-0" aria-hidden />
+            <span>Partial data warning: {loadError}</span>
+          </span>
+          <Button variant="ghost" size="touch" onClick={() => void refreshAll()}>
+            Retry
+          </Button>
+        </div>
       )}
+
       {runSummary && (
-        <p
-          className="mb-4 flex flex-wrap items-start gap-2 rounded-2xl border border-primary/30 bg-primary/8 p-3 text-xs"
+        <div
+          className="flex items-start gap-2.5 rounded-2xl border border-primary/25 bg-primary/8 px-4 py-3 text-xs"
           role="status"
         >
-          <Check className="mt-px size-3.5 shrink-0 text-primary" aria-hidden />
-          <span className="min-w-0 break-words">{runSummary}</span>
+          <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+          <span className="min-w-0 flex-1 break-words leading-relaxed">{runSummary}</span>
           <button
             type="button"
-            className="ml-auto inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground"
+            className="-mr-1 inline-flex size-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
             onClick={() => setRunSummary("")}
             aria-label="Dismiss result"
           >
             <X className="size-4" aria-hidden />
           </button>
-        </p>
+        </div>
       )}
 
-      <Tabs defaultValue="scenes">
-        <TabsList className="mb-5 flex h-auto w-full justify-start gap-1 overflow-x-auto rounded-2xl glass p-1 scrollbar-none sm:w-fit">
-          <TabsTrigger value="scenes" className="h-10 shrink-0 rounded-xl px-4">
+      <Tabs defaultValue="scenes" className="space-y-5">
+        <TabsList className="flex h-auto w-full justify-start gap-1 overflow-x-auto rounded-2xl glass p-1 scrollbar-none sm:w-fit">
+          <TabsTrigger value="scenes" className="h-11 shrink-0 rounded-xl px-4 text-xs sm:text-sm">
             Scenes
           </TabsTrigger>
-          <TabsTrigger value="scheduler" className="h-10 shrink-0 rounded-xl px-4">
+          <TabsTrigger value="scheduler" className="h-11 shrink-0 rounded-xl px-4 text-xs sm:text-sm">
             Scheduler
           </TabsTrigger>
-          <TabsTrigger value="rules" className="h-10 shrink-0 rounded-xl px-4">
+          <TabsTrigger value="rules" className="h-11 shrink-0 rounded-xl px-4 text-xs sm:text-sm">
             Rules
           </TabsTrigger>
-          <TabsTrigger value="activity" className="h-10 shrink-0 rounded-xl px-4">
+          <TabsTrigger value="activity" className="h-11 shrink-0 rounded-xl px-4 text-xs sm:text-sm">
             Activity &amp; usage
           </TabsTrigger>
         </TabsList>
+
         <TabsContent value="scenes">
           <ScenesTab
             scenes={scenes}
             deviceName={deviceName}
             loading={loading}
-            busy={busy}
+            busyAction={busyAction}
             onCreate={() => setCreateSceneOpen(true)}
             onRun={setRunTarget}
             onDelete={setDeleteSceneTarget}
@@ -727,7 +765,7 @@ function AutomationsPage() {
           <SchedulerTab
             scheduler={scheduler}
             loading={loading}
-            busy={busy === "tick"}
+            busy={busyAction === "tick"}
             onTick={() => setTickOpen(true)}
           />
         </TabsContent>
@@ -736,7 +774,7 @@ function AutomationsPage() {
             rules={rules}
             deviceName={deviceName}
             loading={loading}
-            busy={busy === "delete-rule"}
+            busyAction={busyAction}
             onCreate={() => setCreateRuleOpen(true)}
             onDelete={setDeleteRuleTarget}
           />
@@ -758,25 +796,25 @@ function AutomationsPage() {
         deviceOptions={deviceOptions}
         onCreated={() =>
           void getRules()
-            .then((data) =>
+            .then((data) => {
+              if (!mountedRef.current) return;
               setRules(
                 asArray(asRecord(data).rules)
                   .map(parseRule)
                   .filter((rule): rule is RuleView => rule !== null),
-              ),
-            )
+              );
+            })
             .catch((error) => toast.error(messageOf(error)))
         }
       />
 
-      <Dialog open={!!runTarget} onOpenChange={(open) => !open && setRunTarget(null)}>
+      <Dialog open={!!runTarget} onOpenChange={(open) => !open && !busyAction && setRunTarget(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Run “{runTarget?.name ?? ""}” now?</DialogTitle>
             <DialogDescription>
-              This sends REAL device commands through the local backend. Nothing is simulated and
-              the action cannot be undone. The backend refuses critical safety devices, busy
-              devices and unverified writes.
+              This sends live device commands through your local backend. Safety-protected devices
+              and unverified writes are blocked automatically.
             </DialogDescription>
           </DialogHeader>
           {runTarget && (
@@ -784,12 +822,12 @@ function AutomationsPage() {
               {runTarget.actions.map((action, index) => (
                 <li
                   key={`${action.device_id}-${action.dp}-${index}`}
-                  className="flex items-start gap-2 rounded-2xl border border-glass-border bg-muted/30 p-3 text-sm"
+                  className="flex items-start gap-2.5 rounded-2xl border border-glass-border bg-muted/30 p-3 text-sm"
                 >
                   <Zap className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
                   <div className="min-w-0 break-words">
                     <p className="font-medium">{deviceName(action.device_id)}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground tabular">
                       DP {action.dp} → {formatValue(action.value)}
                     </p>
                   </div>
@@ -798,11 +836,26 @@ function AutomationsPage() {
             </ul>
           )}
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setRunTarget(null)} disabled={!!busy}>
+            <Button
+              variant="ghost"
+              size="touch"
+              onClick={() => setRunTarget(null)}
+              disabled={!!busyAction}
+            >
               Cancel
             </Button>
-            <Button variant="warning" onClick={() => void confirmRunScene()} disabled={!!busy}>
-              <Play /> Run scene — send commands
+            <Button
+              variant="warning"
+              size="touch"
+              onClick={() => void confirmRunScene()}
+              disabled={!!busyAction}
+            >
+              {busyAction.startsWith("run:") ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Play className="size-4" />
+              )}
+              Run scene
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -810,34 +863,38 @@ function AutomationsPage() {
 
       <ConfirmDialog
         open={!!tickOpen}
-        onOpenChange={(open) => !open && setTickOpen(false)}
+        onOpenChange={(open) => !open && busyAction !== "tick" && setTickOpen(false)}
         title="Run all due scenes now?"
-        description="This immediately runs every scene whose schedule is due and sends REAL device commands through the local backend. It cannot be undone; the backend still blocks critical safety devices."
-        confirmLabel="Run due scenes — send commands"
+        description="Executes every scheduled scene that is currently due and sends live commands. Safety-protected devices remain blocked."
+        confirmLabel="Run due scenes"
         confirmVariant="warning"
-        busy={busy === "tick"}
+        busy={busyAction === "tick"}
         onConfirm={() => void confirmTick()}
       />
 
       <ConfirmDialog
         open={!!deleteSceneTarget}
-        onOpenChange={(open) => !open && setDeleteSceneTarget(null)}
-        title={`Delete scene “${deleteSceneTarget?.name ?? ""}”?`}
-        description="This removes the saved scene from the local backend. No device command is sent."
+        onOpenChange={(open) =>
+          !open && !busyAction.startsWith("delete-scene:") && setDeleteSceneTarget(null)
+        }
+        title={`Delete “${deleteSceneTarget?.name ?? ""}”?`}
+        description="Removes this scene from the local backend. No device commands are sent."
         confirmLabel="Delete scene"
         confirmVariant="destructive"
-        busy={busy === "delete-scene"}
+        busy={busyAction.startsWith("delete-scene:")}
         onConfirm={() => void confirmDeleteScene()}
       />
 
       <ConfirmDialog
         open={!!deleteRuleTarget}
-        onOpenChange={(open) => !open && setDeleteRuleTarget(null)}
-        title={`Delete rule “${deleteRuleTarget?.name ?? ""}”?`}
-        description="This removes the safety rule from the local backend. No device command is sent."
+        onOpenChange={(open) =>
+          !open && !busyAction.startsWith("delete-rule:") && setDeleteRuleTarget(null)
+        }
+        title={`Delete “${deleteRuleTarget?.name ?? ""}”?`}
+        description="Removes this duration rule from the local backend. No device commands are sent."
         confirmLabel="Delete rule"
         confirmVariant="destructive"
-        busy={busy === "delete-rule"}
+        busy={busyAction.startsWith("delete-rule:")}
         onConfirm={() => void confirmDeleteRule()}
       />
     </div>
@@ -872,10 +929,11 @@ function ConfirmDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
+          <Button variant="ghost" size="touch" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
-          <Button variant={confirmVariant} onClick={onConfirm} disabled={busy}>
+          <Button variant={confirmVariant} size="touch" onClick={onConfirm} disabled={busy}>
+            {busy && <Loader2 className="size-4 animate-spin" />}
             {confirmLabel}
           </Button>
         </DialogFooter>
@@ -889,7 +947,7 @@ function ScenesTab({
   scenes,
   deviceName,
   loading,
-  busy,
+  busyAction,
   onCreate,
   onRun,
   onDelete,
@@ -897,87 +955,114 @@ function ScenesTab({
   scenes: SceneView[];
   deviceName: (id: string) => string;
   loading: boolean;
-  busy: string;
+  busyAction: string;
   onCreate: () => void;
   onRun: (scene: SceneView) => void;
   onDelete: (scene: SceneView) => void;
 }) {
-  if (loading)
-    return <p className="text-sm text-muted-foreground">Loading scenes from the local backend…</p>;
-  if (scenes.length === 0)
+  if (loading && scenes.length === 0) {
+    return <p className="text-sm text-muted-foreground">Loading scenes…</p>;
+  }
+  if (scenes.length === 0) {
     return (
       <EmptyState
         icon={CalendarClock}
         title="No scenes yet"
-        body="Create a scene from real device controls. Running it sends commands through the local backend."
+        body="Create a scene from real device controls. Running it sends commands through your local backend."
         action={
-          <Button variant="glass" onClick={onCreate}>
+          <Button variant="glass" size="touch" onClick={onCreate}>
             <Plus /> New scene
           </Button>
         }
       />
     );
+  }
   return (
     <div className="space-y-4">
-      <p className="flex flex-wrap items-start gap-2 rounded-2xl border border-glass-border bg-muted/30 p-3 text-xs text-muted-foreground">
-        <ShieldAlert className="mt-px size-3.5 shrink-0 text-warning" aria-hidden />
-        Scenes and schedules never operate critical safety devices — the backend refuses those
-        actions automatically.
+      <p className="flex items-center gap-2 rounded-2xl border border-glass-border bg-muted/30 px-3.5 py-2.5 text-xs text-muted-foreground">
+        <ShieldAlert className="size-4 shrink-0 text-warning" aria-hidden />
+        <span>Safety-protected devices are automatically refused by the backend.</span>
       </p>
       <div className="grid gap-4 lg:grid-cols-2">
-        {scenes.map((scene) => (
-          <Panel key={scene.id} pad="sm" className="flex flex-col gap-3 animate-rise">
-            <div className="flex items-start gap-3">
-              <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary/12 text-primary">
-                <Zap className="size-5" aria-hidden />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="break-words font-semibold leading-snug">{scene.name}</p>
-                <p className="text-xs text-muted-foreground tabular">
-                  <Clock className="mr-1 inline size-3" aria-hidden />
-                  {scheduleLabel(scene.schedule)} · {scene.actions.length} action(s)
-                </p>
+        {scenes.map((scene) => {
+          const isRunning = busyAction === `run:${scene.id}`;
+          const isDeleting = busyAction === `delete-scene:${scene.id}`;
+          return (
+            <Panel key={scene.id} pad="sm" className="flex flex-col gap-3.5 animate-rise">
+              <div className="flex items-start gap-3">
+                <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary/12 text-primary">
+                  <Zap className="size-5" aria-hidden />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="break-words font-semibold leading-snug">{scene.name}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground tabular">
+                    <Clock className="mr-1 inline size-3" aria-hidden />
+                    {scheduleLabel(scene.schedule)} · {scene.actions.length}{" "}
+                    {scene.actions.length === 1 ? "action" : "actions"}
+                  </p>
+                </div>
               </div>
-            </div>
-            <ul className="space-y-1 text-sm">
-              {scene.actions.map((action, index) => (
-                <li key={`${action.device_id}-${action.dp}-${index}`} className="break-words">
-                  <span className="font-medium">{deviceName(action.device_id)}</span> · DP{" "}
-                  {action.dp} → {formatValue(action.value)}
-                </li>
-              ))}
-            </ul>
-            <div className="flex flex-wrap gap-1.5">
-              <Badge variant={scene.schedule.enabled ? "info" : "outline"}>
-                <CalendarClock className="size-3" aria-hidden />
-                {scene.schedule.enabled ? describeDays(scene.schedule.days) : "Manual"}
-              </Badge>
-              {scene.last_run && scene.last_run !== "0" && (
-              <Badge variant="outline">Last run {formatRunTime(scene.last_run)}</Badge>
-            )}
-            </div>
-            <div className="mt-auto flex flex-wrap gap-2 pt-1">
-              <Button
-                variant="warning"
-                size="touch"
-                onClick={() => onRun(scene)}
-                disabled={!!busy}
-              >
-                <Play /> Run (real commands)
-              </Button>
-              <Button
-                variant="ghost"
-                size="touch"
-                className="text-muted-foreground"
-                onClick={() => onDelete(scene)}
-                disabled={!!busy}
-                aria-label={`Delete ${scene.name}`}
-              >
-                <Trash2 /> Delete
-              </Button>
-            </div>
-          </Panel>
-        ))}
+
+              <ul className="space-y-1 rounded-2xl bg-muted/35 px-3 py-2 text-xs">
+                {scene.actions.map((action, index) => (
+                  <li
+                    key={`${action.device_id}-${action.dp}-${index}`}
+                    className="break-words leading-relaxed tabular"
+                  >
+                    <span className="font-medium text-foreground">
+                      {deviceName(action.device_id)}
+                    </span>{" "}
+                    · DP {action.dp} →{" "}
+                    <span className="font-medium text-foreground">{formatValue(action.value)}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="flex flex-wrap gap-1.5">
+                <Badge variant={scene.schedule.enabled ? "info" : "outline"} className="rounded-full">
+                  <CalendarClock className="size-3" aria-hidden />
+                  {scene.schedule.enabled ? describeDays(scene.schedule.days) : "Manual"}
+                </Badge>
+                {scene.last_run && scene.last_run !== "0" && (
+                  <Badge variant="outline" className="rounded-full tabular">
+                    Last run {formatRunTime(scene.last_run)}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+                <Button
+                  variant="warning"
+                  size="touch"
+                  onClick={() => onRun(scene)}
+                  disabled={!!busyAction}
+                >
+                  {isRunning ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Play className="size-4" />
+                  )}
+                  Run scene
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="touch"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() => onDelete(scene)}
+                  disabled={!!busyAction}
+                  aria-label={`Delete ${scene.name}`}
+                >
+                  {isDeleting ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-4" />
+                  )}
+                  Delete
+                </Button>
+              </div>
+            </Panel>
+          );
+        })}
       </div>
     </div>
   );
@@ -995,9 +1080,10 @@ function SchedulerTab({
   busy: boolean;
   onTick: () => void;
 }) {
-  if (loading)
+  if (loading && !scheduler) {
     return <p className="text-sm text-muted-foreground">Loading scheduler status…</p>;
-  if (!scheduler)
+  }
+  if (!scheduler) {
     return (
       <EmptyState
         icon={CalendarClock}
@@ -1005,11 +1091,17 @@ function SchedulerTab({
         body="The local backend did not return scheduler information."
       />
     );
+  }
   return (
     <Panel className="space-y-5">
-      <PanelTitle icon={CalendarClock}>Scheduler status</PanelTitle>
+      <div className="flex items-center justify-between gap-3">
+        <PanelTitle icon={CalendarClock}>Scheduler status</PanelTitle>
+        <Badge variant={scheduler.active ? "ok" : "outline"} className="rounded-full">
+          {scheduler.active ? "Active" : "Inactive"}
+        </Badge>
+      </div>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Stat label="Scheduler" value={scheduler.active ? "Active" : "Inactive"} />
+        <Stat label="State" value={scheduler.active ? "Active" : "Inactive"} />
         <Stat label="Scenes" value={scheduler.scenes} />
         <Stat label="Scheduled" value={scheduler.scheduled} />
         <Stat label="Next run" value={scheduler.next_run ?? "None"} />
@@ -1017,7 +1109,7 @@ function SchedulerTab({
       {scheduler.next_scene && (
         <p className="text-sm text-muted-foreground">
           Next scene: <span className="font-medium text-foreground">{scheduler.next_scene}</span>
-          {scheduler.next_run_at ? ` at ${formatAt(scheduler.next_run_at)}` : ""}
+          {scheduler.next_run_at ? ` · ${formatAt(scheduler.next_run_at)}` : ""}
         </p>
       )}
       {scheduler.note && (
@@ -1026,15 +1118,15 @@ function SchedulerTab({
           <span className="min-w-0 break-words">{scheduler.note}</span>
         </p>
       )}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-3">
         <Button variant="warning" size="touch" onClick={onTick} disabled={busy}>
-          <Play /> Run due scenes now
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
+          Run due scenes now
         </Button>
+        <span className="text-xs text-muted-foreground">
+          Manual trigger — due scenes execute only when confirmed.
+        </span>
       </div>
-      <p className="text-xs text-muted-foreground">
-        This is an explicit, confirmation-gated action. Due scenes send real device commands; no
-        scene is run automatically by this screen.
-      </p>
     </Panel>
   );
 }
@@ -1044,25 +1136,27 @@ function RulesTab({
   rules,
   deviceName,
   loading,
-  busy,
+  busyAction,
   onCreate,
   onDelete,
 }: {
   rules: RuleView[];
   deviceName: (id: string) => string;
   loading: boolean;
-  busy: boolean;
+  busyAction: string;
   onCreate: () => void;
   onDelete: (rule: RuleView) => void;
 }) {
-  if (loading) return <p className="text-sm text-muted-foreground">Loading rules…</p>;
+  if (loading && rules.length === 0) {
+    return <p className="text-sm text-muted-foreground">Loading rules…</p>;
+  }
   return (
     <Panel className="space-y-4">
       <PanelTitle
         icon={ShieldAlert}
         action={
-          <Button variant="glass" size="sm" className="h-10" onClick={onCreate}>
-            <Plus /> New rule
+          <Button variant="glass" size="touch" className="h-11 min-w-11 rounded-full px-3.5" onClick={onCreate}>
+            <Plus className="size-3.5" /> New rule
           </Button>
         }
       >
@@ -1072,50 +1166,56 @@ function RulesTab({
         <EmptyState
           icon={Inbox}
           title="No rules yet"
-          body="Create a rule that switches a device after a fixed on/off duration. The backend evaluates it."
+          body="Create a rule that switches a device after a fixed on or off duration."
           action={
-            <Button variant="glass" onClick={onCreate}>
+            <Button variant="glass" size="touch" onClick={onCreate}>
               <Plus /> New rule
             </Button>
           }
         />
       ) : (
-        <ul className="divide-y divide-border">
-          {rules.map((rule) => (
-            <li key={rule.id} className="flex flex-wrap items-start gap-3 py-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary/12 text-primary">
-                <ShieldAlert className="size-4" aria-hidden />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="break-words text-sm font-medium">{rule.name}</p>
-                <p className="break-words text-xs text-muted-foreground">
-                  {deviceName(rule.device_id)} · DP {rule.dp} · after {rule.minutes} min →{" "}
-                  {rule.action ? "On" : "Off"}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Badge variant="outline">{rule.kind}</Badge>
-                <Badge variant={rule.enabled ? "ok" : "unknown"}>
-                  {rule.enabled ? "Enabled" : "Disabled"}
-                </Badge>
-                <Button
-                  variant="ghost"
-                  size="icon-touch"
-                  onClick={() => onDelete(rule)}
-                  disabled={busy}
-                  aria-label={`Delete ${rule.name}`}
-                >
-                  <Trash2 />
-                </Button>
-              </div>
-            </li>
-          ))}
+        <ul className="divide-y divide-border/60">
+          {rules.map((rule) => {
+            const isDeleting = busyAction === `delete-rule:${rule.id}`;
+            return (
+              <li key={rule.id} className="flex flex-wrap items-center gap-3 py-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary/12 text-primary">
+                  <ShieldAlert className="size-4" aria-hidden />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="break-words text-sm font-medium">{rule.name}</p>
+                  <p className="break-words text-xs text-muted-foreground tabular">
+                    {deviceName(rule.device_id)} · DP {rule.dp} · after {rule.minutes} min →{" "}
+                    {rule.action ? "On" : "Off"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge variant="outline" className="rounded-full">
+                    {rule.kind === "on_duration" ? "On duration" : "Off duration"}
+                  </Badge>
+                  <Badge variant={rule.enabled ? "ok" : "unknown"} className="rounded-full">
+                    {rule.enabled ? "Enabled" : "Disabled"}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="icon-touch"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => onDelete(rule)}
+                    disabled={!!busyAction}
+                    aria-label={`Delete ${rule.name}`}
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-4" />
+                    )}
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
-      <p className="text-xs text-muted-foreground">
-        Rules are evaluated by the local backend. Safety devices are refused by the backend even
-        if a rule is saved.
-      </p>
     </Panel>
   );
 }
@@ -1132,7 +1232,9 @@ function ActivityTab({
   deviceName: (id: string) => string;
   loading: boolean;
 }) {
-  if (loading) return <p className="text-sm text-muted-foreground">Loading activity…</p>;
+  if (loading && events.length === 0 && !usage) {
+    return <p className="text-sm text-muted-foreground">Loading activity &amp; usage…</p>;
+  }
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <Panel>
@@ -1140,25 +1242,28 @@ function ActivityTab({
         {events.length === 0 ? (
           <EmptyState icon={Inbox} title="No events" body="Backend activity will appear here." />
         ) : (
-          <ul className="max-h-96 space-y-2 overflow-y-auto">
+          <ul className="mt-3 max-h-96 space-y-2 overflow-y-auto">
             {events.map((event) => (
               <li
                 key={event.id}
                 className="rounded-2xl border border-glass-border bg-muted/30 p-3 text-sm"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={event.kind.includes("error") ? "preview" : "outline"}>
+                  <Badge variant={event.kind.includes("error") ? "preview" : "outline"} className="rounded-full">
                     {event.kind}
                   </Badge>
                   <span className="font-medium">{event.title}</span>
                 </div>
-                {event.body && <p className="mt-1 break-words text-xs text-muted-foreground">{event.body}</p>}
+                {event.body && (
+                  <p className="mt-1 break-words text-xs text-muted-foreground">{event.body}</p>
+                )}
                 <p className="mt-1 text-xs text-muted-foreground tabular">{formatAt(event.at)}</p>
               </li>
             ))}
           </ul>
         )}
       </Panel>
+
       <Panel>
         <PanelTitle icon={Zap}>
           Usage {usage?.today ? `· ${usage.today}` : ""}
@@ -1166,18 +1271,22 @@ function ActivityTab({
         {!usage ? (
           <EmptyState icon={Inbox} title="No usage data" body="The backend has not reported usage." />
         ) : (
-          <div className="space-y-5">
-            <Stat label="Today total" value={`${usage.total_kwh} kWh`} hint="Measured by the local backend" />
+          <div className="mt-3 space-y-5">
+            <Stat
+              label="Today total"
+              value={`${usage.total_kwh} kWh`}
+              hint="Measured by the local backend"
+            />
             <div>
               <p className="mb-2 text-xs font-medium text-muted-foreground">Devices</p>
               {usage.devices.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No device samples yet.</p>
               ) : (
-                <ul className="divide-y divide-border">
+                <ul className="divide-y divide-border/60">
                   {usage.devices.map((device) => (
-                    <li key={device.id} className="flex justify-between gap-3 py-2 text-sm">
+                    <li key={device.id} className="flex justify-between gap-3 py-2 text-sm tabular">
                       <span className="min-w-0 break-words">{deviceName(device.id)}</span>
-                      <span className="shrink-0 tabular">{device.kwh} kWh</span>
+                      <span className="shrink-0 font-medium">{device.kwh} kWh</span>
                     </li>
                   ))}
                 </ul>
@@ -1186,7 +1295,7 @@ function ActivityTab({
             {usage.ac.length > 0 && (
               <div>
                 <p className="mb-2 text-xs font-medium text-muted-foreground">AC last verified</p>
-                <ul className="divide-y divide-border">
+                <ul className="divide-y divide-border/60">
                   {usage.ac.map((ac) => (
                     <li key={ac.id} className="flex flex-wrap justify-between gap-3 py-2 text-sm">
                       <span className="min-w-0 break-words">{ac.name || ac.id}</span>
@@ -1269,7 +1378,9 @@ function CreateSceneDialog({
       const first = deviceOptions[0];
       if (!first) return;
       setDeviceId(first.id);
-      setDp(first.points[0]?.dp ?? "");
+      const firstPoint = first.points[0];
+      setDp(firstPoint?.dp ?? "");
+      setValue(firstPoint ? defaultValueFor(firstPoint) : "");
     }
   }, [deviceId, deviceOptions]);
 
@@ -1289,7 +1400,7 @@ function CreateSceneDialog({
 
   const addAction = () => {
     if (!device || !point) {
-      setError("Choose a device and a real data point first.");
+      setError("Choose a device and a data point first.");
       return;
     }
     if (actions.length >= 20) {
@@ -1313,11 +1424,11 @@ function CreateSceneDialog({
       return;
     }
     if (actions.length < 1 || actions.length > 20) {
-      setError("Add between 1 and 20 actions.");
+      setError("Add at least one action.");
       return;
     }
     if (scheduled && (!time || days.length === 0)) {
-      setError("A enabled schedule needs a time and at least one day.");
+      setError("Choose a time and at least one day for the schedule.");
       return;
     }
     setSaving(true);
@@ -1338,11 +1449,12 @@ function CreateSceneDialog({
         kind: "automation",
         status: "success",
         title: `Scene created: ${name.trim()}`,
-        detail: `${actions.length} action(s) saved to the local backend.`,
+        detail: `${actions.length} action(s) saved to local backend.`,
       });
       setName("");
       setActions([]);
       setScheduled(false);
+      setError("");
       onCreated();
       onOpenChange(false);
     } catch (cause) {
@@ -1354,17 +1466,17 @@ function CreateSceneDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>New scene</DialogTitle>
           <DialogDescription>
-            Actions are chosen from the local backend&apos;s real device data points. Saving a
-            scene does not run it — running sends real commands and always asks first.
+            Saving creates a scene without sending commands. Running a scene always asks for
+            confirmation first.
           </DialogDescription>
         </DialogHeader>
         <form
-          className="max-h-[70vh] space-y-4 overflow-y-auto"
+          className="max-h-[70vh] space-y-4 overflow-y-auto pr-0.5"
           onSubmit={(event) => {
             event.preventDefault();
             void submit();
@@ -1379,12 +1491,13 @@ function CreateSceneDialog({
                 onChange={(event) => setName(event.target.value)}
                 placeholder="e.g. Evening shut-down"
                 maxLength={60}
+                disabled={saving}
                 className="h-11 rounded-xl"
               />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="scene-icon">Icon</Label>
-              <Select value={icon} onValueChange={setIcon}>
+              <Select value={icon} onValueChange={setIcon} disabled={saving}>
                 <SelectTrigger id="scene-icon" className="h-11 rounded-xl">
                   <SelectValue />
                 </SelectTrigger>
@@ -1399,8 +1512,11 @@ function CreateSceneDialog({
             </div>
           </div>
 
-          <div className="space-y-2 rounded-2xl border border-glass-border bg-muted/30 p-3">
-            <p className="text-sm font-medium">Actions ({actions.length}/20)</p>
+          <div className="space-y-3 rounded-2xl border border-glass-border bg-muted/30 p-3.5">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">Actions</p>
+              <span className="text-xs text-muted-foreground tabular">{actions.length} / 20</span>
+            </div>
             {deviceOptions.length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 No local devices with data points were returned by the backend.
@@ -1410,7 +1526,7 @@ function CreateSceneDialog({
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="scene-device">Device</Label>
-                    <Select value={deviceId} onValueChange={selectDevice}>
+                    <Select value={deviceId} onValueChange={selectDevice} disabled={saving}>
                       <SelectTrigger id="scene-device" className="h-11 rounded-xl">
                         <SelectValue />
                       </SelectTrigger>
@@ -1425,7 +1541,7 @@ function CreateSceneDialog({
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="scene-dp">Data point</Label>
-                    <Select value={dp} onValueChange={selectPoint}>
+                    <Select value={dp} onValueChange={selectPoint} disabled={saving}>
                       <SelectTrigger id="scene-dp" className="h-11 rounded-xl">
                         <SelectValue />
                       </SelectTrigger>
@@ -1441,7 +1557,7 @@ function CreateSceneDialog({
                   <div className="space-y-1.5">
                     <Label htmlFor="scene-value">Value</Label>
                     {point && pointKind(point) === "bool" ? (
-                      <Select value={value} onValueChange={setValue}>
+                      <Select value={value} onValueChange={setValue} disabled={saving}>
                         <SelectTrigger id="scene-value" className="h-11 rounded-xl">
                           <SelectValue />
                         </SelectTrigger>
@@ -1451,7 +1567,7 @@ function CreateSceneDialog({
                         </SelectContent>
                       </Select>
                     ) : point && pointKind(point) === "enum" && point.options?.length ? (
-                      <Select value={value} onValueChange={setValue}>
+                      <Select value={value} onValueChange={setValue} disabled={saving}>
                         <SelectTrigger id="scene-value" className="h-11 rounded-xl">
                           <SelectValue />
                         </SelectTrigger>
@@ -1468,31 +1584,39 @@ function CreateSceneDialog({
                         id="scene-value"
                         type={point && pointKind(point) === "number" ? "number" : "text"}
                         value={value}
+                        disabled={saving}
                         onChange={(event) => setValue(event.target.value)}
                         className="h-11 rounded-xl"
                       />
                     )}
                   </div>
                 </div>
-                <Button type="button" variant="glass" size="touch" onClick={addAction}>
+                <Button
+                  type="button"
+                  variant="glass"
+                  size="touch"
+                  onClick={addAction}
+                  disabled={saving}
+                >
                   <Plus /> Add action
                 </Button>
               </>
             )}
             {actions.length > 0 && (
-              <ul className="space-y-1">
+              <ul className="space-y-1.5">
                 {actions.map((action, index) => (
                   <li
                     key={`${action.device_id}-${action.dp}-${index}`}
-                    className="flex items-center gap-2 rounded-xl bg-muted/50 px-3 py-2 text-xs"
+                    className="flex items-center justify-between gap-2 rounded-xl bg-background/60 px-3 py-2 text-xs tabular"
                   >
-                    <span className="min-w-0 flex-1 break-words">
+                    <span className="min-w-0 break-words">
                       {deviceNameFor(deviceOptions, action.device_id)} · DP {action.dp} →{" "}
-                      {formatValue(action.value)}
+                      <span className="font-medium">{formatValue(action.value)}</span>
                     </span>
                     <button
                       type="button"
-                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground"
+                      disabled={saving}
+                      className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                       onClick={() => setActions((current) => current.filter((_, i) => i !== index))}
                       aria-label={`Remove action ${index + 1}`}
                     >
@@ -1504,15 +1628,16 @@ function CreateSceneDialog({
             )}
           </div>
 
-          <fieldset className="space-y-3 rounded-2xl border border-glass-border p-3">
+          <fieldset className="space-y-3 rounded-2xl border border-glass-border p-3.5">
             <legend className="px-1 text-sm font-medium">Schedule</legend>
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="scene-scheduled" className="text-sm text-muted-foreground">
-                Enable schedule
+                Run automatically on schedule
               </Label>
               <Switch
                 id="scene-scheduled"
                 checked={scheduled}
+                disabled={saving}
                 onCheckedChange={setScheduled}
                 aria-label="Enable schedule"
               />
@@ -1525,20 +1650,24 @@ function CreateSceneDialog({
                     id="scene-time"
                     type="time"
                     value={time}
+                    disabled={saving}
                     onChange={(event) => setTime(event.target.value)}
                     className="h-11 rounded-xl"
                     required
                   />
                 </div>
                 <div>
-                  <p className="mb-1.5 text-sm font-medium">Days ({describeDays(days)})</p>
+                  <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                    Days ({describeDays(days)})
+                  </p>
                   <div className="grid grid-cols-7 gap-1">
                     {DAY_SHORT.map((label, index) => {
                       const on = days.includes(index);
                       return (
                         <button
-                          key={label}
+                          key={index}
                           type="button"
+                          disabled={saving}
                           aria-pressed={on}
                           onClick={() =>
                             setDays((current) =>
@@ -1546,10 +1675,10 @@ function CreateSceneDialog({
                             )
                           }
                           className={cn(
-                            "h-11 rounded-xl border border-glass-border text-xs font-medium",
+                            "h-11 rounded-xl border border-glass-border text-xs font-medium transition-colors",
                             on
                               ? "border-primary/60 bg-primary/15 text-primary"
-                              : "bg-muted/30 text-muted-foreground",
+                              : "bg-muted/30 text-muted-foreground hover:bg-muted/60",
                           )}
                         >
                           {label.slice(0, 2)}
@@ -1560,25 +1689,31 @@ function CreateSceneDialog({
                 </div>
               </>
             )}
-            <p className="text-xs text-muted-foreground">
-              Schedules run on the server while it is running. Critical safety devices are refused
-              by the backend.
-            </p>
           </fieldset>
 
           {error && (
-            <p className="flex items-start gap-2 rounded-2xl border border-status-preview/30 bg-status-preview/8 p-3 text-xs text-status-preview" role="alert">
+            <p
+              className="flex items-start gap-2 rounded-2xl border border-status-preview/30 bg-status-preview/8 p-3 text-xs text-status-preview"
+              role="alert"
+            >
               <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
               {error}
             </p>
           )}
 
           <DialogFooter className="gap-2">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="touch"
+              onClick={() => onOpenChange(false)}
+              disabled={saving}
+            >
               Cancel
             </Button>
-            <Button type="submit" variant="hero" disabled={saving}>
-              <Check /> Save scene
+            <Button type="submit" variant="hero" size="touch" disabled={saving}>
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+              Save scene
             </Button>
           </DialogFooter>
         </form>
@@ -1608,7 +1743,7 @@ function CreateRuleDialog({
   const [kind, setKind] = useState<"on_duration" | "off_duration">("on_duration");
   const [deviceId, setDeviceId] = useState("");
   const [dp, setDp] = useState("");
-  const [minutes, setMinutes] = useState(30);
+  const [minutesInput, setMinutesInput] = useState("30");
   const [action, setAction] = useState(true);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1630,11 +1765,12 @@ function CreateRuleDialog({
       return;
     }
     if (!deviceId || !dp) {
-      setError("Choose a device and data point returned by the backend.");
+      setError("Choose a device and data point.");
       return;
     }
-    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
-      setError("Minutes must be between 1 and 1440.");
+    const parsedMinutes = Number(minutesInput);
+    if (!Number.isInteger(parsedMinutes) || parsedMinutes < 1 || parsedMinutes > 1440) {
+      setError("Duration must be a whole number between 1 and 1440 minutes.");
       return;
     }
     setSaving(true);
@@ -1645,7 +1781,7 @@ function CreateRuleDialog({
         kind,
         device_id: deviceId,
         dp,
-        minutes,
+        minutes: parsedMinutes,
         action,
         enabled: true,
       });
@@ -1654,9 +1790,11 @@ function CreateRuleDialog({
         kind: "safety",
         status: "success",
         title: `Rule created: ${name.trim()}`,
-        detail: `${kind} · ${deviceNameFor(deviceOptions, deviceId)} DP ${dp} · ${minutes} min → ${action ? "On" : "Off"}`,
+        detail: `${kind} · ${deviceNameFor(deviceOptions, deviceId)} DP ${dp} · ${parsedMinutes} min → ${action ? "On" : "Off"}`,
       });
       setName("");
+      setMinutesInput("30");
+      setError("");
       onCreated();
       onOpenChange(false);
     } catch (cause) {
@@ -1668,17 +1806,17 @@ function CreateRuleDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>New duration rule</DialogTitle>
           <DialogDescription>
-            The local backend evaluates this rule against verified device state. Saving it does not
-            send a command. Safety devices are refused by the backend.
+            Evaluated by the local backend against verified device state. Saving does not send a
+            command.
           </DialogDescription>
         </DialogHeader>
         <form
-          className="max-h-[70vh] space-y-4 overflow-y-auto"
+          className="max-h-[70vh] space-y-4 overflow-y-auto pr-0.5"
           onSubmit={(event) => {
             event.preventDefault();
             void submit();
@@ -1691,6 +1829,7 @@ function CreateRuleDialog({
               value={name}
               onChange={(event) => setName(event.target.value)}
               maxLength={60}
+              disabled={saving}
               placeholder="e.g. Pump off after 20 min"
               className="h-11 rounded-xl"
             />
@@ -1700,6 +1839,7 @@ function CreateRuleDialog({
               <Label htmlFor="rule-kind">Condition</Label>
               <Select
                 value={kind}
+                disabled={saving}
                 onValueChange={(value) =>
                   setKind(value === "off_duration" ? "off_duration" : "on_duration")
                 }
@@ -1720,9 +1860,11 @@ function CreateRuleDialog({
                 type="number"
                 min={1}
                 max={1440}
-                value={minutes}
-                onChange={(event) => setMinutes(Number(event.target.value))}
-                className="h-11 rounded-xl"
+                step={1}
+                disabled={saving}
+                value={minutesInput}
+                onChange={(event) => setMinutesInput(event.target.value)}
+                className="h-11 rounded-xl tabular"
               />
             </div>
           </div>
@@ -1731,6 +1873,7 @@ function CreateRuleDialog({
               <Label htmlFor="rule-device">Device</Label>
               <Select
                 value={deviceId}
+                disabled={saving}
                 onValueChange={(id) => {
                   setDeviceId(id);
                   const next = deviceOptions.find((item) => item.id === id);
@@ -1751,7 +1894,7 @@ function CreateRuleDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="rule-dp">Data point</Label>
-              <Select value={dp} onValueChange={setDp}>
+              <Select value={dp} onValueChange={setDp} disabled={saving}>
                 <SelectTrigger id="rule-dp" className="h-11 rounded-xl">
                   <SelectValue />
                 </SelectTrigger>
@@ -1769,6 +1912,7 @@ function CreateRuleDialog({
             <Label htmlFor="rule-action">Then set</Label>
             <Select
               value={action ? "on" : "off"}
+              disabled={saving}
               onValueChange={(value) => setAction(value === "on")}
             >
               <SelectTrigger id="rule-action" className="h-11 rounded-xl">
@@ -1781,17 +1925,27 @@ function CreateRuleDialog({
             </Select>
           </div>
           {error && (
-            <p className="flex items-start gap-2 rounded-2xl border border-status-preview/30 bg-status-preview/8 p-3 text-xs text-status-preview" role="alert">
+            <p
+              className="flex items-start gap-2 rounded-2xl border border-status-preview/30 bg-status-preview/8 p-3 text-xs text-status-preview"
+              role="alert"
+            >
               <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
               {error}
             </p>
           )}
           <DialogFooter className="gap-2">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="touch"
+              onClick={() => onOpenChange(false)}
+              disabled={saving}
+            >
               Cancel
             </Button>
-            <Button type="submit" variant="hero" disabled={saving}>
-              <Check /> Save rule
+            <Button type="submit" variant="hero" size="touch" disabled={saving}>
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+              Save rule
             </Button>
           </DialogFooter>
         </form>

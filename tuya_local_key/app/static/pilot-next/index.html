@@ -38,6 +38,41 @@ html, body { margin: 0; overflow-x: hidden; }
     [class~="text-[10px]"] { font-size: 11px !important; }
   }
 }
+
+/* --- Restraint pass: calmer glass, readable type, calm motion ------------- */
+#pilot-next-root aside > div:last-child { display: none; }
+#pilot-next-root .ambient { opacity: 0.45; }
+#pilot-next-root .glass { backdrop-filter: blur(8px) saturate(110%); }
+#pilot-next-root .glass-strong { backdrop-filter: blur(12px) saturate(115%); }
+#pilot-next-root .glow {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary) 30%, transparent);
+}
+@supports not (color: oklch(0 0 0)) {
+  #pilot-next-root .glow { box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.35); }
+}
+#pilot-next-root button,
+#pilot-next-root a,
+#pilot-next-root [role="button"] {
+  transition: background-color 140ms ease, border-color 140ms ease,
+    color 140ms ease, transform 140ms ease;
+}
+#pilot-next-root button:active,
+#pilot-next-root [role="button"]:active { transform: translateY(1px); }
+#pilot-next-root .text-\[10px\] { font-size: 11px; }
+#pilot-next-root p,
+#pilot-next-root li { line-height: 1.5; }
+@media (max-width: 720px) {
+  #pilot-next-root button,
+  #pilot-next-root input,
+  #pilot-next-root select,
+  #pilot-next-root textarea,
+  #pilot-next-root a,
+  #pilot-next-root [role="tab"] { min-height: 44px; }
+  #pilot-next-root button,
+  #pilot-next-root input,
+  #pilot-next-root select,
+  #pilot-next-root textarea { min-width: 44px; }
+}
 </style>
 <style>
 /* Light-theme contrast: darker status foregrounds on neutral surfaces. */
@@ -67,8 +102,8 @@ html:not(.dark) {
   * { backdrop-filter: none !important; }
 }
 </style>
-  <script type="module" crossorigin src="static/pilot-next/assets/index-8jQZSOw9.js"></script>
-  <link rel="stylesheet" crossorigin href="static/pilot-next/assets/index-BaWZ2WNj.css">
+  <script type="module" crossorigin src="static/pilot-next/assets/index-C203VIqW.js"></script>
+  <link rel="stylesheet" crossorigin href="static/pilot-next/assets/index-Rzdt56VB.css">
 </head>
 <body>
 <div id="pilot-next-root"></div>

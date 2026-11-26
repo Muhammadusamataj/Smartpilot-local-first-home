@@ -77,6 +77,7 @@ export interface DeviceSession {
   end: string | null;
   kwh: number;
 }
+
 export interface DeviceHistory {
   day: string;
   running: boolean;
@@ -87,6 +88,7 @@ export interface DeviceHistory {
   todayKwh: number;
   sessions: DeviceSession[];
 }
+
 const HISTORY_KEY = "smartpilot:device-history:v1";
 
 export interface AppState {
@@ -123,7 +125,10 @@ export function initialState(): AppState {
   };
 }
 
-const uid = () => Math.random().toString(36).slice(2, 10);
+const uid = () =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID().slice(0, 8)
+    : Math.random().toString(36).slice(2, 10);
 
 const emptyHistory = (day: string): DeviceHistory => ({
   day,
@@ -146,6 +151,7 @@ function sampleHistory(
   const next: Record<string, DeviceHistory> = { ...previous };
   const day = new Date(nowMs).toLocaleDateString("en-CA");
   const at = new Date(nowMs).toISOString();
+
   for (const device of devices) {
     if (device.kind === "air_conditioner" || !device.power.known) continue;
     const point = (points[device.id] ?? []).find(
@@ -156,9 +162,11 @@ function sampleHistory(
       : null;
     const on = device.power.value === "on";
     const old = next[device.id] ?? emptyHistory(day);
-    const entry: DeviceHistory = old.day === day
-      ? { ...old, sessions: [...old.sessions] }
-      : { ...emptyHistory(day), sessions: [] };
+    const entry: DeviceHistory =
+      old.day === day
+        ? { ...old, sessions: [...old.sessions] }
+        : { ...emptyHistory(day), sessions: [] };
+
     if (on && !entry.running) {
       entry.sessions = [{ start: at, end: null, kwh: 0 }, ...entry.sessions].slice(0, 50);
       entry.lastOnAt = at;
@@ -168,8 +176,13 @@ function sampleHistory(
         entry.sessions[0] = { ...entry.sessions[0], end: at };
       }
     }
-    if (entry.running && entry.lastPowerW !== null && entry.lastPowerW > 0
-      && entry.lastSampleAt) {
+
+    if (
+      entry.running &&
+      entry.lastPowerW !== null &&
+      entry.lastPowerW > 0 &&
+      entry.lastSampleAt
+    ) {
       const elapsed = nowMs - Date.parse(entry.lastSampleAt);
       if (elapsed > 0 && elapsed < 10 * 60 * 1000) {
         const kwh = (entry.lastPowerW / 1000) * (elapsed / 3_600_000);
@@ -182,11 +195,13 @@ function sampleHistory(
         }
       }
     }
+
     entry.running = on;
     entry.lastPowerW = watts;
     entry.lastSampleAt = at;
     next[device.id] = entry;
   }
+
   return next;
 }
 
@@ -232,7 +247,7 @@ interface Ctx {
 const SmartPilotContext = createContext<Ctx | null>(null);
 
 function applyTheme(theme: ThemePref) {
-  if (typeof document === "undefined") return;
+  if (typeof document === "undefined" || typeof window === "undefined") return;
   const dark =
     theme === "dark" ||
     (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -241,6 +256,14 @@ function applyTheme(theme: ThemePref) {
 }
 
 export function SmartPilotProvider({ children }: { children: ReactNode }) {
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const [state, setState] = useState<AppState>(initialState);
   const [hydrated, setHydrated] = useState(false);
   const [devices, setDevices] = useState<Device[]>(() =>
@@ -253,7 +276,7 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
     try {
       const raw = localStorage.getItem(HISTORY_KEY);
       const saved = raw ? JSON.parse(raw) : null;
-      return saved && typeof saved === "object" ? saved as Record<string, DeviceHistory> : {};
+      return saved && typeof saved === "object" ? (saved as Record<string, DeviceHistory>) : {};
     } catch {
       return {};
     }
@@ -263,8 +286,10 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
     message: "Local backend not checked yet",
     refreshedAt: null,
   });
+
   const loaded = useRef(false);
   const haierRenewTried = useRef(false);
+  const refreshInFlight = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     try {
@@ -315,6 +340,7 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
   }, [state.prefs.theme, state.prefs.language]);
 
   const log: Ctx["log"] = useCallback((e) => {
+    if (!mountedRef.current) return;
     setState((s) => ({
       ...s,
       activity: [
@@ -330,72 +356,91 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshDevices = useCallback(async () => {
-    setConnection((current) => ({
-      ...current,
-      state: "refreshing",
-      message: "Refreshing verified local status…",
-    }));
-    try {
-      const result = await liveAdapter.refresh();
-      // After any refresh the catalogue is exactly what the backend reported.
-      // An empty result (or a failed local catalogue) never falls back to the
-      // fixed demo devices used only for the first paint.
-      setDevices(liveAdapter.liveDevices.map((device) => ({ ...device }) as Device));
-      setPoints({ ...liveAdapter.localPoints });
-      if (result.verifiedDevices > 0) {
-        setDeviceHistory((previous) =>
-          sampleHistory(previous, liveAdapter.liveDevices, liveAdapter.localPoints, Date.now()),
-        );
+    if (refreshInFlight.current) return refreshInFlight.current;
+
+    const run = (async () => {
+      if (mountedRef.current) {
+        setConnection((current) => ({
+          ...current,
+          state: "refreshing",
+          message: "Refreshing verified local status…",
+        }));
       }
-      setState((current) => {
-        const ac = { ...current.ac };
-        for (const device of liveAdapter.liveDevices) {
-          if (device.kind !== "air_conditioner") continue;
-          const live = liveAdapter.haierStatus[device.id] ?? {};
-          const mode = liveAdapter.haierModes[device.id];
-          const pause = liveAdapter.haierPauseUntil[device.id] ?? 0;
-          ac[device.id] = {
-            ...(ac[device.id] ?? defaultAcState()),
-            ...(live.power?.known ? { power: live.power.value } : {}),
-            ...(live.targetTemp !== undefined ? { targetTemp: live.targetTemp } : {}),
-            ...(live.mode ? { mode: live.mode as AcPreviewState["mode"] } : {}),
-            ...(live.fan ? { fan: live.fan as AcPreviewState["fan"] } : {}),
-            ...(live.eco !== undefined ? { eco: live.eco } : {}),
-            ...(live.sleep !== undefined ? { nightSleep: live.sleep } : {}),
-            ...(mode ? { controlMode: mode } : {}),
-            overridePausedUntil:
-              pause > Date.now() / 1000 ? new Date(pause * 1000).toISOString() : null,
-          };
+      try {
+        const result = await liveAdapter.refresh();
+        if (!mountedRef.current) return;
+
+        // After any refresh the catalogue is exactly what the backend reported.
+        // An empty result (or a failed local catalogue) never falls back to the
+        // fixed demo devices used only for the first paint.
+        setDevices(liveAdapter.liveDevices.map((device) => ({ ...device }) as Device));
+        setPoints({ ...liveAdapter.localPoints });
+        if (result.verifiedDevices > 0) {
+          setDeviceHistory((previous) =>
+            sampleHistory(previous, liveAdapter.liveDevices, liveAdapter.localPoints, Date.now()),
+          );
         }
-        return { ...current, ac };
-      });
-      setConnection({
-        state: result.verifiedDevices > 0 ? "live" : "degraded",
-        message:
-          result.verifiedDevices > 0
-            ? `${result.verifiedDevices} device${result.verifiedDevices === 1 ? "" : "s"} verified by a fresh local read`
-            : `No fresh verified reads${result.errors.length ? ` — ${result.errors[0]}` : ""}`,
-        refreshedAt: result.at,
-      });
-      // A rotated Haier key makes the AC unverifiable. Renew immediately via
-      // the saved refresh token instead of waiting for the 12-hour background
-      // check, then re-read once. At most one attempt per app session.
-      if (result.errors.some((error) => /key rotated/i.test(error)) && !haierRenewTried.current) {
-        haierRenewTried.current = true;
-        void autoRenewHaierKeys(true).then((outcome) => {
-          toast(outcome.ok ? "Haier key renewed" : "Haier key renewal failed", {
-            description: outcome.message,
+        setState((current) => {
+          const ac = { ...current.ac };
+          for (const device of liveAdapter.liveDevices) {
+            if (device.kind !== "air_conditioner") continue;
+            const live = liveAdapter.haierStatus[device.id] ?? {};
+            const mode = liveAdapter.haierModes[device.id];
+            const pause = liveAdapter.haierPauseUntil[device.id] ?? 0;
+            ac[device.id] = {
+              ...(ac[device.id] ?? defaultAcState()),
+              ...(live.power?.known ? { power: live.power.value } : {}),
+              ...(live.targetTemp !== undefined ? { targetTemp: live.targetTemp } : {}),
+              ...(live.mode ? { mode: live.mode as AcPreviewState["mode"] } : {}),
+              ...(live.fan ? { fan: live.fan as AcPreviewState["fan"] } : {}),
+              ...(live.eco !== undefined ? { eco: live.eco } : {}),
+              ...(live.sleep !== undefined ? { nightSleep: live.sleep } : {}),
+              ...(mode ? { controlMode: mode } : {}),
+              overridePausedUntil:
+                pause > Date.now() / 1000 ? new Date(pause * 1000).toISOString() : null,
+            };
+          }
+          return { ...current, ac };
+        });
+        setConnection({
+          state: result.verifiedDevices > 0 ? "live" : "degraded",
+          message:
+            result.verifiedDevices > 0
+              ? `${result.verifiedDevices} device${result.verifiedDevices === 1 ? "" : "s"} verified by a fresh local read`
+              : `No fresh verified reads${result.errors.length ? ` — ${result.errors[0]}` : ""}`,
+          refreshedAt: result.at,
+        });
+
+        // A rotated Haier key makes the AC unverifiable. Renew immediately via
+        // the saved refresh token instead of waiting for the 12-hour background
+        // check, then re-read once. At most one attempt per app session.
+        if (
+          result.errors.some((error) => /key rotated/i.test(error)) &&
+          !haierRenewTried.current
+        ) {
+          haierRenewTried.current = true;
+          void autoRenewHaierKeys(true).then((outcome) => {
+            if (!mountedRef.current) return;
+            toast(outcome.ok ? "Haier key renewed" : "Haier key renewal failed", {
+              description: outcome.message,
+            });
+            if (outcome.ok) void refreshDevices();
           });
-          if (outcome.ok) void refreshDevices();
+        }
+      } catch (error) {
+        if (!mountedRef.current) return;
+        setConnection({
+          state: "degraded",
+          message: `Local backend unavailable — ${(error as Error).message}`,
+          refreshedAt: null,
         });
       }
-    } catch (error) {
-      setConnection({
-        state: "degraded",
-        message: `Local backend unavailable — ${(error as Error).message}`,
-        refreshedAt: null,
-      });
-    }
+    })();
+
+    refreshInFlight.current = run.finally(() => {
+      refreshInFlight.current = null;
+    });
+    return refreshInFlight.current;
   }, []);
 
   const sendDeviceCommand = useCallback<Ctx["sendDeviceCommand"]>(
@@ -495,6 +540,44 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
     [log],
   );
 
+  const decideApproval = useCallback<Ctx["decideApproval"]>(
+    (id, decision) => {
+      const req = state.approvals.find((a) => a.id === id);
+      if (!req || req.status !== "pending") return;
+
+      setState((s) => {
+        const currentReq = s.approvals.find((a) => a.id === id);
+        if (!currentReq || currentReq.status !== "pending") return s;
+        const approvals = s.approvals.map((a) => (a.id === id ? { ...a, status: decision } : a));
+        const automations =
+          decision === "approved"
+            ? [{ ...currentReq.automation, enabled: true }, ...s.automations]
+            : s.automations;
+        return { ...s, approvals, automations };
+      });
+
+      const title = req.title || "Request";
+      const deviceNames = [
+        ...new Set(
+          req.automation.actions.map(
+            (a) => devices.find((d) => d.id === a.deviceId)?.name ?? deviceLabel(a.deviceId),
+          ),
+        ),
+      ].join(", ");
+
+      log({
+        kind: "automation",
+        status: decision === "approved" ? "success" : "blocked",
+        title: `${decision === "approved" ? "Approved" : "Rejected"}: ${title}`,
+        detail: `${deviceNames ? `${deviceNames} · ` : ""}${PREVIEW_MESSAGE}`,
+      });
+      toast(decision === "approved" ? "Approved — saved as a local automation" : "Rejected", {
+        description: PREVIEW_MESSAGE,
+      });
+    },
+    [devices, log, state.approvals],
+  );
+
   const value = useMemo<Ctx>(() => {
     const lang = state.prefs.language;
     return {
@@ -549,43 +632,14 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
       removeAutomation: (id) =>
         setState((s) => ({ ...s, automations: s.automations.filter((a) => a.id !== id) })),
       addApproval: (r) => setState((s) => ({ ...s, approvals: [r, ...s.approvals] })),
-      decideApproval: (id, decision) => {
-        let req: ApprovalRequest | undefined;
-        setState((s) => {
-          req = s.approvals.find((a) => a.id === id);
-          if (!req || req.status !== "pending") return s;
-          const approvals = s.approvals.map((a) => (a.id === id ? { ...a, status: decision } : a));
-          const automations =
-            decision === "approved"
-              ? [{ ...req.automation, enabled: true }, ...s.automations]
-              : s.automations;
-          return { ...s, approvals, automations };
-        });
-        const title = req?.title ?? "Request";
-        const deviceNames = req
-          ? [
-              ...new Set(
-                req.automation.actions.map(
-                  (a) => devices.find((d) => d.id === a.deviceId)?.name ?? deviceLabel(a.deviceId),
-                ),
-              ),
-            ].join(", ")
-          : "";
-        log({
-          kind: "automation",
-          status: decision === "approved" ? "success" : "blocked",
-          title: `${decision === "approved" ? "Approved" : "Rejected"}: ${title}`,
-          detail: `${deviceNames ? deviceNames + " · " : ""}${PREVIEW_MESSAGE}`,
-        });
-        toast(decision === "approved" ? "Approved — saved as a preview automation" : "Rejected", {
-          description: PREVIEW_MESSAGE,
-        });
-      },
+      decideApproval,
       setChat: (fn) => setState((s) => ({ ...s, chat: fn(s.chat) })),
       resetDemo: () => {
         const base = initialState();
         setState((s) => ({ ...base, prefs: s.prefs }));
-        toast("Demo reset", { description: "Preview settings, automations and history restored." });
+        toast("Local UI state reset", {
+          description: "Local drafts and history restored. Your theme and language are unchanged.",
+        });
       },
     };
   }, [
@@ -602,6 +656,7 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
     resumeAuto,
     log,
     previewAction,
+    decideApproval,
   ]);
 
   // --- Proactive update: check + background download, install stays explicit --
@@ -613,13 +668,18 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
     const bridge = (window as unknown as Record<string, unknown>)["PilotNative"];
     if (!bridge || typeof bridge !== "object") return;
     registerUpdateCallback((result) => {
+      if (!mountedRef.current) return;
       setNativeUpdate((current) => ({ ...(current ?? {}), ...result }));
     });
     setNativeUpdate(nativeUpdateState() as Record<string, unknown> | null);
     // The shared 6h throttle avoids a GitHub call on every screen render.
     void autoCheckUpdates()
-      .then((value) => { if (value) nativeCall("PilotNative", "checkUpdate"); })
-      .catch(() => { /* metadata check is best effort */ });
+      .then((value) => {
+        if (value && mountedRef.current) nativeCall("PilotNative", "checkUpdate");
+      })
+      .catch(() => {
+        /* metadata check is best effort */
+      });
   }, []);
 
   const updateAvailable = nativeUpdate?.["available"] === true;
@@ -649,7 +709,9 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
     if (version) {
       try {
         window.localStorage.setItem(`smartpilot:update-prompted:${version}`, "1");
-      } catch { /* non-persistent dismissal is still fine */ }
+      } catch {
+        /* non-persistent dismissal is still fine */
+      }
     }
     setUpdatePrompt(null);
   }, []);
@@ -657,21 +719,32 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
   return (
     <>
       <SmartPilotContext.Provider value={value}>{children}</SmartPilotContext.Provider>
-      <Dialog open={!!updatePrompt} onOpenChange={(open) => { if (!open) dismissUpdate(updatePrompt); }}>
+      <Dialog
+        open={!!updatePrompt}
+        onOpenChange={(open) => {
+          if (!open) dismissUpdate(updatePrompt);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Update {updatePrompt} is ready</DialogTitle>
+            <DialogTitle className="tabular">Update {updatePrompt} is ready</DialogTitle>
             <DialogDescription>
               The signed APK was downloaded in the background. Installing still requires your
               confirmation and the Android install prompt. Nothing is installed automatically.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="glass" size="touch" onClick={() => dismissUpdate(updatePrompt)}>
+            <Button
+              variant="glass"
+              size="touch"
+              className="rounded-xl active:scale-[0.98]"
+              onClick={() => dismissUpdate(updatePrompt)}
+            >
               Later
             </Button>
             <Button
               size="touch"
+              className="rounded-xl active:scale-[0.98]"
               onClick={() => {
                 dismissUpdate(updatePrompt);
                 nativeCall("PilotNative", "installUpdate");
@@ -693,4 +766,4 @@ export function useSmartPilot(): Ctx {
 }
 
 /** Inline script that applies the saved theme before first paint (avoids a flash). */
-export const themeBootScript = `(function(){try{var s=JSON.parse(localStorage.getItem("${STORAGE_KEY}")||"{}");var t=(s.prefs&&s.prefs.theme)||"dark";var d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d);document.documentElement.style.colorScheme=d?"dark":"light";}catch(e){}})();`;
+export const themeBootScript = `(function(){try{var s=JSON.parse(localStorage.getItem("${STORAGE_KEY}")||"{}");var t=(s.prefs&&s.prefs.theme)||"system";var d=t==="dark"||(t==="system"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d);document.documentElement.style.colorScheme=d?"dark":"light";}catch(e){}})();`;

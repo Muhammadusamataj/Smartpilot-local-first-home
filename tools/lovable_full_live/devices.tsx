@@ -1,8 +1,11 @@
-// Presentation overlay for the Lovable /devices route.
-// Quick power on the card and full controls in DeviceSheet both use
-// useSmartPilot().sendDeviceCommand / sendDpCommand. Management actions call
-// the existing Flask endpoints through @/lib/smartpilot/backend-api.
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { createFileRoute, useRouterState } from "@tanstack/react-router";
 import {
   Activity,
@@ -91,7 +94,7 @@ export const Route = createFileRoute("/devices")({
   component: DevicesPage,
 });
 
-const CATS: { v: DeviceCategory | "all"; label: string }[] = [
+const CATS: ReadonlyArray<{ v: DeviceCategory | "all"; label: string }> = [
   { v: "all", label: "All" },
   { v: "climate", label: "Climate" },
   { v: "water", label: "Water" },
@@ -124,9 +127,7 @@ const EMPTY_FORM: FormState = {
 };
 
 const asRecord = (value: unknown): JsonObj =>
-  value && typeof value === "object" && !Array.isArray(value)
-    ? (value as JsonObj)
-    : {};
+  value && typeof value === "object" && !Array.isArray(value) ? (value as JsonObj) : {};
 const str = (value: unknown): string =>
   typeof value === "string" || typeof value === "number" ? String(value) : "";
 const validId = (v: string) => /^[A-Za-z0-9_-]{1,64}$/.test(v);
@@ -165,7 +166,7 @@ function DeviceFormFields({
   keyPlaceholder: string;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="dev-name">Device name</Label>
@@ -174,6 +175,7 @@ function DeviceFormFields({
             value={form.name}
             maxLength={60}
             placeholder="e.g. Kitchen plug"
+            className="h-11 rounded-xl"
             onChange={(e) => onChange({ name: e.target.value })}
           />
         </div>
@@ -184,6 +186,7 @@ function DeviceFormFields({
             value={form.id}
             disabled={fixedId}
             placeholder="letters, numbers, _ or -"
+            className="h-11 rounded-xl"
             onChange={(e) => onChange({ id: e.target.value })}
           />
         </div>
@@ -194,13 +197,14 @@ function DeviceFormFields({
             value={form.ip}
             inputMode="decimal"
             placeholder="192.168.1.23"
+            className="h-11 rounded-xl tabular"
             onChange={(e) => onChange({ ip: e.target.value })}
           />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="dev-version">Protocol version</Label>
           <Select value={form.version} onValueChange={(v) => onChange({ version: v })}>
-            <SelectTrigger id="dev-version">
+            <SelectTrigger id="dev-version" className="h-11 rounded-xl">
               <SelectValue placeholder="Auto (detect)" />
             </SelectTrigger>
             <SelectContent>
@@ -219,16 +223,14 @@ function DeviceFormFields({
             value={form.dp}
             inputMode="numeric"
             placeholder="1"
+            className="h-11 rounded-xl tabular"
             onChange={(e) => onChange({ dp: e.target.value })}
           />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="dev-kind">Type (display only)</Label>
-          <Select
-            value={form.kind}
-            onValueChange={(v) => onChange({ kind: v as ManageKind })}
-          >
-            <SelectTrigger id="dev-kind">
+          <Select value={form.kind} onValueChange={(v) => onChange({ kind: v as ManageKind })}>
+            <SelectTrigger id="dev-kind" className="h-11 rounded-xl">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -248,6 +250,7 @@ function DeviceFormFields({
           maxLength={32}
           autoComplete="new-password"
           placeholder={keyPlaceholder}
+          className="h-11 rounded-xl"
           onChange={(e) => onChange({ local_key: e.target.value })}
         />
         <p className="text-xs text-muted-foreground">Keys are never displayed after saving.</p>
@@ -260,11 +263,8 @@ function DevicesPage() {
   const { t, devices, connection, refreshDevices, log } = useSmartPilot();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<DeviceCategory | "all">("all");
-  const [selected, setSelected] = useState<Device | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Management state. The catalogue list from the store is the honest source
-  // of status; added/removed devices are tracked locally because the store
-  // rebuilds its list from the fixed catalogue on every refresh.
   const [added, setAdded] = useState<Device[]>([]);
   const [removed, setRemoved] = useState<string[]>([]);
   const [meta, setMeta] = useState<Record<string, FormState>>({});
@@ -310,27 +310,37 @@ function DevicesPage() {
     [devices, removed, added],
   );
 
-  const filtered = useMemo(
-    () =>
-      allDevices.filter(
-        (d) =>
-          (cat === "all" || d.category === cat) &&
+  const selected = useMemo(
+    () => (selectedId ? allDevices.find((d) => d.id === selectedId) ?? null : null),
+    [allDevices, selectedId],
+  );
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return allDevices.filter(
+      (d) =>
+        (cat === "all" || d.category === cat) &&
+        (!needle ||
           `${d.name} ${prefs?.rooms?.[d.id] ?? d.location ?? ""} ${KIND_LABEL[d.kind]}`
             .toLowerCase()
-            .includes(q.trim().toLowerCase()),
-      ),
-    [allDevices, q, cat, prefs],
-  );
+            .includes(needle)),
+    );
+  }, [allDevices, q, cat, prefs]);
+
   const groups = useMemo(() => {
     const m = new Map<string, Device[]>();
     for (const d of filtered) {
       const k = prefs?.rooms?.[d.id] || d.location || t("room_not_set");
-      m.set(k, [...(m.get(k) ?? []), d]);
+      const bucket = m.get(k);
+      if (bucket) {
+        bucket.push(d);
+      } else {
+        m.set(k, [d]);
+      }
     }
     return [...m.entries()];
   }, [filtered, prefs, t]);
 
-  // Load saved favorites/rooms once. Failure is non-fatal: local defaults stay.
   useEffect(() => {
     let alive = true;
     void getPreferences()
@@ -347,14 +357,21 @@ function DevicesPage() {
     };
   }, []);
 
-  // Deep link: /devices?device=<id> opens the matching device sheet.
+  // Deep link: /devices?device=<id> opens the matching device once per query change.
   const searchStr = useRouterState({ select: (s) => s.location.searchStr });
+  const handledQueryId = useRef<string | null>(null);
   useEffect(() => {
     const raw = searchStr || window.location.search;
     const id = new URLSearchParams(raw).get("device");
-    if (!id) return;
-    const match = allDevices.find((d) => d.id === id);
-    if (match) setSelected(match);
+    if (!id) {
+      handledQueryId.current = null;
+      return;
+    }
+    if (handledQueryId.current === id) return;
+    if (allDevices.some((d) => d.id === id)) {
+      handledQueryId.current = id;
+      setSelectedId(id);
+    }
   }, [searchStr, allDevices]);
 
   // LAN scan polling. One request at a time; stops as soon as the job ends.
@@ -456,7 +473,8 @@ function DevicesPage() {
           id: payload.id,
           name: payload.name,
           kind: form.kind,
-          category: form.kind === "breaker" ? "power" : form.kind === "water_heater" ? "heating" : "water",
+          category:
+            form.kind === "breaker" ? "power" : form.kind === "water_heater" ? "heating" : "water",
           ecosystem: "tuya_smart_life",
           location: null,
           requiresApproval: true,
@@ -557,7 +575,7 @@ function DevicesPage() {
       try {
         await deleteDevice(deleting.id);
         setRemoved((old) => [...new Set([...old, deleting.id])]);
-        setSelected((current) => (current?.id === deleting.id ? null : current));
+        setSelectedId((current) => (current === deleting.id ? null : current));
         setDeleting(null);
         setDeleteAck(false);
         await refreshDevices();
@@ -689,9 +707,10 @@ function DevicesPage() {
   };
 
   const toggleFavorite = async (d: Device) => {
-    const next = favorites.includes(d.id)
-      ? favorites.filter((id) => id !== d.id)
-      : [...favorites, d.id];
+    const previous = favorites;
+    const next = previous.includes(d.id)
+      ? previous.filter((id) => id !== d.id)
+      : [...previous, d.id];
     setFavorites(next);
     try {
       const saved = await savePreferences({
@@ -703,18 +722,18 @@ function DevicesPage() {
       setPrefs(saved);
       toast.success(next.includes(d.id) ? "Added to favorites" : "Removed from favorites");
     } catch (error) {
-      setFavorites(favorites);
+      setFavorites(previous);
       toast.error(`Favorite was not saved: ${messageOf(error)}`);
     }
   };
 
   return (
-    <div>
+    <div className="space-y-5">
       <PageHeader
         title={t("devices_title")}
         sub={t("devices_sub")}
         actions={
-          <>
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="hero"
               size="touch"
@@ -728,11 +747,11 @@ function DevicesPage() {
             <details className="group relative">
               <summary
                 aria-label="More device management options"
-                className="glass flex h-11 cursor-pointer list-none items-center rounded-full px-4 text-sm font-medium [&::-webkit-details-marker]:hidden"
+                className="glass flex h-11 cursor-pointer list-none items-center rounded-full px-4 text-sm font-medium transition-colors hover:bg-accent/40 [&::-webkit-details-marker]:hidden"
               >
                 Manage
               </summary>
-              <div className="absolute right-0 z-30 mt-2 flex w-48 flex-col gap-2 rounded-2xl border border-glass-border bg-card p-2 shadow-glass">
+              <div className="absolute right-0 z-30 mt-2 flex w-52 flex-col gap-1.5 rounded-2xl border border-glass-border bg-card p-2 shadow-glass">
                 <Button
                   variant="glass"
                   size="touch"
@@ -771,11 +790,11 @@ function DevicesPage() {
             >
               {busy["ensure"] ? <Loader2 className="animate-spin" /> : <PlugZap />}
             </Button>
-          </>
+          </div>
         }
       />
 
-      <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground" role="status">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
         <span
           className={cn(
             "size-2 shrink-0 rounded-full",
@@ -787,19 +806,19 @@ function DevicesPage() {
           )}
           aria-hidden
         />
-        {connection.message}
+        <span>{connection.message}</span>
       </div>
 
       {connection.state === "degraded" && (
         <div
           role="alert"
-          className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-status-offline/30 bg-status-offline/8 p-3 text-sm"
+          className="flex flex-wrap items-center gap-3 rounded-2xl border border-status-offline/30 bg-status-offline/8 px-4 py-3 text-sm"
         >
           <AlertTriangle className="size-4 shrink-0 text-status-offline" aria-hidden />
           <span className="min-w-0 flex-1 break-words">{connection.message}</span>
           <Button
             type="button"
-            size="sm"
+            size="touch"
             variant="glass"
             disabled={!!busy["refresh"]}
             onClick={() => void reloadAll()}
@@ -808,15 +827,16 @@ function DevicesPage() {
           </Button>
         </div>
       )}
+
       {connection.state === "refreshing" && allDevices.length === 0 && (
-        <div role="status" className="mb-4 space-y-2" aria-busy="true">
+        <div role="status" className="space-y-2" aria-busy="true">
           <div className="h-12 animate-pulse rounded-2xl bg-muted/50" />
           <div className="h-12 animate-pulse rounded-2xl bg-muted/50" />
           <p className="text-xs text-muted-foreground">Loading verified device status…</p>
         </div>
       )}
 
-      <div className="mb-6 space-y-3">
+      <div className="space-y-3">
         <div className="relative">
           <Search
             className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -828,11 +848,22 @@ function DevicesPage() {
             onChange={(e) => setQ(e.target.value)}
             placeholder={`${t("search")}: name, location, type…`}
             aria-label={t("search")}
-            className="glass h-12 rounded-2xl pl-10"
+            className="glass h-11 rounded-2xl pl-10 pr-10"
           />
+          {q && (
+            <button
+              type="button"
+              onClick={() => setQ("")}
+              aria-label="Clear search"
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
         </div>
+
         <div
-          className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-none sm:mx-0 sm:flex-wrap sm:px-0"
+          className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 scrollbar-none sm:mx-0 sm:flex-wrap sm:px-0"
           role="group"
           aria-label="Filter by category"
         >
@@ -841,16 +872,17 @@ function DevicesPage() {
               c.v === "all"
                 ? allDevices.length
                 : allDevices.filter((d) => d.category === c.v).length;
+            const active = cat === c.v;
             return (
               <Button
                 key={c.v}
                 variant="chip"
-                size="sm"
-                aria-pressed={cat === c.v}
+                size="touch"
+                aria-pressed={active}
                 onClick={() => setCat(c.v)}
                 className={cn(
-                  "h-10 shrink-0 px-4",
-                  cat === c.v && "border-primary/60 bg-primary/15 text-primary",
+                  "h-11 shrink-0 rounded-full px-3.5 text-xs transition-all",
+                  active && "border-primary/50 bg-primary/12 text-primary shadow-xs",
                 )}
               >
                 {c.label} <span className="text-muted-foreground tabular">{n}</span>
@@ -867,6 +899,7 @@ function DevicesPage() {
           action={
             <Button
               variant="glass"
+              size="touch"
               onClick={() => {
                 setQ("");
                 setCat("all");
@@ -880,15 +913,16 @@ function DevicesPage() {
         <div className="space-y-8">
           {groups.map(([loc, list]) => (
             <section key={loc} aria-label={loc}>
-              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                {loc} <span className="tabular">· {list.length}</span>
+              <h2 className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                <span>{loc}</span>
+                <span className="tabular">· {list.length}</span>
               </h2>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {list.map((d) => (
                   <DeviceCard
                     key={d.id}
                     device={d}
-                    onOpen={() => setSelected(d)}
+                    onOpen={() => setSelectedId(d.id)}
                     favorite={favorites.includes(d.id)}
                     onFavorite={() => void toggleFavorite(d)}
                     onEdit={() => {
@@ -909,7 +943,7 @@ function DevicesPage() {
         </div>
       )}
 
-      <DeviceSheet device={selected} onOpenChange={(o) => !o && setSelected(null)} />
+      <DeviceSheet device={selected} onOpenChange={(o) => !o && setSelectedId(null)} />
 
       {/* Add device */}
       <Dialog
@@ -935,10 +969,10 @@ function DevicesPage() {
               keyPlaceholder="16–32 printable characters"
             />
             <DialogFooter className="gap-2">
-              <Button type="button" variant="ghost" onClick={() => setAddOpen(false)}>
+              <Button type="button" variant="ghost" size="touch" onClick={() => setAddOpen(false)}>
                 {t("cancel")}
               </Button>
-              <Button type="submit" variant="hero" disabled={!!busy["add"]} aria-busy={!!busy["add"]}>
+              <Button type="submit" variant="hero" size="touch" disabled={!!busy["add"]} aria-busy={!!busy["add"]}>
                 {busy["add"] ? <Loader2 className="animate-spin" /> : <Plus />} Save device
               </Button>
             </DialogFooter>
@@ -969,10 +1003,10 @@ function DevicesPage() {
               keyPlaceholder="Unchanged — leave blank"
             />
             <DialogFooter className="gap-2">
-              <Button type="button" variant="ghost" onClick={() => setEditing(null)}>
+              <Button type="button" variant="ghost" size="touch" onClick={() => setEditing(null)}>
                 {t("cancel")}
               </Button>
-              <Button type="submit" variant="hero" disabled={!!busy["edit"]} aria-busy={!!busy["edit"]}>
+              <Button type="submit" variant="hero" size="touch" disabled={!!busy["edit"]} aria-busy={!!busy["edit"]}>
                 {busy["edit"] ? <Loader2 className="animate-spin" /> : <Pencil />} Save changes
               </Button>
             </DialogFooter>
@@ -1001,15 +1035,20 @@ function DevicesPage() {
             </DialogDescription>
           </DialogHeader>
           <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-glass-border bg-muted/40 p-3 text-sm">
-            <Checkbox checked={deleteAck} onCheckedChange={(v) => setDeleteAck(v === true)} className="mt-0.5" />
+            <Checkbox
+              checked={deleteAck}
+              onCheckedChange={(v) => setDeleteAck(v === true)}
+              className="mt-0.5"
+            />
             <span>I understand this device will be removed from the saved local list.</span>
           </label>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setDeleting(null)}>
+            <Button variant="ghost" size="touch" onClick={() => setDeleting(null)}>
               {t("cancel")}
             </Button>
             <Button
               variant="destructive"
+              size="touch"
               disabled={!deleteAck || !!busy["delete"]}
               aria-busy={!!busy["delete"]}
               onClick={() => void confirmDelete()}
@@ -1041,25 +1080,31 @@ function DevicesPage() {
               id="scan-targets"
               value={scanTargets}
               placeholder="192.168.1.0/24 or 192.168.1.23, 192.168.1.24"
+              className="h-11 rounded-xl tabular"
               onChange={(e) => setScanTargets(e.target.value)}
               disabled={scanPolling}
             />
           </div>
-          <div className="rounded-2xl border border-glass-border bg-muted/40 p-3" role="status" aria-live="polite">
+          <div
+            className="rounded-2xl border border-glass-border bg-muted/40 p-3"
+            role="status"
+            aria-live="polite"
+          >
             <p className="text-sm font-medium">{jobSummary(scanJob)}</p>
             {scanJob && !scanPolling && (
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground tabular">
                 {str(scanJob["targets"]) || "Scan finished"}
               </p>
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setScanOpen(false)}>
+            <Button variant="ghost" size="touch" onClick={() => setScanOpen(false)}>
               Close
             </Button>
             {scanPolling ? (
               <Button
                 variant="warning"
+                size="touch"
                 onClick={() => void stopScan()}
                 disabled={!!busy["cancelScan"]}
                 aria-busy={!!busy["cancelScan"]}
@@ -1067,7 +1112,7 @@ function DevicesPage() {
                 {busy["cancelScan"] ? <Loader2 className="animate-spin" /> : <X />} Cancel scan
               </Button>
             ) : (
-              <Button variant="hero" onClick={() => void startScan()}>
+              <Button variant="hero" size="touch" onClick={() => void startScan()}>
                 <Radar /> Start scan
               </Button>
             )}
@@ -1090,7 +1135,11 @@ function DevicesPage() {
               Organizes devices in local preferences. Favorites are toggled on each device card.
             </DialogDescription>
           </DialogHeader>
-          {orgError && <p className="text-sm text-status-offline" role="alert">{orgError}</p>}
+          {orgError && (
+            <p className="text-sm text-status-offline" role="alert">
+              {orgError}
+            </p>
+          )}
           <form onSubmit={(e) => void saveOrganize(e)} className="space-y-4">
             <div className="space-y-2">
               <p className="text-sm font-medium">Homes</p>
@@ -1101,6 +1150,7 @@ function DevicesPage() {
                     maxLength={60}
                     placeholder="Home name"
                     aria-label={`Home ${index + 1}`}
+                    className="h-11 rounded-xl"
                     onChange={(e) =>
                       setOrgHomes((old) => old.map((h, i) => (i === index ? e.target.value : h)))
                     }
@@ -1119,7 +1169,7 @@ function DevicesPage() {
               <Button
                 type="button"
                 variant="glass"
-                size="sm"
+                size="touch"
                 onClick={() => setOrgHomes((old) => [...old, ""])}
               >
                 <Plus /> Add home
@@ -1135,6 +1185,7 @@ function DevicesPage() {
                     maxLength={60}
                     placeholder="Room (blank = default)"
                     aria-label={`Room for ${d.name}`}
+                    className="h-11 rounded-xl"
                     onChange={(e) =>
                       setOrgRooms((old) => ({ ...old, [d.id]: e.target.value }))
                     }
@@ -1142,15 +1193,24 @@ function DevicesPage() {
                 </div>
               ))}
               {allDevices.length === 0 && (
-                <p className="text-sm text-muted-foreground">Add a device first, then assign rooms here.</p>
+                <p className="text-sm text-muted-foreground">
+                  Add a device first, then assign rooms here.
+                </p>
               )}
             </div>
             <DialogFooter className="gap-2">
-              <Button type="button" variant="ghost" onClick={() => setOrganizeOpen(false)}>
+              <Button type="button" variant="ghost" size="touch" onClick={() => setOrganizeOpen(false)}>
                 {t("cancel")}
               </Button>
-              <Button type="submit" variant="hero" disabled={!!busy["orgSave"]} aria-busy={!!busy["orgSave"]}>
-                {busy["orgSave"] ? <Loader2 className="animate-spin" /> : <LayoutGrid />} Save organization
+              <Button
+                type="submit"
+                variant="hero"
+                size="touch"
+                disabled={!!busy["orgSave"]}
+                aria-busy={!!busy["orgSave"]}
+              >
+                {busy["orgSave"] ? <Loader2 className="animate-spin" /> : <LayoutGrid />} Save
+                organization
               </Button>
             </DialogFooter>
           </form>
@@ -1177,7 +1237,7 @@ function DevicesPage() {
           <div className="flex flex-wrap gap-2">
             <Button
               variant="glass"
-              size="sm"
+              size="touch"
               disabled={!!busy["diag"]}
               aria-busy={!!busy["diag"]}
               onClick={() => diagDevice && void openDiagnostics(diagDevice)}
@@ -1185,11 +1245,18 @@ function DevicesPage() {
               {busy["diag"] ? <Loader2 className="animate-spin" /> : <RefreshCw />} Re-run
             </Button>
           </div>
-          {diagError && <p className="text-sm text-status-offline" role="alert">{diagError}</p>}
+          {diagError && (
+            <p className="text-sm text-status-offline" role="alert">
+              {diagError}
+            </p>
+          )}
           {diagData && (
             <>
               <div className="grid gap-2 rounded-2xl border border-glass-border bg-muted/40 p-3 text-sm sm:grid-cols-2">
-                <Fact label="Saved IP" value={str(asRecord(diagData["addresses"])["saved_ip"]) || "unknown"} />
+                <Fact
+                  label="Saved IP"
+                  value={str(asRecord(diagData["addresses"])["saved_ip"]) || "unknown"}
+                />
                 <Fact
                   label="TCP port"
                   value={str(asRecord(diagData["tcp6668"])["state"]) || "unknown"}
@@ -1212,7 +1279,7 @@ function DevicesPage() {
                   value={str(asRecord(diagData["history"])["fail_count"]) || "0"}
                 />
               </div>
-              <pre className="max-h-72 overflow-auto rounded-2xl border border-glass-border bg-muted/30 p-3 text-xs leading-relaxed">
+              <pre className="max-h-72 overflow-auto rounded-2xl border border-glass-border bg-muted/30 p-3 text-xs leading-relaxed tabular">
                 {JSON.stringify(diagData, null, 2)}
               </pre>
             </>
@@ -1221,7 +1288,7 @@ function DevicesPage() {
             <p className="text-sm text-muted-foreground">No diagnostics available.</p>
           )}
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setDiagDevice(null)}>
+            <Button variant="ghost" size="touch" onClick={() => setDiagDevice(null)}>
               Close
             </Button>
           </DialogFooter>
@@ -1235,11 +1302,10 @@ function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="truncate font-medium">{value}</p>
+      <p className="truncate font-medium tabular">{value}</p>
     </div>
   );
 }
-
 
 /** Quick power on the device card. Critical loads keep a two-tap arm gate. */
 function CardPowerToggle({ device }: { device: Device }) {
@@ -1248,24 +1314,30 @@ function CardPowerToggle({ device }: { device: Device }) {
   const [armed, setArmed] = useState(false);
   const timer = useRef<number | null>(null);
 
-  useEffect(() => () => {
-    if (timer.current !== null) window.clearTimeout(timer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+    },
+    [],
+  );
 
   const target: "on" | "off" =
     device.power.known && device.power.value === "on" ? "off" : "on";
 
   const fire = async () => {
     setBusy(true);
-    await sendDeviceCommand(
-      device.id,
-      { type: "power", value: target },
-      device.requiresApproval
-        ? { approvedBy: "local-user-two-tap", approvedAt: new Date().toISOString() }
-        : undefined,
-    );
-    setBusy(false);
-    setArmed(false);
+    try {
+      await sendDeviceCommand(
+        device.id,
+        { type: "power", value: target },
+        device.requiresApproval
+          ? { approvedBy: "local-user-two-tap", approvedAt: new Date().toISOString() }
+          : undefined,
+      );
+    } finally {
+      setBusy(false);
+      setArmed(false);
+    }
   };
 
   const onClick = (event: React.MouseEvent) => {
@@ -1301,10 +1373,15 @@ function CardPowerToggle({ device }: { device: Device }) {
       aria-busy={busy}
       onClick={onClick}
       onKeyDown={(event) => event.stopPropagation()}
-      className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl border border-glass-border bg-accent/40 px-3 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
+      className={cn(
+        "inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-all active:scale-[0.97] disabled:opacity-50",
+        armed
+          ? "border-warning/50 bg-warning/15 text-warning"
+          : "border-glass-border bg-accent/40 hover:bg-accent",
+      )}
     >
-      <Power className="size-4" aria-hidden />
-      {armed ? "Confirm" : target === "on" ? "On" : "Off"}
+      <Power className="size-3.5" aria-hidden />
+      <span>{armed ? "Confirm" : target === "on" ? "On" : "Off"}</span>
       {busy && <Loader2 className="size-3 animate-spin" aria-hidden />}
     </button>
   );
@@ -1330,51 +1407,66 @@ function DeviceCard({
   managing: boolean;
 }) {
   const { t } = useSmartPilot();
+  const isOn = device.power.known && device.power.value === "on";
+
   return (
     <Panel pad="none" className="animate-rise overflow-hidden">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onOpen}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            onOpen();
-          }
-        }}
-        className="flex w-full cursor-pointer flex-col gap-4 p-4 text-left transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label={`Open ${device.name} details`}
-      >
+      <div className="flex flex-col gap-3.5 p-4">
         <div className="flex items-start gap-3">
           <DeviceGlyph device={device} />
           <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold">{device.name}</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {KIND_LABEL[device.kind]} · {ECOSYSTEM_LABEL[device.ecosystem]}
-            </p>
+            <button
+              type="button"
+              onClick={onOpen}
+              className="group block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+              aria-label={`Open ${device.name} details`}
+            >
+              <span className="flex items-center gap-1.5">
+                <span className="truncate font-semibold tracking-tight group-hover:text-primary transition-colors">
+                  {device.name}
+                </span>
+                <ChevronRight
+                  className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                  aria-hidden
+                />
+              </span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {KIND_LABEL[device.kind]} · {ECOSYSTEM_LABEL[device.ecosystem]}
+              </span>
+            </button>
           </div>
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         </div>
+
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-xl bg-muted/40 p-2">
-            <p className="text-muted-foreground">{t("connectivity")}</p>
-            <div className="mt-1">
+          <div className="rounded-2xl bg-muted/40 p-2.5">
+            <p className="text-[11px] text-muted-foreground">{t("connectivity")}</p>
+            <div className="mt-1.5">
               <ConnectionPill status={device.connection} />
             </div>
           </div>
-          <div className="rounded-xl bg-muted/40 p-2">
-            <p className="text-muted-foreground">{t("power")}</p>
-            <p className="mt-1 font-medium">
-              {device.power.known ? device.power.value.toUpperCase() : t("status_unknown")}
-            </p>
+
+          <div className="flex flex-col justify-between rounded-2xl bg-muted/40 p-2.5">
+            <div>
+              <p className="text-[11px] text-muted-foreground">{t("power")}</p>
+              <p
+                className={cn(
+                  "mt-1 font-medium tabular",
+                  isOn && "text-foreground",
+                  !device.power.known && "text-muted-foreground",
+                )}
+              >
+                {device.power.known ? device.power.value.toUpperCase() : t("status_unknown")}
+              </p>
+            </div>
             <div className="mt-2">
               <CardPowerToggle device={device} />
             </div>
           </div>
         </div>
+
         <div className="flex flex-wrap items-center gap-1.5">
           {device.requiresApproval ? <ApprovalPill /> : <LiveBadge />}
-          <span className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground">
+          <span className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground tabular">
             <Clock className="size-3" aria-hidden />
             {device.lastSeen.known
               ? new Date(device.lastSeen.value).toLocaleTimeString()
@@ -1382,17 +1474,21 @@ function DeviceCard({
           </span>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-1 border-t border-glass-border px-2 py-1.5">
+
+      <div className="flex flex-wrap items-center gap-1 border-t border-glass-border/70 px-2 py-1.5">
         <Button
           variant="ghost"
           size="icon-touch"
-          aria-label={favorite ? `Remove ${device.name} from favorites` : `Add ${device.name} to favorites`}
+          aria-label={
+            favorite ? `Remove ${device.name} from favorites` : `Add ${device.name} to favorites`
+          }
           aria-pressed={favorite}
           title={favorite ? "Favorite" : "Add to favorites"}
           onClick={onFavorite}
         >
-          <Star className={cn(favorite && "fill-current text-warning")} />
+          <Star className={cn("size-4", favorite && "fill-current text-warning")} />
         </Button>
+
         {managing ? (
           <>
             <Button
@@ -1402,7 +1498,7 @@ function DeviceCard({
               title="Diagnostics"
               onClick={onDiagnostics}
             >
-              <Activity />
+              <Activity className="size-4" />
             </Button>
             <Button
               variant="ghost"
@@ -1411,17 +1507,17 @@ function DeviceCard({
               title="Edit device"
               onClick={onEdit}
             >
-              <Pencil />
+              <Pencil className="size-4" />
             </Button>
             <Button
               variant="ghost"
               size="icon-touch"
               aria-label={`Remove ${device.name}`}
               title="Remove device"
-              className="text-status-offline"
+              className="text-status-offline hover:text-status-offline"
               onClick={onDelete}
             >
-              <Trash2 />
+              <Trash2 className="size-4" />
             </Button>
           </>
         ) : (

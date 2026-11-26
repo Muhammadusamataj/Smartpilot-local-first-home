@@ -56,7 +56,7 @@ const en = {
   greeting_evening: "Good evening",
   overview_summary_title: "Smart Pilot summary",
   overview_summary:
-    "Verified local reads only. Critical devices need approval; unverified devices cannot be commanded.",
+    "Live status of your devices, rooms and local backend.",
   connection_health: "Connection health",
   connected_count: "{n} of {total} connected",
   backend_not_configured: "Local backend not configured",
@@ -154,7 +154,7 @@ const ur: Record<I18nKey, string> = {
   greeting_evening: "Shaam bakhair",
   overview_summary_title: "Smart Pilot khulasa",
   overview_summary:
-    "Sirf tasdeeq-shuda local reads. Critical devices ko command se pehle manzoori chahiye; jinhe tasdeeq nahi hui, unhe chalaya nahi ja sakta.",
+    "Aapke devices, rooms aur local backend ki live halat.",
   connection_health: "Connection ki sehat",
   connected_count: "{total} mein se {n} connect",
   backend_not_configured: "Local backend set nahi",

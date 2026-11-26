@@ -10,46 +10,148 @@
 <title>Smart Pilot | Titanium Live</title>
 <link rel="icon" href="icon.png" type="image/png">
 <style>
-html, body { margin: 0; overflow-x: hidden; }
+html, body {
+  margin: 0;
+  overflow-x: hidden;
+}
+
 /* Keep the exact computed body colours pinned by tests/test_ui.py. */
-html.dark body, html[data-theme="dark"] body { background-color: rgb(8, 16, 35) !important; }
-html[data-theme="light"] body { background-color: rgb(237, 245, 252) !important; }
-#pilot-next-root { max-width: 100vw; overflow-x: hidden; }
+html.dark body,
+html[data-theme="dark"] body {
+  background-color: rgb(8, 16, 35) !important;
+}
+
+html[data-theme="light"] body {
+  background-color: rgb(237, 245, 252) !important;
+}
+
+#pilot-next-root {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
 /* Keep the last card clear of the fixed bottom dock on tall touch screens. */
-#pilot-next-root main { padding-bottom: calc(8rem + env(safe-area-inset-bottom)); }
+#pilot-next-root main {
+  padding-bottom: calc(8rem + env(safe-area-inset-bottom));
+}
+
 @media (prefers-reduced-motion: reduce) {
-  #pilot-next-root *, #pilot-next-root *::before, #pilot-next-root *::after {
+  #pilot-next-root *,
+  #pilot-next-root *::before,
+  #pilot-next-root *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
-.pilot-next-safety { background:#0b1220; color:#cbd5e1; font:12px/1.6 system-ui,sans-serif;
-  padding:9px 14px; border-bottom:1px solid #30445d; display:flex; flex-wrap:wrap; gap:12px;
-  justify-content:space-between; align-items:center; position:relative; z-index:80; }
-.pilot-next-safety strong {color:#7dd3fc}
-.pilot-next-safety a {color:#7dd3fc;text-decoration:underline}
+
+.pilot-next-safety {
+  background: #0b1220;
+  color: #cbd5e1;
+  font: 12px/1.6 system-ui, sans-serif;
+  padding: 9px 14px;
+  border-bottom: 1px solid #30445d;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  z-index: 80;
+}
+
+.pilot-next-safety strong {
+  color: #7dd3fc;
+}
+
+.pilot-next-safety a {
+  color: #7dd3fc;
+  text-decoration: underline;
+}
+
 /* Touch-layout target sizes for secondary text links inherited from the
    pinned Lovable UI. Device buttons already use the 44px touch size. */
 @media (pointer: coarse) {
-  .pilot-next-safety a, header a, main a, a.sr-only {
-    display: inline-flex; align-items: center; min-height: 44px; min-width: 44px;
+  .pilot-next-safety a,
+  header a,
+  main a,
+  a.sr-only {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    min-width: 44px;
   }
-  button, input, select, textarea { min-height: 44px; min-width: 44px; }
+
+  button,
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+  }
 
   /* Readability on touch layouts: never clip device names, never shrink body
      labels below 11px. Existing Tailwind classes are left untouched. */
-  @media (pointer: coarse) {
-    .truncate { white-space: normal !important; overflow: visible !important;
-                text-overflow: clip !important; overflow-wrap: anywhere; }
-    [class~="text-[10px]"] { font-size: 11px !important; }
+  .truncate {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere;
+  }
+
+  [class~="text-[10px]"] {
+    font-size: 11px !important;
   }
 }
-</style>
-  <script id="pilot-remote-config" type="application/json">{{ {"tailscaleUrl": tailscale_url, "homeAssistant": home_assistant} | tojson }}</script>
-  <script type="module" crossorigin src="static/pilot-next/assets/__JS_ASSET__"></script>
-  <link rel="stylesheet" crossorigin href="static/pilot-next/assets/__CSS_ASSET__">
-<style>
+
+/* --- Restraint pass ------------------------------------------------------ */
+/* The duplicate sidebar warning card is cleared by the builder patch. */
+#pilot-next-root aside > div:last-child { display: none; }
+/* Keep the premium character but calm the glass and ambient lighting. The
+   exact pinned body colours above are deliberately untouched. */
+#pilot-next-root .ambient { opacity: 0.45; }
+#pilot-next-root .glass { backdrop-filter: blur(8px) saturate(110%); }
+#pilot-next-root .glass-strong { backdrop-filter: blur(12px) saturate(115%); }
+#pilot-next-root .glow {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary) 30%, transparent);
+}
+@supports not (color: oklch(0 0 0)) {
+  #pilot-next-root .glow { box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.35); }
+}
+
+/* Short, calm easing; state changes stay visible and reduced motion wins. */
+#pilot-next-root button,
+#pilot-next-root a,
+#pilot-next-root [role="button"] {
+  transition: background-color 140ms ease, border-color 140ms ease,
+    color 140ms ease, transform 140ms ease;
+}
+#pilot-next-root button:active,
+#pilot-next-root [role="button"]:active { transform: translateY(1px); }
+
+/* Never clip long device names or drop essential labels below 11px. */
+#pilot-next-root .text-\[10px\] { font-size: 11px; }
+#pilot-next-root p,
+#pilot-next-root li { line-height: 1.5; }
+
+/* Touch targets at phone widths even when the pointer is reported as fine
+   (mocked Chromium and desktop WebViews). Chip rows scroll horizontally. */
+@media (max-width: 720px) {
+  #pilot-next-root button,
+  #pilot-next-root input,
+  #pilot-next-root select,
+  #pilot-next-root textarea,
+  #pilot-next-root a,
+  #pilot-next-root [role="tab"] {
+    min-height: 44px;
+  }
+  #pilot-next-root button,
+  #pilot-next-root input,
+  #pilot-next-root select,
+  #pilot-next-root textarea {
+    min-width: 44px;
+  }
+}
+
 /* Light-theme contrast: darker status foregrounds on neutral surfaces. */
 html:not(.dark) {
   --status-ok: #0a6b50;
@@ -61,26 +163,43 @@ html:not(.dark) {
   --color-status-preview: var(--status-preview);
   --color-status-offline: var(--status-offline);
 }
+
 /* Solid fallbacks for Android WebViews without oklch / color-mix. */
 @supports not (color: oklch(0 0 0)) {
   :root {
-    --bg: #081023; --card: #15233b; --fg: #eff5ff; --muted: #96aac5;
-    --status-ok: #0b7a5a; --status-unknown: #96aac5; --status-preview: #c98a3c;
+    --bg: #081023;
+    --card: #15233b;
+    --fg: #eff5ff;
+    --muted: #96aac5;
+    --status-ok: #0b7a5a;
+    --status-unknown: #96aac5;
+    --status-preview: #c98a3c;
     --color-status-ok: var(--status-ok);
     --color-status-unknown: var(--status-unknown);
     --color-status-preview: var(--status-preview);
   }
+
   html:not(.dark) {
-    --bg: #edf5fc; --card: #f9fcff; --fg: #10233e; --muted: #62748b;
-    --status-ok: #0a6b50; --status-unknown: #475467; --status-preview: #8a4b00;
+    --bg: #edf5fc;
+    --card: #f9fcff;
+    --fg: #10233e;
+    --muted: #62748b;
+    --status-ok: #0a6b50;
+    --status-unknown: #475467;
+    --status-preview: #8a4b00;
   }
-  * { backdrop-filter: none !important; }
+
+  * {
+    backdrop-filter: none !important;
+  }
 }
 </style>
+<script id="pilot-remote-config" type="application/json">{{ {"tailscaleUrl": tailscale_url, "homeAssistant": home_assistant} | tojson }}</script>
+<script type="module" crossorigin src="static/pilot-next/assets/__JS_ASSET__"></script>
+<link rel="stylesheet" crossorigin href="static/pilot-next/assets/__CSS_ASSET__">
 </head>
 <body>
 <div id="pilot-next-root"></div>
-
 </body>
 </html>
 {% endif %}

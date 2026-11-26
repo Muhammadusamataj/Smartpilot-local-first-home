@@ -1691,3 +1691,58 @@ installed with `adb -s 10FF3H02QE0004Y install -r` -> Success,
   signature. A mocked runtime check injects a `v513 -> v514` rotation error,
   verifies a passwordless `/api/haier/cloud/login`, confirms a successful
   re-read afterwards and records 0 control writes.
+
+---
+
+## Audit-fix pass — 2026-11-26 `[VERIFIED, not committed/pushed]`
+
+User-approved follow-up to the Apple-level audit. Presentation-only overlay
+changes, audited one file at a time against the pinned Lovable source
+(`ef0f9f88`) and applied via `tools/build_lovable_webview.py`.
+
+Applied overlays: `AcControl.tsx`, `activity.tsx`, `assistant.tsx`,
+`automations.tsx`, `devices.tsx`, `DeviceSheet.tsx`, `index.tsx`,
+`primitives.tsx`, `settings.tsx`, `store.tsx`, `i18n.ts`,
+`local_control.template.html`; new `input.tsx` (h-11) and `checkbox.tsx`
+(44px) primitives; builder registers both and clears the duplicate sidebar
+warning; `tests/test_titanium_ui.py` assertion updated for the new single
+global safety line.
+
+Findings addressed: duplicate safety copy (one global line + short context
+hints), 44px dialog/checkbox/chip targets, phone capability table replaced by
+stacked cards, calmer glass/ambient/motion, empty room groups hidden, theme
+boot defaults to `system`, stale "Demo/Preview" copy removed.
+
+Build/verification commands and exact results:
+
+```powershell
+python tools/build_lovable_webview.py --source <pinned checkout>
+# index-C203VIqW.js + index-Rzdt56VB.css staged in all three mirrors
+
+python -m pytest tests/test_titanium_ui.py tests/test_pilot_v07_static.py tests/test_packaging.py -q
+# 28 passed in 0.52s
+
+python -m pytest tests/test_ui.py -q -k "modular_frontend or premium or control_link"
+# 6 passed, 410 deselected in 72.80s
+
+node tests/test_pilot_adapter.mjs
+node tests/test_pilot_home_layout.mjs
+# Adapter read-only mapping ... PASS / Home layout state ... PASS
+
+python UI_REVIEW_TEMP/audit_capture.py
+# shots: 96 / overflow failures: 0 / page errors: 0 / small font rows: 0 /
+# small targets: 0 / command POSTs: []
+
+python UI_REVIEW_TEMP/check_dialog_targets.py
+# devices/Add device, overview/Customize, settings/AC setup,
+# automations/New scene: 0 small targets at 320px
+```
+
+Mirror hashes (all three copies identical): index.html `A5344546CB5A964D`,
+JS `0383358AC22A65AE`, CSS `0B99DB2D36AB1015`, template `9A0BA097B06F2A19`.
+
+Boundaries: no Python backend, API, protocol, key, auth, safety or Android
+source changed; no device command sent; no commit, push, tag, release, PR or
+install performed. The local mocked launcher was used only for a browser
+preview; real-app update and any preview APK install remain a separate,
+explicitly approved step.

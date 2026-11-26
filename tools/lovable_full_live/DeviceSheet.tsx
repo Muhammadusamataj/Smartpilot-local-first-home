@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Clock, Network, Power, ShieldAlert, ShieldCheck } from "lucide-react";
+import {
+  ArrowRight,
+  Clock,
+  Loader2,
+  Network,
+  Power,
+  ShieldAlert,
+  ShieldCheck,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -38,6 +46,7 @@ import {
   DeviceGlyph,
   LiveNotice,
 } from "./primitives";
+import { cn } from "@/lib/utils";
 
 export const ECOSYSTEM_LABEL: Record<Device["ecosystem"], string> = {
   haier_haismart: "Haier HaiSmart",
@@ -66,6 +75,7 @@ export function ApprovalDialog({
 }) {
   const { t } = useSmartPilot();
   const [ack, setAck] = useState(false);
+
   return (
     <Dialog
       open={open}
@@ -77,24 +87,30 @@ export function ApprovalDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ShieldAlert className="size-5 text-status-preview" aria-hidden /> {title}
+            <ShieldAlert className="size-5 text-status-preview" aria-hidden />
+            <span>{title}</span>
           </DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-glass-border bg-muted/40 p-3 text-sm">
-          <Checkbox checked={ack} onCheckedChange={(v) => setAck(v === true)} className="mt-0.5" />
-          <span>I understand this is a high-risk load and I'm approving it explicitly.</span>
+        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-glass-border bg-muted/40 p-3.5 text-sm">
+          <Checkbox
+            checked={ack}
+            onCheckedChange={(v) => setAck(v === true)}
+            className="mt-0.5"
+          />
+          <span>I understand this is a high-risk load and I am approving it explicitly.</span>
         </label>
         <p className="flex items-start gap-2 text-xs text-muted-foreground" role="note">
           <ShieldAlert className="mt-px size-3.5 shrink-0 text-status-preview" aria-hidden />
-          Approval is recorded locally; the backend still refuses unverified writes.
+          <span>Approval is recorded locally; the backend still enforces safety checks.</span>
         </p>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" size="touch" onClick={() => onOpenChange(false)}>
             {t("cancel")}
           </Button>
           <Button
             variant="approve"
+            size="touch"
             disabled={!ack}
             onClick={() => {
               onApprove();
@@ -102,7 +118,8 @@ export function ApprovalDialog({
               onOpenChange(false);
             }}
           >
-            <ShieldCheck /> {t("approve")} &amp; send
+            <ShieldCheck className="size-4" aria-hidden />
+            {t("approve")} &amp; send
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -126,28 +143,52 @@ export function DeviceSheet({
   device: Device | null;
   onOpenChange: (o: boolean) => void;
 }) {
-  const { t, connection, sendDeviceCommand, sendDpCommand, points, deviceHistory, log } = useSmartPilot();
+  const {
+    t,
+    connection,
+    sendDeviceCommand,
+    sendDpCommand,
+    points,
+    deviceHistory,
+    log,
+  } = useSmartPilot();
   const [pending, setPending] = useState<null | "on" | "off">(null);
   const [busy, setBusy] = useState(false);
   const [armed, setArmed] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [dpError, setDpError] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
-  const armTimer = useRef<number | null>(null);
 
-  useEffect(() => () => {
-    if (armTimer.current !== null) window.clearTimeout(armTimer.current);
+  const armTimer = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (armTimer.current !== null) window.clearTimeout(armTimer.current);
+    };
   }, []);
+
+  useEffect(() => {
+    setArmed(null);
+    setDpError(null);
+    setPending(null);
+  }, [device?.id]);
 
   const runPower = async (d: Device, value: "on" | "off", approved: boolean) => {
     setBusy(true);
-    await sendDeviceCommand(
-      d.id,
-      { type: "power", value },
-      approved
-        ? { approvedBy: "local-user", approvedAt: new Date().toISOString() }
-        : undefined,
-    );
-    setBusy(false);
+    try {
+      await sendDeviceCommand(
+        d.id,
+        { type: "power", value },
+        approved
+          ? { approvedBy: "local-user", approvedAt: new Date().toISOString() }
+          : undefined,
+      );
+    } finally {
+      if (mountedRef.current) setBusy(false);
+    }
   };
 
   const request = (d: Device, value: "on" | "off") => {
@@ -159,16 +200,18 @@ export function DeviceSheet({
     void runPower(d, value, true);
   };
 
-  /** Two-tap arm/confirm for high-risk data points; backend gate stays final. */
   const requestDp = async (
     d: Device,
     point: { dp: string; code: string; type: string; value?: unknown },
     value: unknown,
   ) => {
-    if (device?.requiresApproval && armed !== point.dp) {
+    setDpError(null);
+    if (d.requiresApproval && armed !== point.dp) {
       setArmed(point.dp);
       if (armTimer.current !== null) window.clearTimeout(armTimer.current);
-      armTimer.current = window.setTimeout(() => setArmed(null), 4500);
+      armTimer.current = window.setTimeout(() => {
+        if (mountedRef.current) setArmed(null);
+      }, 4500);
       log({
         kind: "safety",
         status: "warning",
@@ -177,17 +220,23 @@ export function DeviceSheet({
       });
       return;
     }
+
     setBusy(true);
-    await sendDpCommand(
-      d.id,
-      point.dp,
-      value,
-      device?.requiresApproval
-        ? { approvedBy: "local-user-two-tap", approvedAt: new Date().toISOString() }
-        : undefined,
-    );
-    setBusy(false);
-    setArmed(null);
+    try {
+      await sendDpCommand(
+        d.id,
+        point.dp,
+        value,
+        d.requiresApproval
+          ? { approvedBy: "local-user-two-tap", approvedAt: new Date().toISOString() }
+          : undefined,
+      );
+    } finally {
+      if (mountedRef.current) {
+        setBusy(false);
+        setArmed(null);
+      }
+    }
   };
 
   const devicePoints = device ? (points[device.id] ?? []) : [];
@@ -195,39 +244,47 @@ export function DeviceSheet({
   const controlPoints = devicePoints.filter((point) => !isPhasePoint(point));
   const usefulPoints = controlPoints.filter(
     (point) =>
-      isMeterPoint(point)
-      || /switch|relay|onoff|power|clear_energy/i.test(point.code)
-      || /bool/i.test(point.type),
+      isMeterPoint(point) ||
+      /switch|relay|onoff|power|clear_energy/i.test(point.code) ||
+      /bool/i.test(point.type),
   );
   const rawCount = controlPoints.length - usefulPoints.length;
   const visiblePoints = showRaw ? controlPoints : usefulPoints;
-  const history = device ? deviceHistory[device.id] ?? null : null;
+  const history = device ? (deviceHistory[device.id] ?? null) : null;
 
   return (
     <Sheet open={!!device} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full border-glass-border sm:max-w-md">
+      <SheetContent
+        side="right"
+        className="w-full overflow-y-auto border-glass-border sm:max-w-md"
+      >
         {device && (
-          <>
+          <div className="space-y-4 pb-4">
             <SheetHeader className="text-left">
               <div className="flex items-center gap-3">
                 <DeviceGlyph device={device} size="lg" />
-                <div className="min-w-0">
-                  <SheetTitle className="truncate">{device.name}</SheetTitle>
-                  <SheetDescription>
+                <div className="min-w-0 flex-1">
+                  <SheetTitle className="truncate tracking-tight">{device.name}</SheetTitle>
+                  <SheetDescription className="truncate">
                     {KIND_LABEL[device.kind]} · {device.location ?? t("room_not_set")}
                   </SheetDescription>
                 </div>
               </div>
             </SheetHeader>
 
+            {/* Connectivity */}
             <section
-              className="mt-6 rounded-2xl border border-glass-border bg-muted/30 p-4"
+              className="rounded-2xl border border-glass-border bg-muted/30 p-4"
               aria-labelledby="conn-h"
             >
-              <h3 id="conn-h" className="mb-1 flex items-center gap-2 text-sm font-semibold">
-                <Network className="size-4 text-primary" aria-hidden /> {t("connectivity")}
+              <h3
+                id="conn-h"
+                className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+              >
+                <Network className="size-3.5 text-primary" aria-hidden />
+                {t("connectivity")}
               </h3>
-              <div className="divide-y divide-border">
+              <div className="divide-y divide-border/60">
                 <Row label="Status">
                   <ConnectionPill status={device.connection} />
                 </Row>
@@ -237,7 +294,7 @@ export function DeviceSheet({
                   <span className="text-xs text-muted-foreground">{connection.message}</span>
                 </Row>
                 <Row label="Last seen">
-                  <span className="flex items-center gap-1 text-muted-foreground">
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground tabular">
                     <Clock className="size-3.5" aria-hidden />
                     {device.lastSeen.known
                       ? new Date(device.lastSeen.value).toLocaleString()
@@ -245,26 +302,35 @@ export function DeviceSheet({
                   </span>
                 </Row>
                 <Row label={t("power")}>
-                  {device.power.known ? device.power.value.toUpperCase() : t("status_unknown")}
+                  <span className="font-medium tabular">
+                    {device.power.known ? device.power.value.toUpperCase() : t("status_unknown")}
+                  </span>
                 </Row>
               </div>
             </section>
 
+            {/* Controls */}
             <section
-              className="mt-4 rounded-2xl border border-glass-border bg-muted/30 p-4"
+              className="rounded-2xl border border-glass-border bg-muted/30 p-4"
               aria-labelledby="ctrl-h"
             >
-              <h3 id="ctrl-h" className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                <Power className="size-4 text-primary" aria-hidden /> {t("controls")}
+              <h3
+                id="ctrl-h"
+                className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+              >
+                <Power className="size-3.5 text-primary" aria-hidden />
+                {t("controls")}
               </h3>
               {device.kind === "air_conditioner" ? (
                 <div className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    Full Manual/Auto, temperature, mode and fan controls live on the Climate screen.
+                    Full Manual/Auto, temperature, mode, and fan controls live on the Climate
+                    screen.
                   </p>
                   <Button asChild variant="hero" size="touch" className="w-full">
                     <Link to="/climate" onClick={() => onOpenChange(false)}>
-                      {t("openClimate")} <ArrowRight />
+                      {t("openClimate")}
+                      <ArrowRight className="size-4" aria-hidden />
                     </Link>
                   </Button>
                 </div>
@@ -278,8 +344,10 @@ export function DeviceSheet({
                       data-critical={device.requiresApproval ? "true" : undefined}
                       disabled={busy || connection.state === "refreshing"}
                       aria-busy={busy}
+                      className="active:scale-[0.98]"
                       onClick={() => request(device, "on")}
                     >
+                      {busy && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
                       Turn on
                     </Button>
                     <Button
@@ -288,12 +356,14 @@ export function DeviceSheet({
                       data-critical={device.requiresApproval ? "true" : undefined}
                       disabled={busy || connection.state === "refreshing"}
                       aria-busy={busy}
+                      className="active:scale-[0.98]"
                       onClick={() => request(device, "off")}
                     >
+                      {busy && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
                       Turn off
                     </Button>
                   </div>
-                  <div className="divide-y divide-border">
+                  <div className="divide-y divide-border/60">
                     <Row label="Power switch">
                       <CapabilityPill status={device.capabilities.power} />
                     </Row>
@@ -309,13 +379,18 @@ export function DeviceSheet({
               <LiveNotice className="mt-3" />
             </section>
 
+            {/* Verified data points */}
             {device.kind !== "air_conditioner" && devicePoints.length > 0 && (
               <section
-                className="mt-4 rounded-2xl border border-glass-border bg-muted/30 p-4"
+                className="rounded-2xl border border-glass-border bg-muted/30 p-4"
                 aria-labelledby="dps-h"
               >
-                <h3 id="dps-h" className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                  <Power className="size-4 text-primary" aria-hidden /> Verified data points
+                <h3
+                  id="dps-h"
+                  className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                >
+                  <Power className="size-3.5 text-primary" aria-hidden />
+                  Verified data points
                 </h3>
 
                 {phasePoints.length > 0 && (
@@ -325,10 +400,10 @@ export function DeviceSheet({
                       return (
                         <div
                           key={`phase-${point.dp}`}
-                          className="rounded-xl border border-glass-border bg-muted/20 p-3"
+                          className="rounded-xl border border-glass-border bg-background/40 p-3"
                         >
-                          <p className="text-xs text-muted-foreground">
-                            {point.code || `DP ${point.dp}`} · DP {point.dp} · read-only
+                          <p className="text-xs text-muted-foreground tabular">
+                            {point.code || `DP ${point.dp}`} · DP {point.dp} · Read-only
                           </p>
                           {decoded ? (
                             <dl className="mt-2 grid grid-cols-3 gap-2">
@@ -337,9 +412,9 @@ export function DeviceSheet({
                                   <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
                                     {reading.label}
                                   </dt>
-                                  <dd className="font-display tabular text-sm">
+                                  <dd className="font-display text-sm font-medium tabular">
                                     {decoded[reading.key].toFixed(reading.digits)}{" "}
-                                    <span className="text-xs text-muted-foreground">
+                                    <span className="text-xs font-normal text-muted-foreground">
                                       {reading.unit}
                                     </span>
                                   </dd>
@@ -357,34 +432,45 @@ export function DeviceSheet({
                   </div>
                 )}
 
-                <div className="divide-y divide-border">
+                {dpError && (
+                  <p className="mb-2 text-xs text-status-offline" role="alert">
+                    {dpError}
+                  </p>
+                )}
+
+                <div className="divide-y divide-border/60">
                   {visiblePoints.map((point) => {
                     const isBool = /bool/i.test(point.type);
                     const isNum = /int|number/i.test(point.type);
                     const readOnly = isMeterPoint(point);
+                    const draftKey = `${device.id}:${point.dp}`;
                     const current =
-                      draft[point.dp] ??
+                      draft[draftKey] ??
                       (point.value === undefined ? "" : String(point.value));
+                    const isArmed = armed === point.dp;
+
                     return (
                       <div key={point.dp} className="py-2.5">
                         <div className="flex items-center justify-between gap-3">
                           <span className="min-w-0 text-sm">
                             <span className="font-medium">{point.code || `DP ${point.dp}`}</span>
-                            <span className="ml-1 text-xs text-muted-foreground">
+                            <span className="ml-1.5 text-xs text-muted-foreground tabular">
                               DP {point.dp} · {point.type || "unknown"}
                             </span>
                           </span>
                           {readOnly ? (
-                            <span className="shrink-0 text-right font-display tabular text-sm">
+                            <span className="shrink-0 text-right font-display text-sm tabular">
                               {formatPointValue(point)}
-                              <span className="ml-1 block text-[11px] font-normal text-muted-foreground">
-                                read-only measurement
+                              <span className="ml-1 block text-[11px] font-sans font-normal text-muted-foreground">
+                                Read-only
                               </span>
                             </span>
                           ) : isBool ? (
                             <Switch
                               checked={
-                                point.value === true || point.value === 1 || point.value === "1"
+                                point.value === true ||
+                                point.value === 1 ||
+                                point.value === "1"
                               }
                               data-critical={device.requiresApproval ? "true" : undefined}
                               disabled={busy || connection.state === "refreshing"}
@@ -397,44 +483,60 @@ export function DeviceSheet({
                                 type={isNum ? "number" : "text"}
                                 value={current}
                                 aria-label={`Value for ${point.code || point.dp}`}
-                                onChange={(event) =>
-                                  setDraft((old) => ({ ...old, [point.dp]: event.target.value }))
-                                }
-                                className="h-9 w-24 rounded-lg border border-glass-border bg-muted/40 px-2 text-sm"
+                                onChange={(event) => {
+                                  setDpError(null);
+                                  setDraft((old) => ({
+                                    ...old,
+                                    [draftKey]: event.target.value,
+                                  }));
+                                }}
+                                className="h-11 w-28 rounded-xl border border-glass-border bg-background/60 px-2.5 text-sm tabular"
                               />
                               <Button
-                                variant="glass"
-                                size="sm"
+                                variant={isArmed ? "warning" : "glass"}
+                                size="touch"
+                                className="rounded-xl"
                                 data-critical={device.requiresApproval ? "true" : undefined}
                                 disabled={busy || connection.state === "refreshing"}
-                                onClick={() =>
-                                  void requestDp(
-                                    device,
-                                    point,
-                                    isNum ? Number(current) : current,
-                                  )
-                                }
+                                onClick={() => {
+                                  if (isNum) {
+                                    const parsed = Number(current);
+                                    if (!current.trim() || !Number.isFinite(parsed)) {
+                                      setDpError(`Enter a valid number for ${point.code || `DP ${point.dp}`}.`);
+                                      return;
+                                    }
+                                    void requestDp(device, point, parsed);
+                                  } else {
+                                    void requestDp(device, point, current);
+                                  }
+                                }}
                               >
-                                {armed === point.dp ? "Confirm" : "Set"}
+                                {isArmed ? "Confirm" : "Set"}
                               </Button>
                             </div>
                           )}
                         </div>
-                        {armed === point.dp && (
-                          <p className="mt-1 text-xs text-status-preview" role="status">
-                            Armed — tap again within 4.5 seconds to send the command.
+                        {isArmed && (
+                          <p
+                            className={cn(
+                              "mt-1 text-xs text-status-preview tabular",
+                            )}
+                            role="status"
+                          >
+                            Tap again within 4.5s to send.
                           </p>
                         )}
                       </div>
                     );
                   })}
                 </div>
+
                 {rawCount > 0 && (
                   <Button
                     type="button"
-                    variant="glass"
-                    size="sm"
-                    className="mt-3"
+                    variant="ghost"
+                    size="touch"
+                    className="mt-2 rounded-full text-xs text-muted-foreground hover:text-foreground"
                     onClick={() => setShowRaw((value) => !value)}
                     aria-expanded={showRaw}
                   >
@@ -444,44 +546,60 @@ export function DeviceSheet({
               </section>
             )}
 
-            {device && device.kind !== "air_conditioner" && (
+            {/* Device history */}
+            {device.kind !== "air_conditioner" && (
               <section
-                className="mt-4 rounded-2xl border border-glass-border bg-muted/30 p-4"
+                className="rounded-2xl border border-glass-border bg-muted/30 p-4"
                 aria-labelledby="history-h"
               >
-                <h3 id="history-h" className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                  <Clock className="size-4 text-primary" aria-hidden /> Device history
+                <h3
+                  id="history-h"
+                  className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                >
+                  <Clock className="size-3.5 text-primary" aria-hidden />
+                  Device history
                 </h3>
                 {history ? (
-                  <div className="divide-y divide-border text-sm">
+                  <div className="divide-y divide-border/60 text-sm">
                     <div className="flex items-center justify-between gap-3 py-2">
                       <span className="text-muted-foreground">Last ON</span>
-                      <span className="text-right">
-                        {history.lastOnAt ? new Date(history.lastOnAt).toLocaleString() : "—"}
+                      <span className="text-right text-xs tabular">
+                        {history.lastOnAt
+                          ? new Date(history.lastOnAt).toLocaleString()
+                          : "—"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-3 py-2">
                       <span className="text-muted-foreground">Last OFF</span>
-                      <span className="text-right">
-                        {history.lastOffAt ? new Date(history.lastOffAt).toLocaleString() : "—"}
+                      <span className="text-right text-xs tabular">
+                        {history.lastOffAt
+                          ? new Date(history.lastOffAt).toLocaleString()
+                          : "—"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-3 py-2">
                       <span className="text-muted-foreground">Units today (sampled)</span>
-                      <span className="font-display tabular">{history.todayKwh.toFixed(3)} kWh</span>
+                      <span className="font-display text-sm tabular">
+                        {history.todayKwh.toFixed(3)} kWh
+                      </span>
                     </div>
                     <div className="flex items-center justify-between gap-3 py-2">
                       <span className="text-muted-foreground">Runs recorded</span>
                       <span className="tabular">{history.sessions.length}</span>
                     </div>
                     {history.sessions.slice(0, 5).map((session, index) => (
-                      <div key={`${session.start}-${index}`} className="py-2 text-xs">
+                      <div
+                        key={`${session.start}-${index}`}
+                        className="flex items-center justify-between gap-2 py-2 text-xs tabular"
+                      >
                         <span className="font-medium">
                           {new Date(session.start).toLocaleTimeString()}
                           {" → "}
-                          {session.end ? new Date(session.end).toLocaleTimeString() : "running"}
+                          {session.end
+                            ? new Date(session.end).toLocaleTimeString()
+                            : "running"}
                         </span>
-                        <span className="ml-2 text-muted-foreground">
+                        <span className="text-muted-foreground">
                           {session.kwh.toFixed(3)} kWh
                         </span>
                       </div>
@@ -492,9 +610,9 @@ export function DeviceSheet({
                     No local samples yet. History appears after a verified local read.
                   </p>
                 )}
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Recorded on this phone from verified local reads every 30 s. Not a billing meter;
-                  gaps while the app is closed are not counted.
+                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                  Sampled locally from verified reads every 30s. Not a billing meter; gaps while
+                  closed are not counted.
                 </p>
               </section>
             )}
@@ -503,7 +621,7 @@ export function DeviceSheet({
               open={pending !== null}
               onOpenChange={(o) => !o && setPending(null)}
               title={`Approve: ${device.name} ${pending ?? ""}`}
-              description={`${device.name} is a high-risk load. This approval is sent only to this app’s command gate; the backend still refuses unverified or unknown controls.`}
+              description={`${device.name} is a high-risk load. This approval is recorded locally; the backend still refuses unverified or unknown controls.`}
               onApprove={() => {
                 if (!pending) return;
                 log({
@@ -516,7 +634,7 @@ export function DeviceSheet({
                 setPending(null);
               }}
             />
-          </>
+          </div>
         )}
       </SheetContent>
     </Sheet>

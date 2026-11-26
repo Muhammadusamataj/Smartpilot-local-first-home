@@ -30,6 +30,8 @@ SOURCE_COMMIT = "ef0f9f88a9c3621d919d25116dc4e14fa3b74f1a"
 
 OVERLAY_DIR = ROOT / "tools" / "lovable_full_live"
 _OVERLAY_FILES = {
+    "components/ui/input.tsx": "input.tsx",
+    "components/ui/checkbox.tsx": "checkbox.tsx",
     "lib/smartpilot/adapter.ts": "adapter.ts",
     "lib/smartpilot/store.tsx": "store.tsx",
     "lib/smartpilot/local-backend-adapter.ts": "local-backend-adapter.ts",
@@ -53,14 +55,16 @@ _OVERLAY_FILES = {
 # silently shipping stale preview claims. Tuples are (anchor, replacement, n).
 _STRING_PATCHES = {
     "components/sp/AppShell.tsx": [
+        # One global safety line lives in the header. The sidebar card repeated
+        # the same warning, so clear its copy (its empty box is hidden in CSS).
         (
             '<ShieldCheck className="size-3.5" aria-hidden /> {t("prototype")}',
-            '<ShieldCheck className="size-3.5" aria-hidden /> Live local',
+            "",
             1,
         ),
         (
             "No hardware is connected. Controls are previews and never reach your devices.",
-            "Reads and commands use this app’s local backend. Critical devices still require explicit approval.",
+            "",
             1,
         ),
         (
@@ -147,6 +151,41 @@ html, body { margin: 0; overflow-x: hidden; }
                 text-overflow: clip !important; overflow-wrap: anywhere; }
     [class~="text-[10px]"] { font-size: 11px !important; }
   }
+}
+
+/* --- Restraint pass: calmer glass, readable type, calm motion ------------- */
+#pilot-next-root aside > div:last-child { display: none; }
+#pilot-next-root .ambient { opacity: 0.45; }
+#pilot-next-root .glass { backdrop-filter: blur(8px) saturate(110%); }
+#pilot-next-root .glass-strong { backdrop-filter: blur(12px) saturate(115%); }
+#pilot-next-root .glow {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary) 30%, transparent);
+}
+@supports not (color: oklch(0 0 0)) {
+  #pilot-next-root .glow { box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.35); }
+}
+#pilot-next-root button,
+#pilot-next-root a,
+#pilot-next-root [role="button"] {
+  transition: background-color 140ms ease, border-color 140ms ease,
+    color 140ms ease, transform 140ms ease;
+}
+#pilot-next-root button:active,
+#pilot-next-root [role="button"]:active { transform: translateY(1px); }
+#pilot-next-root .text-\\[10px\\] { font-size: 11px; }
+#pilot-next-root p,
+#pilot-next-root li { line-height: 1.5; }
+@media (max-width: 720px) {
+  #pilot-next-root button,
+  #pilot-next-root input,
+  #pilot-next-root select,
+  #pilot-next-root textarea,
+  #pilot-next-root a,
+  #pilot-next-root [role="tab"] { min-height: 44px; }
+  #pilot-next-root button,
+  #pilot-next-root input,
+  #pilot-next-root select,
+  #pilot-next-root textarea { min-width: 44px; }
 }
 </style>
 <style>

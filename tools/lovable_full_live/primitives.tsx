@@ -1,3 +1,4 @@
+
 import type { ComponentProps, ReactNode } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import {
@@ -21,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { useSmartPilot } from "@/lib/smartpilot/store";
 import type { CapabilityStatus, ConnectionStatus, Device } from "@/lib/smartpilot/types";
 
-const panelVariants = cva("rounded-3xl text-card-foreground", {
+const panelVariants = cva("rounded-3xl text-card-foreground transition-colors", {
   variants: {
     variant: {
       glass: "glass",
@@ -47,14 +48,16 @@ export function PanelTitle({
   icon: Icon,
   children,
   action,
+  className,
 }: {
   icon?: LucideIcon;
   children: ReactNode;
   action?: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="mb-4 flex items-center justify-between gap-3">
-      <h2 className="flex min-w-0 items-center gap-2 text-base font-semibold">
+    <div className={cn("mb-4 flex items-center justify-between gap-3", className)}>
+      <h2 className="flex min-w-0 items-center gap-2.5 text-base font-semibold tracking-tight">
         {Icon && (
           <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-primary/12 text-primary">
             <Icon className="size-4" aria-hidden />
@@ -62,7 +65,7 @@ export function PanelTitle({
         )}
         <span className="truncate">{children}</span>
       </h2>
-      {action}
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }
@@ -72,20 +75,27 @@ export function PageHeader({
   sub,
   actions,
   eyebrow,
+  className,
 }: {
   title: string;
   sub?: string;
   actions?: ReactNode;
   eyebrow?: ReactNode;
+  className?: string;
 }) {
   return (
-    <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between animate-rise">
+    <header
+      className={cn(
+        "mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between animate-rise",
+        className,
+      )}
+    >
       <div className="min-w-0">
         {eyebrow && <div className="mb-2 flex flex-wrap gap-2">{eyebrow}</div>}
-        <h1 className="text-2xl font-semibold sm:text-3xl">{title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
         {sub && <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{sub}</p>}
       </div>
-      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </header>
   );
 }
@@ -126,7 +136,7 @@ export function PreviewNotice({ className }: { className?: string }) {
   );
 }
 
-/** Honest live-control notice: commands use existing Flask safety gates. */
+/** Honest live-control notice: a short context hint after the global banner. */
 export function LiveNotice({ className }: { className?: string }) {
   const { connection } = useSmartPilot();
   return (
@@ -134,8 +144,8 @@ export function LiveNotice({ className }: { className?: string }) {
       <ShieldCheck className="mt-px size-3.5 shrink-0 text-primary" aria-hidden />
       <span>
         {connection.state === "live"
-          ? "Live local backend: verified reads only; critical devices still need approval."
-          : "Local backend not verified yet — commands are held until a fresh read succeeds."}
+          ? "Critical devices still require your approval."
+          : "Local backend not verified yet — commands are held."}
       </span>
     </p>
   );
@@ -222,32 +232,53 @@ export function EmptyState({
   title,
   body,
   action,
+  className,
 }: {
   icon: LucideIcon;
   title: string;
   body?: string;
   action?: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-glass-border px-6 py-10 text-center">
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-glass-border bg-muted/20 px-6 py-10 text-center",
+        className,
+      )}
+    >
       <span className="grid size-12 place-items-center rounded-2xl bg-muted text-muted-foreground">
         <Icon className="size-6" aria-hidden />
       </span>
       <div>
-        <p className="font-medium">{title}</p>
+        <p className="font-medium tracking-tight">{title}</p>
         {body && <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">{body}</p>}
       </div>
-      {action}
+      {action && <div className="mt-1">{action}</div>}
     </div>
   );
 }
 
-export function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
+export function Stat({
+  label,
+  value,
+  hint,
+  className,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: string;
+  className?: string;
+}) {
   return (
-    <div className="min-w-0">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-0.5 truncate font-display text-lg font-semibold tabular">{value}</p>
-      {hint && <p className="truncate text-xs text-muted-foreground">{hint}</p>}
+    <div className={cn("min-w-0", className)}>
+      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 truncate font-display text-lg font-semibold tracking-tight tabular">
+        {value}
+      </p>
+      {hint && <p className="mt-0.5 truncate text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }

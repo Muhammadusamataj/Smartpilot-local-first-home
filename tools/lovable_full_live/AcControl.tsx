@@ -7,7 +7,6 @@ import {
   Droplets,
   Fan,
   Flame,
-  Gauge,
   Hand,
   Leaf,
   Loader2,
@@ -87,13 +86,34 @@ import type {
 } from "@/lib/smartpilot/types";
 import { CapabilityPill, ConnectionPill, DeviceGlyph, LiveNotice, Panel } from "./primitives";
 
-const MODE_META: Record<AcMode, { label: string; icon: LucideIcon }> = {
-  cool: { label: "Cool", icon: Snowflake },
-  dry: { label: "Dry", icon: Droplets },
-  fan: { label: "Fan", icon: Fan },
-  auto: { label: "Auto", icon: Sparkles },
-  heat: { label: "Heat", icon: Flame },
+const MODE_META: Record<AcMode, { label: string; icon: LucideIcon; ambient: string }> = {
+  cool: {
+    label: "Cool",
+    icon: Snowflake,
+    ambient: "from-sky-500/15 via-cyan-500/5 to-transparent border-sky-500/25",
+  },
+  dry: {
+    label: "Dry",
+    icon: Droplets,
+    ambient: "from-teal-500/15 via-emerald-500/5 to-transparent border-teal-500/25",
+  },
+  fan: {
+    label: "Fan",
+    icon: Fan,
+    ambient: "from-slate-400/15 via-slate-400/5 to-transparent border-glass-border",
+  },
+  auto: {
+    label: "Auto",
+    icon: Sparkles,
+    ambient: "from-primary/15 via-primary/5 to-transparent border-primary/25",
+  },
+  heat: {
+    label: "Heat",
+    icon: Flame,
+    ambient: "from-orange-500/15 via-amber-500/5 to-transparent border-orange-500/25",
+  },
 };
+
 const FAN_LABEL: Record<FanSpeed, string> = {
   auto: "Auto",
   low: "Low",
@@ -109,12 +129,6 @@ const HAIER_SLOT_BY_NAME: Record<string, HaierSlot> = {
   "FF Haier 19HFAB T3": "ff",
 };
 
-/**
- * The local backend accepts a `strong` Haier command, but the shared
- * DeviceCommand union does not describe it. Keep the extension local so no
- * shared type or adapter file has to change; the live adapter forwards any
- * `setFeature` name to the backend, whose command gate already allows `strong`.
- */
 type StrongFeatureCommand = { type: "setFeature"; feature: "strong"; value: boolean };
 type AcCommand = DeviceCommand | StrongFeatureCommand;
 type AcPatch = Partial<AcPreviewState> & { strong?: boolean };
@@ -158,10 +172,12 @@ export function ControlModeSwitch({
   value,
   onChange,
   name,
+  disabled,
 }: {
   value: ControlMode;
   onChange: (m: ControlMode) => void;
   name: string;
+  disabled?: boolean;
 }) {
   const { t } = useSmartPilot();
   const opts: { v: ControlMode; label: string; icon: LucideIcon }[] = [
@@ -172,7 +188,7 @@ export function ControlModeSwitch({
     <div
       role="radiogroup"
       aria-label={`${name} control mode`}
-      className="grid grid-cols-2 gap-1 rounded-2xl border border-glass-border bg-muted/50 p-1"
+      className="grid grid-cols-2 gap-1 rounded-2xl border border-glass-border bg-muted/40 p-1"
     >
       {opts.map((o) => {
         const active = value === o.v;
@@ -181,10 +197,11 @@ export function ControlModeSwitch({
             key={o.v}
             type="button"
             role="radio"
+            disabled={disabled}
             aria-checked={active}
             onClick={() => onChange(o.v)}
             className={cn(
-              "flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-muted-foreground transition-all",
+              "flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-muted-foreground transition-all active:scale-[0.98] disabled:opacity-50",
               active && o.v === "manual" && "bg-background text-foreground shadow-sm",
               active && o.v === "auto" && "bg-gradient-primary text-primary-foreground glow",
             )}
@@ -203,6 +220,7 @@ function OptionGrid<T extends string>({
   options,
   value,
   caps,
+  disabled,
   render,
   onSelect,
 }: {
@@ -210,12 +228,13 @@ function OptionGrid<T extends string>({
   options: T[];
   value: T;
   caps: Record<T, CapabilityStatus>;
+  disabled?: boolean;
   render: (v: T) => { label: string; icon?: LucideIcon };
   onSelect: (v: T) => void;
 }) {
   return (
-    <fieldset>
-      <legend className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+    <fieldset disabled={disabled}>
+      <legend className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </legend>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
@@ -227,24 +246,19 @@ function OptionGrid<T extends string>({
             <button
               key={o}
               type="button"
-              disabled={!enabled}
+              disabled={!enabled || disabled}
               aria-pressed={active}
               title={enabled ? undefined : `${r.label}: ${caps[o]}`}
               onClick={() => onSelect(o)}
               className={cn(
-                "relative flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl border border-glass-border bg-muted/30 px-1 py-2 text-xs font-medium transition-colors hover:border-primary/40",
-                active && "border-primary/60 bg-primary/12 text-primary",
+                "relative flex min-h-12 flex-col items-center justify-center gap-1 rounded-2xl border border-transparent bg-muted/35 px-1.5 py-2 text-xs font-medium transition-all active:scale-[0.97] hover:bg-muted/60",
+                active && "border-primary/40 bg-primary/12 text-primary shadow-sm",
                 !enabled &&
-                  "hatch-disabled cursor-not-allowed text-muted-foreground opacity-60 hover:border-glass-border",
+                  "hatch-disabled cursor-not-allowed text-muted-foreground opacity-50 hover:bg-muted/35",
               )}
             >
               {r.icon && <r.icon className="size-4" aria-hidden />}
               <span>{r.label}</span>
-              {!enabled && (
-                <span className="text-[10px] font-normal">
-                  {caps[o] === "unverified" ? "Unverified" : "Unsupported"}
-                </span>
-              )}
             </button>
           );
         })}
@@ -258,12 +272,14 @@ function FeatureRow({
   label,
   status,
   checked,
+  disabled,
   onChange,
 }: {
   icon: LucideIcon;
   label: string;
   status: CapabilityStatus;
   checked: boolean;
+  disabled?: boolean;
   onChange: (v: boolean) => void;
 }) {
   const enabled = isEnabled(status);
@@ -271,12 +287,12 @@ function FeatureRow({
   return (
     <div
       className={cn(
-        "flex min-h-14 items-center gap-3 rounded-2xl border border-glass-border bg-muted/30 px-3",
-        !enabled && "hatch-disabled",
+        "flex min-h-13 items-center gap-3 px-3.5 py-2 transition-colors",
+        !enabled && "opacity-55",
       )}
     >
       <Icon
-        className={cn("size-4 shrink-0", enabled ? "text-emerald" : "text-muted-foreground")}
+        className={cn("size-4 shrink-0", enabled && checked ? "text-primary" : "text-muted-foreground")}
         aria-hidden
       />
       <label
@@ -289,7 +305,7 @@ function FeatureRow({
       <Switch
         id={id}
         checked={enabled && checked}
-        disabled={!enabled}
+        disabled={!enabled || disabled}
         onCheckedChange={onChange}
         aria-label={label}
       />
@@ -333,7 +349,6 @@ export function AcSetupDialog({
 
   const close = (next: boolean) => {
     if (!next) {
-      // Never leave a key sitting in component state after the dialog closes.
       setForm((prev) => ({ ...prev, local_key: "" }));
       setError("");
       setNotice("");
@@ -352,15 +367,15 @@ export function AcSetupDialog({
     try {
       const reply = (await discoverHaier(host.trim() || undefined)) as DiscoverReply;
       if (reply && reply.ok === false) {
-        setError(reply.error || "LAN discovery is unavailable on this backend.");
+        setError(reply.error || "LAN discovery is unavailable right now.");
         return;
       }
       const rows = Array.isArray(reply?.devices) ? reply.devices : [];
       setFound(rows);
       setNotice(
         rows.length
-          ? `Found ${rows.length} Haier device${rows.length === 1 ? "" : "s"}. Tap Use to fill the identity fields, then paste the local key.`
-          : "No devices answered. Broadcast discovery needs UDP 7083 — you can still enter the LAN details manually.",
+          ? `Found ${rows.length} Haier device${rows.length === 1 ? "" : "s"}. Tap Use to fill details, then paste your local key.`
+          : "No devices answered on UDP 7083. You can still enter the LAN details manually.",
       );
     } catch (e) {
       setError(messageOf(e));
@@ -376,7 +391,6 @@ export function AcSetupDialog({
       device_id: asText(row.device_id) || prev.device_id,
       uplus_id: asText(row.uplus_id) || prev.uplus_id,
       product_code: asText(row.product_code) || prev.product_code,
-      // A discovered identity never carries a key. local_key is left untouched.
     }));
   };
 
@@ -401,12 +415,11 @@ export function AcSetupDialog({
         uplus_id: form.uplus_id.trim(),
         product_code: form.product_code.trim(),
       });
-      setNotice("Connection saved. The backend reset this AC to Manual — verify it with Read now.");
+      setNotice("Connection saved. Switched to Manual mode — run a quick refresh to verify.");
       onSaved();
     } catch (e) {
       setError(messageOf(e));
     } finally {
-      // Clear the secret on every path, including failure.
       setForm((prev) => ({ ...prev, local_key: "" }));
       setBusy(false);
     }
@@ -418,9 +431,8 @@ export function AcSetupDialog({
         <DialogHeader>
           <DialogTitle id={`${device.id}-setup-title`}>AC setup · {device.name}</DialogTitle>
           <DialogDescription>
-            Direct LAN connection for slot “{slot}”. The key is encrypted on this phone and is
-            never displayed here. Saving resets this AC to Manual mode; the backend still refuses
-            unverified writes.
+            Direct LAN connection for slot “{slot}”. Your local key is stored encrypted on this
+            device and never shown again.
           </DialogDescription>
         </DialogHeader>
 
@@ -567,6 +579,7 @@ export function AcSetupDialog({
  */
 export function HaierCloudPanel() {
   const { t } = useSmartPilot();
+  const rememberId = useId();
   const [status, setStatus] = useState<CloudStatusReply | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -651,7 +664,7 @@ export function HaierCloudPanel() {
     setNotice("");
     try {
       await haierCloudLogout();
-      setNotice("Signed out. Direct LAN control is unchanged.");
+      setNotice("Signed out. Direct LAN control continues normally.");
     } catch (e) {
       setError(messageOf(e));
     } finally {
@@ -668,8 +681,8 @@ export function HaierCloudPanel() {
         <Cloud className="size-4 text-primary" aria-hidden /> Optional cloud key renewal
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Only needed if Haier rotates a local key. Direct LAN control keeps working without an
-        account or an internet connection.
+        Only needed if Haier rotates a local key. Direct LAN control works without an account or
+        internet access.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -725,7 +738,13 @@ export function HaierCloudPanel() {
           >
             <LogIn /> Use another account
           </Button>
-          <Button type="button" size="touch" variant="glass" disabled={busy} onClick={() => void logout()}>
+          <Button
+            type="button"
+            size="touch"
+            variant="glass"
+            disabled={busy}
+            onClick={() => void logout()}
+          >
             <LogOut /> Sign out
           </Button>
         </div>
@@ -759,14 +778,12 @@ export function HaierCloudPanel() {
               autoComplete="current-password"
             />
           </div>
-          <label className="flex items-center gap-2 text-xs sm:col-span-2">
-            <input
-              type="checkbox"
-              checked={remember}
-              onChange={(e) => setRemember(e.target.checked)}
-            />
-            Remember login on this phone
-          </label>
+          <div className="flex items-center justify-between rounded-xl bg-muted/30 px-3 py-2 sm:col-span-2">
+            <Label htmlFor={rememberId} className="text-xs font-medium">
+              Remember login on this device
+            </Label>
+            <Switch id={rememberId} checked={remember} onCheckedChange={setRemember} />
+          </div>
           <div className="flex flex-wrap gap-2 sm:col-span-2">
             <Button
               type="button"
@@ -815,17 +832,22 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
   const s = state.ac[device.id] as AcPreviewState;
   const caps = device.capabilities;
   const now = useNow(1000);
-  // AC_DEVICES names are fixed by contract; this is the backend's slot id.
   const slot: HaierSlot | undefined = HAIER_SLOT_BY_NAME[device.name];
+
   const [confirmPower, setConfirmPower] = useState<null | "on" | "off">(null);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [diagnosticBusy, setDiagnosticBusy] = useState<null | "read" | "pause">(null);
   const [diagnosticError, setDiagnosticError] = useState("");
   const [diagnosticNotice, setDiagnosticNotice] = useState("");
-  // Only ever set from a strict /api/haier/read reply — never from an assumption.
   const [strongOn, setStrongOn] = useState<boolean | null>(null);
+  const [tempDraft, setTempDraft] = useState<number | null>(null);
+
   const paused = now > 0 && isOverridePaused(s, now);
   const waitMs = now > 0 ? compressorWaitMs(s, now) : 0;
+  const on = s.power === "on";
+  const displayTemp = tempDraft ?? s.targetTemp;
+  const modeAmbient = on ? MODE_META[s.mode].ambient : "from-muted/40 to-transparent border-glass-border";
 
   /** Local state is updated only after the backend confirms the command. */
   const runCommands = async (
@@ -836,26 +858,28 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
   ) => {
     setBusy(true);
     let ok = true;
-    for (const command of commands) {
-      // The live adapter forwards any `setFeature` name; the backend command
-      // gate already allows "strong", so no shared type/adapter change is made.
-      const result = await sendDeviceCommand(device.id, command as DeviceCommand);
-      if (!result.delivered) {
-        ok = false;
-        break;
+    try {
+      for (const command of commands) {
+        const result = await sendDeviceCommand(device.id, command as DeviceCommand);
+        if (!result.delivered) {
+          ok = false;
+          break;
+        }
       }
+      if (!ok) return;
+      if (extra.overridePausedUntil && !paused) {
+        log({
+          kind: "safety",
+          status: "warning",
+          title: `Manual override on ${device.name} — Auto paused ${state.prefs.overridePauseMin} min`,
+          deviceId: device.id,
+        });
+      }
+      updateAc(device.id, { ...patch, ...extra }, `${device.name}: ${title}`);
+    } finally {
+      setBusy(false);
+      setTempDraft(null);
     }
-    setBusy(false);
-    if (!ok) return;
-    if (extra.overridePausedUntil && !paused) {
-      log({
-        kind: "safety",
-        status: "warning",
-        title: `Manual override on ${device.name} — Auto paused ${state.prefs.overridePauseMin} min`,
-        deviceId: device.id,
-      });
-    }
-    updateAc(device.id, { ...patch, ...extra }, `${device.name}: ${title}`);
   };
 
   /** Any manual tweak while in Auto pauses Auto-Pilot for the configured window. */
@@ -873,7 +897,9 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
     }
     if (patch.mode) commands.push({ type: "setMode", value: patch.mode });
     if (patch.fan) commands.push({ type: "setFan", value: patch.fan });
-    if (patch.eco !== undefined) commands.push({ type: "setFeature", feature: "eco", value: patch.eco });
+    if (patch.eco !== undefined) {
+      commands.push({ type: "setFeature", feature: "eco", value: patch.eco });
+    }
     if (patch.nightSleep !== undefined) {
       commands.push({ type: "setFeature", feature: "nightSleep", value: patch.nightSleep });
     }
@@ -883,7 +909,6 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
     if (patch.strong !== undefined) {
       commands.push({ type: "setFeature", feature: "strong", value: patch.strong });
     }
-    // `strong` is command-only: do not write it into the shared preview state.
     const previewPatch: Partial<AcPreviewState> = { ...patch };
     delete (previewPatch as { strong?: boolean }).strong;
     void runCommands(commands, previewPatch, title, extra);
@@ -898,10 +923,10 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
       `power ${value}`,
     );
   };
+
   const requestPower = (value: "on" | "off") =>
     state.prefs.confirmAcPower ? setConfirmPower(value) : applyPower(value);
 
-  /** Strict backend read: a failed read invalidates the cached verification. */
   const readNow = async () => {
     if (!slot) {
       setDiagnosticError("Unknown AC slot — controls are disabled.");
@@ -913,7 +938,7 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
     try {
       const reply = (await readHaier(slot)) as ReadReply;
       if (typeof reply?.status?.strong === "boolean") setStrongOn(reply.status.strong);
-      setDiagnosticNotice("Fresh LAN read verified — status refreshed.");
+      setDiagnosticNotice("Status refreshed from AC.");
       await refreshDevices();
     } catch (e) {
       setDiagnosticError(messageOf(e));
@@ -922,7 +947,6 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
     }
   };
 
-  /** Server-side safety action: pauses Auto-Pilot for two hours on the backend. */
   const pauseAuto = async () => {
     if (!slot) {
       setDiagnosticError("Unknown AC slot — controls are disabled.");
@@ -933,7 +957,7 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
     setDiagnosticNotice("");
     try {
       await pauseHaier(slot);
-      setDiagnosticNotice("Auto-Pilot paused for 2 hours by the local backend.");
+      setDiagnosticNotice("Auto-Pilot paused for 2 hours.");
       await refreshDevices();
     } catch (e) {
       setDiagnosticError(messageOf(e));
@@ -942,72 +966,90 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
     }
   };
 
-  const [tempDraft, setTempDraft] = useState<number | null>(null);
-  const setTemp = (v: number) =>
-    change({ targetTemp: clampTemp(v, caps) }, `target ${clampTemp(v, caps)}°C`);
+  const setTemp = (v: number) => {
+    const clamped = clampTemp(v, caps);
+    setTempDraft(clamped);
+    change({ targetTemp: clamped }, `target ${clamped}°C`);
+  };
+
   const timeFmt = (iso: string) =>
     new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const on = s.power === "on";
 
   return (
     <Panel className="@container animate-rise" aria-labelledby={`${device.id}-title`}>
+      {/* Header */}
       <div className="flex items-start gap-3">
         <DeviceGlyph device={device} size="lg" />
         <div className="min-w-0 flex-1">
-          <h2 id={`${device.id}-title`} className="truncate text-lg font-semibold">
+          <h2 id={`${device.id}-title`} className="truncate text-lg font-semibold tracking-tight">
             {device.name}
           </h2>
-          <p className="break-words text-xs text-muted-foreground">
+          <p className="truncate text-xs text-muted-foreground">
             {device.model}
-            {device.roomTemperature.known
-              ? ` · ${device.roomTemperature.value}°C room`
-              : ""}
+            {device.roomTemperature.known ? ` · ${device.roomTemperature.value}°C room` : ""}
           </p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <ConnectionPill status={device.connection} />
             <Badge variant={device.power.known ? "info" : "unknown"}>
               {device.power.known ? device.power.value.toUpperCase() : t("power_unknown")}
             </Badge>
           </div>
         </div>
+        <Button
+          type="button"
+          variant="glass"
+          size="icon-touch"
+          aria-label={`Advanced & diagnostics for ${device.name}`}
+          onClick={() => setDiagnosticsOpen(true)}
+          className="relative shrink-0"
+        >
+          <Settings2 className="size-4" />
+          {diagnosticError && (
+            <span
+              className="absolute right-2 top-2 size-2 rounded-full bg-status-offline"
+              aria-hidden
+            />
+          )}
+        </Button>
       </div>
 
+      {/* Control Mode */}
       <div className="mt-5 space-y-2">
         <ControlModeSwitch
           name={device.name}
           value={s.controlMode}
+          disabled={busy}
           onChange={(m) => {
             void (async () => {
               const result = await setAcControlMode(device.id, m);
-              if (result.delivered) updateAc(device.id, { controlMode: m, overridePausedUntil: null });
+              if (result.delivered) {
+                updateAc(device.id, { controlMode: m, overridePausedUntil: null });
+              }
             })();
           }}
         />
-        <p
-          className={cn(
-            "flex items-start gap-2 text-xs",
-            s.controlMode === "manual" ? "text-foreground" : "text-muted-foreground",
-          )}
-        >
+        <p className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
           {s.controlMode === "manual" ? (
-            <Hand className="mt-px size-3.5 shrink-0 text-primary" aria-hidden />
+            <Hand className="size-3.5 shrink-0 text-primary" aria-hidden />
           ) : (
-            <Sparkles className="mt-px size-3.5 shrink-0 text-primary" aria-hidden />
+            <Sparkles className="size-3.5 shrink-0 text-primary" aria-hidden />
           )}
-          {s.controlMode === "manual" ? t("manual_note") : t("auto_note")}
+          <span>{s.controlMode === "manual" ? t("manual_note") : t("auto_note")}</span>
         </p>
+
         {s.controlMode === "auto" && paused && s.overridePausedUntil && (
           <div
-            className="flex flex-wrap items-center gap-3 rounded-2xl border border-status-preview/30 bg-status-preview/10 p-3 text-sm"
+            className="flex flex-wrap items-center gap-3 rounded-2xl border border-status-preview/30 bg-status-preview/10 px-3.5 py-2.5 text-xs"
             role="status"
           >
-            <Timer className="size-4 text-status-preview" aria-hidden />
-            <span className="min-w-0 flex-1">
+            <Timer className="size-4 shrink-0 text-status-preview" aria-hidden />
+            <span className="min-w-0 flex-1 font-medium">
               {t("override_paused", { time: timeFmt(s.overridePausedUntil) })}
             </span>
             <Button
               size="sm"
               variant="glass"
+              disabled={busy}
               onClick={() => {
                 void (async () => {
                   const result = await resumeAuto(device.id);
@@ -1021,62 +1063,78 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
         )}
       </div>
 
-      <div className="mt-6 grid gap-6 @3xl:grid-cols-[1fr_1.15fr]">
-        <div className="flex flex-col items-center rounded-3xl border border-glass-border bg-muted/30 p-5">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground">
-            {t("target")} · live
+      {/* Primary Control Area */}
+      <div className="mt-5 grid gap-6 @3xl:grid-cols-[1fr_1.15fr]">
+        {/* Hero Temperature Tile */}
+        <div
+          className={cn(
+            "flex flex-col items-center rounded-3xl border bg-gradient-to-b p-5 transition-colors duration-300",
+            modeAmbient,
+          )}
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {on ? `${MODE_META[s.mode].label} · ${t("target")}` : `${t("target")} · Off`}
           </p>
-          <div className="my-3 flex items-center gap-4">
+
+          <div className="my-4 flex items-center gap-5">
             <Button
               variant="glass"
               size="icon-touch"
               aria-label="Decrease temperature"
-              disabled={s.targetTemp <= caps.minTemp}
-              onClick={() => setTemp(s.targetTemp - 1)}
+              disabled={busy || displayTemp <= caps.minTemp}
+              onClick={() => setTemp(displayTemp - 1)}
             >
               <Minus />
             </Button>
             <output
               aria-live="polite"
-              className="font-display text-6xl font-semibold tabular text-gradient sm:text-7xl"
+              className={cn(
+                "font-display text-6xl font-semibold tabular tracking-tight transition-opacity sm:text-7xl",
+                on ? "text-gradient" : "text-muted-foreground/70",
+              )}
             >
-              {s.targetTemp}°
+              {displayTemp}°
             </output>
             <Button
               variant="glass"
               size="icon-touch"
               aria-label="Increase temperature"
-              disabled={s.targetTemp >= caps.maxTemp}
-              onClick={() => setTemp(s.targetTemp + 1)}
+              disabled={busy || displayTemp >= caps.maxTemp}
+              onClick={() => setTemp(displayTemp + 1)}
             >
               <Plus />
             </Button>
           </div>
+
           <Slider
             className="w-full max-w-xs"
             min={caps.minTemp}
             max={caps.maxTemp}
             step={1}
-            value={[tempDraft ?? s.targetTemp]}
-            onValueCommit={(v) => {
-              setTempDraft(null);
-              setTemp(v[0] ?? s.targetTemp);
-            }}
+            disabled={busy}
+            value={[displayTemp]}
             onValueChange={(v) => setTempDraft(clampTemp(v[0] ?? s.targetTemp, caps))}
+            onValueCommit={(v) => setTemp(v[0] ?? s.targetTemp)}
             aria-label={`${device.name} target temperature`}
           />
-          <div className="mt-1 flex w-full max-w-xs justify-between text-[11px] text-muted-foreground tabular">
+          <div className="mt-1.5 flex w-full max-w-xs justify-between text-[11px] text-muted-foreground tabular">
             <span>{caps.minTemp}°C</span>
             <span>{caps.maxTemp}°C</span>
           </div>
-          <div className="mt-4 flex w-full items-center justify-between gap-3 rounded-2xl bg-background/40 px-3 py-2 text-xs">
+
+          <div className="mt-4 flex w-full items-center justify-between rounded-2xl bg-background/45 px-3.5 py-2.5 text-xs">
             <span className="flex items-center gap-1.5 text-muted-foreground">
               <Thermometer className="size-3.5" aria-hidden /> {t("room_temp")}
             </span>
-            <span className="text-muted-foreground">{t("no_sensor")}</span>
+            <span className="font-medium tabular text-foreground">
+              {device.roomTemperature.known
+                ? `${device.roomTemperature.value}°C`
+                : t("no_sensor")}
+            </span>
           </div>
+
           <Button
-            className="mt-4 w-full"
+            className="mt-3.5 w-full"
             size="touch"
             variant={on ? "hero" : "glass"}
             disabled={busy || connection.state === "refreshing" || (!on && waitMs > 0)}
@@ -1084,21 +1142,40 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
             onClick={() => requestPower(on ? "off" : "on")}
             aria-pressed={on}
           >
-            <Power />
+            {busy ? <Loader2 className="animate-spin" aria-hidden /> : <Power />}
             {on
-              ? "On — tap to stop"
+              ? "Turn Off"
               : waitMs > 0
                 ? t("compressor_wait", { time: formatWait(waitMs) })
-                : "Off — tap to start"}
+                : "Turn On"}
           </Button>
+
+          {waitMs > 0 && (
+            <div className="mt-3 w-full space-y-1.5" role="status">
+              <div className="flex items-center justify-between text-[11px] text-status-preview">
+                <span className="flex items-center gap-1 font-medium">
+                  <ShieldCheck className="size-3.5" aria-hidden /> {t("compressor_protection")}
+                </span>
+                <span className="tabular">{formatWait(waitMs)}</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-status-preview transition-all"
+                  style={{ width: `${Math.min(100, Math.max(0, 100 - (waitMs / 180000) * 100))}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="space-y-5">
+        {/* Mode, Fan & Features */}
+        <div className={cn("space-y-5 transition-opacity duration-300", !on && "opacity-60")}>
           <OptionGrid
             label={t("mode")}
             options={["cool", "dry", "fan", "auto", "heat"] as AcMode[]}
             value={s.mode}
             caps={caps.modes}
+            disabled={busy}
             render={(m) => MODE_META[m]}
             onSelect={(m) => change({ mode: m }, `mode ${MODE_META[m].label}`)}
           />
@@ -1107,15 +1184,19 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
             options={["auto", "low", "medium", "high", "turbo"] as FanSpeed[]}
             value={s.fan}
             caps={caps.fanSpeeds}
+            disabled={busy}
             render={(f) => ({ label: FAN_LABEL[f], icon: Wind })}
             onSelect={(f) => change({ fan: f }, `fan ${FAN_LABEL[f]}`)}
           />
-          <div className="grid gap-2">
+
+          {/* Grouped iOS-style feature list */}
+          <div className="divide-y divide-glass-border overflow-hidden rounded-2xl border border-glass-border bg-muted/25">
             <FeatureRow
               icon={Leaf}
               label={t("eco")}
               status={caps.eco}
               checked={s.eco}
+              disabled={busy}
               onChange={(v) => change({ eco: v }, `Eco ${v ? "on" : "off"}`)}
             />
             <FeatureRow
@@ -1123,6 +1204,7 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
               label={t("nightSleep")}
               status={caps.nightSleep}
               checked={s.nightSleep}
+              disabled={busy}
               onChange={(v) => change({ nightSleep: v }, `Night Sleep ${v ? "on" : "off"}`)}
             />
             <FeatureRow
@@ -1130,122 +1212,111 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
               label={t("quiet")}
               status={caps.quiet}
               checked={s.quiet}
+              disabled={busy}
               onChange={(v) => change({ quiet: v }, `Quiet ${v ? "on" : "off"}`)}
             />
           </div>
         </div>
       </div>
 
-      <div className="mt-6 grid gap-3 @xl:grid-cols-2">
-        <div className="rounded-2xl border border-glass-border bg-muted/30 p-4">
-          <p className="flex items-center gap-2 text-sm font-semibold">
-            <ShieldCheck className="size-4 text-emerald" aria-hidden /> {t("compressor_protection")}
-          </p>
-          <p
-            className={cn(
-              "mt-1 text-sm",
-              waitMs > 0 ? "text-status-preview" : "text-muted-foreground",
-            )}
-            role="status"
-          >
-            {waitMs > 0 ? t("compressor_wait", { time: formatWait(waitMs) }) : t("compressor_ok")}
-          </p>
-          {waitMs > 0 && (
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-status-preview transition-all"
-                style={{ width: `${100 - (waitMs / 180000) * 100}%` }}
-              />
-            </div>
-          )}
-        </div>
-        <div className="rounded-2xl border border-glass-border bg-muted/30 p-4">
-          <p className="flex items-center gap-2 text-sm font-semibold">
-            <Gauge className="size-4 text-primary" aria-hidden /> {t("energy_info")}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">{t("no_live_measurement")}</p>
-          <div className="mt-2">
-            <CapabilityPill status={caps.energyMetering} />
-          </div>
-        </div>
-      </div>
-
       <LiveNotice className="mt-4" />
 
-      <div className="mt-4 rounded-2xl border border-glass-border bg-muted/30 p-4">
-        <p className="flex items-center gap-2 text-sm font-semibold">
-          <Settings2 className="size-4 text-primary" aria-hidden /> Connection &amp; diagnostics
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Slot {slot ? slot.toUpperCase() : "unknown"} · setup lives in Settings.
-          Every action below goes through the existing local backend; its safety gates are unchanged.
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="touch"
-            variant="glass"
-            disabled={diagnosticBusy !== null || busy}
-            aria-busy={diagnosticBusy === "read"}
-            onClick={() => void readNow()}
-          >
-            <RefreshCw /> Read now
-          </Button>
-          <Button
-            type="button"
-            size="touch"
-            variant="glass"
-            disabled={diagnosticBusy !== null || busy}
-            aria-busy={diagnosticBusy === "pause"}
-            onClick={() => void pauseAuto()}
-          >
-            <Timer /> Pause Auto 2h
-          </Button>
-        </div>
-        {diagnosticError && (
-          <p role="alert" className="mt-3 flex items-start gap-2 text-xs text-status-offline">
-            <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden /> {diagnosticError}
-          </p>
-        )}
-        {diagnosticNotice && (
-          <p role="status" className="mt-3 flex items-start gap-2 text-xs text-status-ok">
-            <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden /> {diagnosticNotice}
-          </p>
-        )}
-      </div>
+      {/* Progressive Disclosure: Advanced & Diagnostics Dialog */}
+      <Dialog open={diagnosticsOpen} onOpenChange={setDiagnosticsOpen}>
+        <DialogContent aria-labelledby={`${device.id}-diag-title`}>
+          <DialogHeader>
+            <DialogTitle id={`${device.id}-diag-title`}>{device.name} · Advanced</DialogTitle>
+            <DialogDescription>
+              Direct LAN diagnostics and command-only features for slot{" "}
+              {slot ? slot.toUpperCase() : "unknown"}.
+            </DialogDescription>
+          </DialogHeader>
 
-      <div className="mt-3 flex min-h-14 flex-wrap items-center gap-3 rounded-2xl border border-glass-border bg-muted/30 px-3 py-2">
-        <Zap className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">Strong airflow</p>
-          <p className="text-xs text-muted-foreground">
-            {strongOn === null
-              ? "Last verified state unavailable — use Read now."
-              : `Last verified state: ${strongOn ? "on" : "off"}.`}
-          </p>
-        </div>
-        <Button
-          type="button"
-          size="touch"
-          variant={strongOn === true ? "hero" : "glass"}
-          disabled={busy || diagnosticBusy !== null}
-          aria-label={`Turn strong airflow on for ${device.name}`}
-          onClick={() => change({ strong: true }, "Strong airflow on")}
-        >
-          On
-        </Button>
-        <Button
-          type="button"
-          size="touch"
-          variant={strongOn === false ? "hero" : "glass"}
-          disabled={busy || diagnosticBusy !== null}
-          aria-label={`Turn strong airflow off for ${device.name}`}
-          onClick={() => change({ strong: false }, "Strong airflow off")}
-        >
-          Off
-        </Button>
-      </div>
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="touch"
+                variant="glass"
+                disabled={diagnosticBusy !== null || busy}
+                aria-busy={diagnosticBusy === "read"}
+                onClick={() => void readNow()}
+              >
+                <RefreshCw className={cn(diagnosticBusy === "read" && "animate-spin")} />
+                Refresh status
+              </Button>
+              <Button
+                type="button"
+                size="touch"
+                variant="glass"
+                disabled={diagnosticBusy !== null || busy}
+                aria-busy={diagnosticBusy === "pause"}
+                onClick={() => void pauseAuto()}
+              >
+                <Timer /> Pause Auto 2h
+              </Button>
+            </div>
 
+            <div className="flex items-center gap-3 rounded-2xl border border-glass-border bg-muted/30 p-3">
+              <Zap className="size-4 shrink-0 text-primary" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">Strong airflow</p>
+                <p className="text-xs text-muted-foreground">
+                  {strongOn === null
+                    ? "Tap Refresh status to check current state."
+                    : `Currently ${strongOn ? "on" : "off"}.`}
+                </p>
+              </div>
+              <div className="flex gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={strongOn === true ? "hero" : "glass"}
+                  disabled={busy || diagnosticBusy !== null}
+                  aria-label={`Turn strong airflow on for ${device.name}`}
+                  onClick={() => change({ strong: true }, "Strong airflow on")}
+                >
+                  On
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={strongOn === false ? "hero" : "glass"}
+                  disabled={busy || diagnosticBusy !== null}
+                  aria-label={`Turn strong airflow off for ${device.name}`}
+                  onClick={() => change({ strong: false }, "Strong airflow off")}
+                >
+                  Off
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-2xl border border-glass-border bg-muted/30 px-3.5 py-2.5 text-xs">
+              <span className="text-muted-foreground">{t("energy_info")}</span>
+              <CapabilityPill status={caps.energyMetering} />
+            </div>
+
+            {diagnosticError && (
+              <p role="alert" className="flex items-start gap-2 text-xs text-status-offline">
+                <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden /> {diagnosticError}
+              </p>
+            )}
+            {diagnosticNotice && (
+              <p role="status" className="flex items-start gap-2 text-xs text-status-ok">
+                <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden /> {diagnosticNotice}
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="glass" size="touch" onClick={() => setDiagnosticsOpen(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Power Confirmation */}
       <AlertDialog open={confirmPower !== null} onOpenChange={(o) => !o && setConfirmPower(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1253,11 +1324,9 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
               Turn {device.name} {confirmPower}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This command is sent through this app’s local backend. The backend
-              refuses unverified writes and holds every restart for 3 minutes
-              after power-off.
-              {confirmPower === "off" &&
-                " The official HaiSmart app remains usable."}
+              {confirmPower === "off"
+                ? "For compressor safety, the AC will wait 3 minutes before it can be turned back on."
+                : "This will start the AC with your current target temperature and mode."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1268,7 +1337,7 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
                 setConfirmPower(null);
               }}
             >
-              Confirm command
+              {confirmPower === "off" ? "Turn Off" : "Turn On"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1280,13 +1349,18 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
 export function AcSummaryCard({ device }: { device: AcDevice }) {
   const { state, t } = useSmartPilot();
   const s = state.ac[device.id] as AcPreviewState;
+  const on = s.power === "on";
   return (
     <Panel pad="sm" className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
         <DeviceGlyph device={device} />
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{device.name}</p>
-          <p className="truncate text-xs text-muted-foreground">{t("room_not_set")}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {device.roomTemperature.known
+              ? `${device.roomTemperature.value}°C room`
+              : t("room_not_set")}
+          </p>
         </div>
         <Badge variant={s.controlMode === "auto" ? "info" : "outline"}>
           {s.controlMode === "auto" ? (
@@ -1300,15 +1374,17 @@ export function AcSummaryCard({ device }: { device: AcDevice }) {
       <div className="flex items-end justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            {t("target")} · live
+            {t("target")}
           </p>
-          <p className="font-display text-4xl font-semibold tabular">{s.targetTemp}°</p>
+          <p className={cn("font-display text-4xl font-semibold tabular", !on && "text-muted-foreground")}>
+            {s.targetTemp}°
+          </p>
         </div>
         <div className="text-right text-xs text-muted-foreground">
           <p>
             {MODE_META[s.mode].label} · {FAN_LABEL[s.fan]}
           </p>
-          <p>{s.power === "on" ? "On" : "Off"}</p>
+          <p className={cn("font-medium", on && "text-foreground")}>{on ? "On" : "Off"}</p>
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
