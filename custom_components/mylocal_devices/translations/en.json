@@ -14,6 +14,7 @@
     "error": {
       "addon_not_found": "Add-on not found. Install and start MY Local Devices Tuya first.",
       "cannot_connect": "Cannot reach the add-on. Check that it is running and the URL/credentials are correct.",
+    "auth_required": "The add-on is in ingress-only mode. Set AUTH_USERNAME and AUTH_PASSWORD in the add-on options, then enter the same credentials here.",
       "already_configured": "This integration is already configured."
     },
     "abort": {

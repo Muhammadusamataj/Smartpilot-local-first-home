@@ -35,7 +35,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                 except ApiError as error:
                     _LOGGER.debug("Validation failed: %s", error)
-                    errors["base"] = "cannot_connect"
+                    errors["base"] = (
+                        "auth_required" if "ingress-only mode" in str(error) else "cannot_connect"
+                    )
                 else:
                     await self.async_set_unique_id(DOMAIN)
                     self._abort_if_unique_id_configured()

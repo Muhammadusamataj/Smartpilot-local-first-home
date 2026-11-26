@@ -1347,3 +1347,26 @@ panel failures and zero uncaught page errors.
   NOT enabled automatically (network exposure + credentials need explicit user
   action). The native Remote panel defaults the username to `tuya` and generates
   a random password if the field is empty (`LocalControlService.java:150-158`).
+
+
+### Final remaining-audit batch
+
+- Dynamic inventory: adapter now builds the device list from the actual
+  `/api/local/devices` + `/api/haier/devices` rows; no demo fallback after a
+  refresh. Empty catalogue yields 0 devices; a failed local catalogue with
+  working Haier yields only the 2 ACs; errors stay visible. Commands and DP
+  points are keyed by real backend ids.
+- Settings usability: search box + section chips filter Panels via
+  `data-settings-section`; only matching sections remain visible, so long
+  scrolling is removed. Full list still available with "All".
+- Contrast/fallbacks: light-theme status tokens darkened and solid hex fallbacks
+  added for Android WebViews without `oklch`/`color-mix`; `backdrop-filter`
+  disabled in the fallback path.
+- Loading/error states: skeleton while refreshing an empty Devices list;
+  explicit degraded banner with Retry; Retry buttons on Energy and Activity.
+- HA integration: `api.py` now explains the add-on's ingress-only 403 and
+  tells the operator to set `AUTH_USERNAME`/`AUTH_PASSWORD` in the add-on and
+  the same credentials in the integration config; config_flow surfaces a
+  dedicated `auth_required` error string.
+- Verification: strict `tsc --noEmit` 0 errors; guards 28/28; backend 52/52;
+  mocked browser 12/12; APK build + install Success.

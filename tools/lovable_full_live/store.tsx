@@ -218,11 +218,14 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
     }));
     try {
       const result = await liveAdapter.refresh();
-      setDevices(DEVICES.map((device) => ({ ...device }) as Device));
+      // After any refresh the catalogue is exactly what the backend reported.
+      // An empty result (or a failed local catalogue) never falls back to the
+      // fixed demo devices used only for the first paint.
+      setDevices(liveAdapter.liveDevices.map((device) => ({ ...device }) as Device));
       setPoints({ ...liveAdapter.localPoints });
       setState((current) => {
         const ac = { ...current.ac };
-        for (const device of DEVICES) {
+        for (const device of liveAdapter.liveDevices) {
           if (device.kind !== "air_conditioner") continue;
           const live = liveAdapter.haierStatus[device.id] ?? {};
           const mode = liveAdapter.haierModes[device.id];
@@ -422,14 +425,20 @@ export function SmartPilotProvider({ children }: { children: ReactNode }) {
           return { ...s, approvals, automations };
         });
         const title = req?.title ?? "Request";
-        const devices = req
-          ? [...new Set(req.automation.actions.map((a) => deviceLabel(a.deviceId)))].join(", ")
+        const deviceNames = req
+          ? [
+              ...new Set(
+                req.automation.actions.map(
+                  (a) => devices.find((d) => d.id === a.deviceId)?.name ?? deviceLabel(a.deviceId),
+                ),
+              ),
+            ].join(", ")
           : "";
         log({
           kind: "automation",
           status: decision === "approved" ? "success" : "blocked",
           title: `${decision === "approved" ? "Approved" : "Rejected"}: ${title}`,
-          detail: `${devices ? devices + " · " : ""}${PREVIEW_MESSAGE}`,
+          detail: `${deviceNames ? deviceNames + " · " : ""}${PREVIEW_MESSAGE}`,
         });
         toast(decision === "approved" ? "Approved — saved as a preview automation" : "Rejected", {
           description: PREVIEW_MESSAGE,

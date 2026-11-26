@@ -122,6 +122,70 @@ function switchDp(row: JsonRecord | null): string | null {
   return first ? "1" : null;
 }
 
+/** Location comes only from backend metadata; an absent room stays null. */
+function locationOf(row: JsonRecord): string | null {
+  const direct = text(row["room_name"]);
+  if (direct) return direct;
+  const nested = record(row["room"]);
+  return nested ? text(nested["name"]) || null : null;
+}
+
+/** Preserve the pinned display shape for known names; classify others conservatively. */
+function switchShape(row: JsonRecord, name: string): Pick<SwitchDevice, "kind" | "category"> {
+  const known = DEVICES.find(
+    (device): device is SwitchDevice =>
+      device.kind !== "air_conditioner" && device.name.toLowerCase() === name.toLowerCase(),
+  );
+  if (known) return { kind: known.kind, category: known.category };
+  const haystack = `${text(row["category"])} ${text(row["product_name"])} ${name}`.toLowerCase();
+  if (/breaker|circuit|cz\b/.test(haystack)) return { kind: "breaker", category: "power" };
+  if (/heater|geyser|heating/.test(haystack)) return { kind: "water_heater", category: "heating" };
+  return { kind: "water_pump", category: "water" };
+}
+
+/**
+ * Capabilities are only claimed when the cached DP specification supports
+ * them. A boolean switch DP is the only writable power control; measurement
+ * DPs are the only basis for an energy-metering claim.
+ */
+function switchCapabilities(row: JsonRecord): SwitchDevice["capabilities"] {
+  const hasSwitch = switchDp(row) !== null;
+  const hasMeter = pointsOf(row).some((point) => {
+    const type = text(point["type"]).toLowerCase();
+    const code = text(point["code"]).toLowerCase();
+    return (
+      /int|number|float|double|energy/.test(type) &&
+      /energy|kwh|power|watt|consumption|current|voltage/.test(code)
+    );
+  });
+  return {
+    power: hasSwitch ? "supported" : "unverified",
+    timer: "unverified",
+    energyMetering: hasMeter ? "supported" : "unverified",
+  };
+}
+
+/** Fresh AC object from the fixed contract; live status is filled in by refresh(). */
+function acTemplate(name: string): AcDevice | null {
+  const found = DEVICES.find(
+    (device): device is AcDevice =>
+      device.kind === "air_conditioner" && device.name === name,
+  );
+  if (!found) return null;
+  return {
+    ...found,
+    capabilities: {
+      ...found.capabilities,
+      modes: { ...found.capabilities.modes },
+      fanSpeeds: { ...found.capabilities.fanSpeeds },
+    },
+    connection: "offline",
+    lastSeen: { known: false },
+    power: { known: false },
+    roomTemperature: { known: false },
+  };
+}
+
 function messageOf(body: unknown, fallback: string): string {
   const data = record(body);
   if (!data) return fallback;
@@ -179,9 +243,15 @@ export class LocalBackendAdapter implements DeviceAdapter {
   private _haierModes: Record<string, "manual" | "auto"> = {};
   private _haierPauseUntil: Record<string, number> = {};
   private _localPoints: Record<string, LiveDpPoint[]> = {};
+  private _liveDevices: Device[] = [];
 
   get isLive(): boolean {
     return this._isLive;
+  }
+
+  /** The backend-derived catalogue. Empty until the first refresh succeeds. */
+  get liveDevices(): Device[] {
+    return this._liveDevices;
   }
 
   get haierStatus(): Record<string, HaierLiveStatus> {
@@ -215,7 +285,7 @@ export class LocalBackendAdapter implements DeviceAdapter {
     value: unknown,
     approval?: { approvedBy: string; approvedAt: string },
   ): Promise<CommandResult> {
-    const device = DEVICES.find((item) => item.id === deviceId);
+    const device = this._liveDevices.find((item) => item.id === deviceId);
     if (!device || device.kind === "air_conditioner") return failure("unknown_device");
     if (device.requiresApproval && (!approval?.approvedBy || !approval?.approvedAt)) {
       return failure("needs_approval");
@@ -250,11 +320,11 @@ export class LocalBackendAdapter implements DeviceAdapter {
   }
 
   async listDevices(): Promise<Device[]> {
-    return DEVICES.map(cloneDevice);
+    return this._liveDevices.map(cloneDevice);
   }
 
   async getStatus(deviceId: string) {
-    const device = DEVICES.find((item) => item.id === deviceId);
+    const device = this._liveDevices.find((item) => item.id === deviceId);
     return {
       connection: device?.connection ?? ("unknown" as const),
       lastSeen: device?.lastSeen ?? ({ known: false } as const),
@@ -286,60 +356,53 @@ export class LocalBackendAdapter implements DeviceAdapter {
 
     this._localRows = new Map();
     const nextPoints: Record<string, LiveDpPoint[]> = {};
-    const localByName = new Map<string, JsonRecord>();
+    const nextDevices: Device[] = [];
+    const seenIds = new Set<string>();
     for (const row of localRows) {
       const name = text(row["name"]);
       const id = text(row["id"]);
-      if (!name || !id) continue;
-      if (!localByName.has(name)) localByName.set(name, row);
-      else localByName.set(name, {}); // duplicate names are never claimed
-    }
-
-    for (const device of DEVICES) {
-      if (device.kind === "air_conditioner") continue;
-      let row = localByName.get(device.name) ?? null;
-      if (!row) {
-        // Backend names can be longer than the fixed UI labels, e.g.
-        // "Ground Floor Breaker" / "Water Tank under ground". Accept exactly
-        // one unambiguous prefix/contains match; never guess with >1 row.
-        const key = device.name.trim().toLowerCase();
-        const candidates = localRows.filter((candidate) => {
-          const name = text(candidate["name"]).trim().toLowerCase();
-          return name.includes(key) || key.includes(name);
-        });
-        if (candidates.length === 1) row = candidates[0] ?? null;
-      }
-      if (!row || Object.keys(row).length === 0) {
-        device.connection = "offline";
-        device.lastSeen = { known: false };
-        device.power = { known: false };
-        nextPoints[device.id] = [];
-        continue;
-      }
-      // Key commands by the Lovable device id, not the backend row id.
-      this._localRows.set(device.id, row);
-      device.connection =
-        row["verified"] === true ? "online" : row["lan_known"] === true ? "disconnected" : "offline";
-      device.lastSeen = reportedString(row["checked_at"] ?? row["last_ok"] ?? row["last_read"]);
-      device.power = { known: false };
+      // One honest card per backend row; rows without a name/id or with a
+      // duplicate id are skipped instead of guessing a Lovable identity.
+      if (!name || !id || seenIds.has(id)) continue;
+      seenIds.add(id);
+      const shape = switchShape(row, name);
+      const device: SwitchDevice = {
+        id,
+        name,
+        location: locationOf(row),
+        kind: shape.kind,
+        category: shape.category,
+        ecosystem: "tuya_smart_life",
+        // Every local load is high-risk and the backend refuses unverified
+        // writes; keep the explicit-approval gate on all of them.
+        requiresApproval: true,
+        connection:
+          row["verified"] === true ? "online" : row["lan_known"] === true ? "disconnected" : "offline",
+        lastSeen: reportedString(row["checked_at"] ?? row["last_ok"] ?? row["last_read"]),
+        power: { known: false },
+        capabilities: switchCapabilities(row),
+      };
+      nextDevices.push(device);
+      // Commands are keyed by the backend id, exactly as the row reports it.
+      this._localRows.set(id, row);
       // Count only an actual fresh status read below; the catalogue flag alone
       // is a cached claim and must not inflate the verified-device count.
       try {
-        const status = await requestJson(
-          `${LOCAL}/status?id=${encodeURIComponent(text(row["id"]))}`,
-        );
+        const status = await requestJson(`${LOCAL}/status?id=${encodeURIComponent(id)}`);
         if (status["status"] !== "ok") {
-          errors.push(`${device.name}: ${messageOf(status, "read_failed")}`);
+          errors.push(`${name}: ${messageOf(status, "read_failed")}`);
+          nextPoints[id] = pointsOf(row).map((item) => ({
+            dp: text(item["dp"]), code: text(item["code"]), type: text(item["type"]),
+          }));
           continue;
         }
-        device.connection = "online";
         device.lastSeen = reportedString(status["read_at"] ?? row["checked_at"]);
         verifiedDevices += 1;
         this._isLive = true;
         const values = Array.isArray(status["values"])
           ? status["values"].map(record).filter((item): item is JsonRecord => item !== null)
           : [];
-        nextPoints[device.id] = values.map((item) => ({
+        nextPoints[id] = values.map((item) => ({
           dp: text(item["dp"]), code: text(item["code"]), type: text(item["type"]), value: item["value"],
         }));
         const dp = switchDp(row);
@@ -351,8 +414,8 @@ export class LocalBackendAdapter implements DeviceAdapter {
           }
         }
       } catch (error) {
-        errors.push(`${device.name}: ${(error as Error).message}`);
-        nextPoints[device.id] = pointsOf(row).map((item) => ({
+        errors.push(`${name}: ${(error as Error).message}`);
+        nextPoints[id] = pointsOf(row).map((item) => ({
           dp: text(item["dp"]), code: text(item["code"]), type: text(item["type"]),
         }));
       }
@@ -379,21 +442,24 @@ export class LocalBackendAdapter implements DeviceAdapter {
     const nextAcStatus: Record<string, HaierLiveStatus> = {};
     const nextModes: Record<string, "manual" | "auto"> = {};
     const nextPause: Record<string, number> = {};
-    for (const device of DEVICES) {
-      if (device.kind !== "air_conditioner") continue;
-      let summary = haierByName.get(device.name) ?? null;
+    // Only the two fixed Haier slots exist. An AC is shown only when the
+    // backend actually reports that slot — never a demo card for a missing AC.
+    for (const [name, slot] of Object.entries(HAIER_SLOT)) {
+      const template = acTemplate(name);
+      const backendRow = haierByName.get(name) ?? null;
+      if (!template || !backendRow) continue;
+      const device: AcDevice = template;
+      nextDevices.push(device);
+      let summary: JsonRecord | null = backendRow;
       let status: JsonRecord | null = null;
-      const slot = HAIER_SLOT[device.name];
-      if (slot) {
-        try {
-          const polled = await postJson(`${HAIER}/poll`, { slot });
-          if (polled["ok"] !== false) {
-            status = record(polled["status"]);
-            summary = record(polled["device"]) ?? summary;
-          }
-        } catch (error) {
-          errors.push(`${device.name}: ${(error as Error).message}`);
+      try {
+        const polled = await postJson(`${HAIER}/poll`, { slot });
+        if (polled["ok"] !== false) {
+          status = record(polled["status"]);
+          summary = record(polled["device"]) ?? summary;
         }
+      } catch (error) {
+        errors.push(`${name}: ${(error as Error).message}`);
       }
       // A successful poll is itself a fresh read. If polling was blocked, a
       // still-fresh backend summary is the second honest source.
@@ -446,6 +512,7 @@ export class LocalBackendAdapter implements DeviceAdapter {
     this._haierStatus = nextAcStatus;
     this._haierModes = nextModes;
     this._haierPauseUntil = nextPause;
+    this._liveDevices = nextDevices;
 
     // Never latch a successful read forever: once no device is freshly
     // verified, commands must be held again.
@@ -458,7 +525,7 @@ export class LocalBackendAdapter implements DeviceAdapter {
     command: DeviceCommand,
     approval?: { approvedBy: string; approvedAt: string },
   ): Promise<CommandResult> {
-    const device = DEVICES.find((item) => item.id === deviceId);
+    const device = this._liveDevices.find((item) => item.id === deviceId);
     if (!device) return failure("unknown_device");
     if (device.requiresApproval && (!approval?.approvedBy || !approval?.approvedAt)) {
       return failure("needs_approval");
@@ -477,7 +544,7 @@ export class LocalBackendAdapter implements DeviceAdapter {
   }
 
   async setAcControlMode(deviceId: string, mode: "manual" | "auto"): Promise<CommandResult> {
-    const device = DEVICES.find((item) => item.id === deviceId);
+    const device = this._liveDevices.find((item) => item.id === deviceId);
     const slot = device ? HAIER_SLOT[device.name] : null;
     if (!device || device.kind !== "air_conditioner" || !slot) return failure("unknown_device");
     try {

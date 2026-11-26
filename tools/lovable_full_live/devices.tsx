@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { createFileRoute, useRouterState } from "@tanstack/react-router";
 import {
   Activity,
+  AlertTriangle,
   ChevronRight,
   Clock,
   LayoutGrid,
@@ -768,6 +769,32 @@ function DevicesPage() {
         />
         {connection.message}
       </div>
+
+      {connection.state === "degraded" && (
+        <div
+          role="alert"
+          className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-status-offline/30 bg-status-offline/8 p-3 text-sm"
+        >
+          <AlertTriangle className="size-4 shrink-0 text-status-offline" aria-hidden />
+          <span className="min-w-0 flex-1 break-words">{connection.message}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="glass"
+            disabled={!!busy["refresh"]}
+            onClick={() => void reloadAll()}
+          >
+            <RefreshCw /> Retry
+          </Button>
+        </div>
+      )}
+      {connection.state === "refreshing" && allDevices.length === 0 && (
+        <div role="status" className="mb-4 space-y-2" aria-busy="true">
+          <div className="h-12 animate-pulse rounded-2xl bg-muted/50" />
+          <div className="h-12 animate-pulse rounded-2xl bg-muted/50" />
+          <p className="text-xs text-muted-foreground">Loading verified device status…</p>
+        </div>
+      )}
 
       <div className="mb-6 space-y-3">
         <div className="relative">

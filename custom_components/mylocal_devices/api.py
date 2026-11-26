@@ -114,6 +114,11 @@ async def api_request(
     except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as error:
         raise ApiError(f"Cannot reach MY Local Devices add-on: {error}") from error
     if response.status >= 400:
+        if response.status == 403:
+            raise ApiError(
+                "Add-on is in ingress-only mode. Set AUTH_USERNAME and AUTH_PASSWORD in "
+                "the add-on options, then enter the same credentials in this integration."
+            )
         message = body.get("error") if isinstance(body, dict) else response.reason
         raise ApiError(str(message or f"HTTP {response.status}"))
     if isinstance(body, dict) and body.get("error"):

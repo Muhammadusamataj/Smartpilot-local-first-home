@@ -24,6 +24,7 @@ import {
   Radio,
   RefreshCw,
   RotateCcw,
+  Search,
   ShieldCheck,
   Sun,
   Trash2,
@@ -31,6 +32,7 @@ import {
   UserLock,
   Users,
   Wifi,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -136,6 +138,11 @@ async function copyRemoteUrl(value: string): Promise<boolean> {
     }
   }
 }
+
+const SETTINGS_SECTIONS = [
+  "Appearance", "Network", "Backup", "Updates", "Family Hub", "Haier keys",
+  "Security", "Support", "Remote", "Preferences", "Safety", "About",
+];
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -439,6 +446,16 @@ function SettingsPage() {
     return () => { alive = false; };
   }, []);
   const p = state.prefs;
+  const [sectionFilter, setSectionFilter] = useState("");
+  useEffect(() => {
+    const needle = sectionFilter.trim().toLowerCase();
+    const nodes = document.querySelectorAll<HTMLElement>("[data-settings-section]");
+    nodes.forEach((node) => {
+      const haystack = (node.dataset["settingsSection"] ?? "").toLowerCase();
+      node.hidden = needle.length > 0 && !haystack.includes(needle);
+    });
+  }, [sectionFilter, state.prefs.theme, state.prefs.language]);
+
   const tailnetUrl =
     typeof remoteConfig["tailscaleUrl"] === "string" ? remoteConfig["tailscaleUrl"] : "";
   const directOn = remoteFamily?.["direct_mode"] === true;
@@ -884,8 +901,74 @@ function SettingsPage() {
   return (
     <div>
       <PageHeader title={t("settings_title")} sub={t("settings_sub")} />
+      <div className="mb-5 space-y-3">
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <Input
+            type="search"
+            value={sectionFilter}
+            onChange={(event) => setSectionFilter(event.target.value)}
+            placeholder="Find a setting (backup, remote, update…)"
+            aria-label="Find a setting"
+            className="glass h-12 rounded-2xl pl-10"
+          />
+          {sectionFilter && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-touch"
+              aria-label="Clear settings filter"
+              className="absolute right-1 top-1/2 -translate-y-1/2"
+              onClick={() => setSectionFilter("")}
+            >
+              <X />
+            </Button>
+          )}
+        </div>
+        <div
+          className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-none sm:mx-0 sm:flex-wrap sm:px-0"
+          role="group"
+          aria-label="Settings sections"
+        >
+          <Button
+            type="button"
+            variant="chip"
+            size="sm"
+            className="h-10 shrink-0 px-4"
+            aria-pressed={!sectionFilter}
+            onClick={() => setSectionFilter("")}
+          >
+            All
+          </Button>
+          {SETTINGS_SECTIONS.map((section) => (
+            <Button
+              key={section}
+              type="button"
+              variant="chip"
+              size="sm"
+              className="h-10 shrink-0 px-4"
+              aria-pressed={sectionFilter === section.toLowerCase()}
+              onClick={() => setSectionFilter(
+                sectionFilter === section.toLowerCase() ? "" : section.toLowerCase(),
+              )}
+            >
+              {section}
+            </Button>
+          ))}
+        </div>
+        {sectionFilter && (
+          <p className="text-xs text-muted-foreground" role="status">
+            Showing sections matching “{sectionFilter}”.
+          </p>
+        )}
+      </div>
+
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Panel>
+        <Panel data-settings-section="appearance appearance theme language colours dark light">
           <PanelTitle icon={Palette}>Appearance</PanelTitle>
           <div className="space-y-5">
             <div>
@@ -921,7 +1004,7 @@ function SettingsPage() {
           </div>
         </Panel>
 
-        <Panel>
+        <Panel data-settings-section="integration integration status local backend">
           <PanelTitle icon={Network}>Integration status</PanelTitle>
           <ul className="space-y-2">
             {INTEGRATIONS.map((item) => (
@@ -948,7 +1031,7 @@ function SettingsPage() {
           </div>
         </Panel>
 
-        <Panel>
+        <Panel data-settings-section="network network reconnect scan ensure diagnostics">
           <PanelTitle icon={Wifi}>Network &amp; reconnect</PanelTitle>
           <div className="space-y-4">
             <div className="space-y-2 rounded-2xl border border-glass-border bg-muted/30 p-3">
@@ -1018,7 +1101,7 @@ function SettingsPage() {
           </Dialog>
         </Panel>
 
-        <Panel>
+        <Panel data-settings-section="backup backup restore zip download">
           <PanelTitle icon={Download}>Backup &amp; restore</PanelTitle>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
@@ -1148,7 +1231,7 @@ function SettingsPage() {
           </p>
         </Panel>
 
-        <Panel className="lg:col-span-2">
+        <Panel className="lg:col-span-2" data-settings-section="family hub family hub share connect client">
           <PanelTitle icon={Users}>Family Hub <Badge variant="unknown">Optional</Badge></PanelTitle>
           <div className="space-y-4">
             <div className="grid gap-2 sm:grid-cols-2">
@@ -1258,7 +1341,7 @@ function SettingsPage() {
           </Dialog>
         </Panel>
 
-        <Panel>
+        <Panel data-settings-section="haier keys haier cloud key renew sign in">
           <PanelTitle icon={Cloud}>Haier cloud keys <Badge variant="unknown">Optional</Badge></PanelTitle>
           <div className="mt-3 flex flex-wrap gap-2">
             {AC_DEVICES.map((acDevice) => (
@@ -1340,7 +1423,7 @@ function SettingsPage() {
           </div>
         </Panel>
 
-        <Panel>
+        <Panel data-settings-section="security security sign in login logout qr">
           <PanelTitle icon={UserLock}>Security &amp; sign-in</PanelTitle>
           <div className="space-y-4">
             <PanelRow label="Tuya account">
@@ -1383,7 +1466,7 @@ function SettingsPage() {
           </div>
         </Panel>
 
-        <Panel>
+        <Panel data-settings-section="support support report diagnostics">
           <PanelTitle icon={FileDown}>Support report</PanelTitle>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
@@ -1408,7 +1491,7 @@ function SettingsPage() {
           </div>
         </Panel>
 
-        <Panel>
+        <Panel data-settings-section="remote remote tailscale direct access vpn">
           <PanelTitle icon={ShieldCheck}>Remote access</PanelTitle>
           <div className="flex flex-wrap gap-1.5">
             <Badge variant={tailnetUrl ? "ok" : "unknown"}>
@@ -1495,7 +1578,7 @@ function SettingsPage() {
           </p>
         </Panel>
 
-        <Panel>
+        <Panel data-settings-section="preferences local first preferences">
           <PanelTitle icon={MonitorSmartphone}>Local-first preferences</PanelTitle>
           <div className="divide-y divide-border">
             <ToggleRow
@@ -1519,7 +1602,7 @@ function SettingsPage() {
           </div>
         </Panel>
 
-        <Panel>
+        <Panel data-settings-section="safety safety permissions approval">
           <PanelTitle icon={ShieldCheck}>Safety permissions</PanelTitle>
           <div className="divide-y divide-border">
             <ToggleRow
@@ -1551,7 +1634,7 @@ function SettingsPage() {
           </div>
         </Panel>
 
-        <Panel className="lg:col-span-2">
+        <Panel className="lg:col-span-2" data-settings-section="capabilities device capabilities">
           <PanelTitle icon={Cpu}>Device capabilities</PanelTitle>
           <div className="-mx-2 overflow-x-auto">
             <table className="w-full min-w-[560px] text-left text-sm">
@@ -1614,7 +1697,7 @@ function SettingsPage() {
           </p>
         </Panel>
 
-        <Panel>
+        <Panel data-settings-section="privacy privacy data">
           <PanelTitle icon={UserLock}>Privacy</PanelTitle>
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li>• No analytics or trackers in this UI.</li>
@@ -1636,7 +1719,7 @@ function SettingsPage() {
           />
         </Panel>
 
-        <Panel>
+        <Panel data-settings-section="local state local ui state reset demo">
           <PanelTitle icon={RotateCcw}>Local UI state</PanelTitle>
           <p className="text-sm text-muted-foreground">
             Reset locally stored UI state, drafts and history. Your theme and language
@@ -1652,7 +1735,7 @@ function SettingsPage() {
           />
         </Panel>
 
-        <Panel className="lg:col-span-2">
+        <Panel className="lg:col-span-2" data-settings-section="about about version repository">
           <PanelTitle icon={Info}>About</PanelTitle>
           <dl className="grid gap-3 text-sm sm:grid-cols-3">
             <div>

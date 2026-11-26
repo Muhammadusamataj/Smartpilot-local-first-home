@@ -140,6 +140,34 @@ html, body { margin: 0; overflow-x: hidden; }
   }
 }
 </style>
+<style>
+/* Light-theme contrast: darker status foregrounds on neutral surfaces. */
+html:not(.dark) {
+  --status-ok: #0a6b50;
+  --status-unknown: #475467;
+  --status-preview: #8a4b00;
+  --status-offline: #b42318;
+  --color-status-ok: var(--status-ok);
+  --color-status-unknown: var(--status-unknown);
+  --color-status-preview: var(--status-preview);
+  --color-status-offline: var(--status-offline);
+}
+/* Solid fallbacks for Android WebViews without oklch / color-mix. */
+@supports not (color: oklch(0 0 0)) {
+  :root {
+    --bg: #081023; --card: #15233b; --fg: #eff5ff; --muted: #96aac5;
+    --status-ok: #0b7a5a; --status-unknown: #96aac5; --status-preview: #c98a3c;
+    --color-status-ok: var(--status-ok);
+    --color-status-unknown: var(--status-unknown);
+    --color-status-preview: var(--status-preview);
+  }
+  html:not(.dark) {
+    --bg: #edf5fc; --card: #f9fcff; --fg: #10233e; --muted: #62748b;
+    --status-ok: #0a6b50; --status-unknown: #475467; --status-preview: #8a4b00;
+  }
+  * { backdrop-filter: none !important; }
+}
+</style>
 </head>
 <body>
 <div id="pilot-next-root"></div>
