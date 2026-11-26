@@ -1370,3 +1370,22 @@ panel failures and zero uncaught page errors.
   dedicated `auth_required` error string.
 - Verification: strict `tsc --noEmit` 0 errors; guards 28/28; backend 52/52;
   mocked browser 12/12; APK build + install Success.
+
+
+### Localtuya-inspired phase sensors
+
+- Reviewed xZetsubou/hass-localtuya (fork of rospogrigio/localtuya). Reused only
+  its documented packed-DP decoding formula (bytes 0-1 voltage /10, bytes 3-4
+  current /1000, bytes 6-7 power /1000) and unit/device-class mapping.
+- `custom_components/mylocal_devices/pure.py` now provides `is_base64_dp`,
+  `is_phase_code` and `decode_base64_dp`; `sensor.py` creates three honest
+  sub-sensors (voltage V, current A, power kW) for `phase_a/b/c` DPs instead of
+  exposing the raw packed string. No scaling is guessed and no DP value is
+  invented.
+- `tests/test_mylocal_integration_pure.py` covers the decoder and phase-code
+  detection: 2 passed. Python compile of the touched integration files: pass.
+- Note: localtuya's full per-device DP configuration engine was NOT copied —
+  it is device-control logic and outside the presentation-only boundary. Local
+  status must actually contain the phase DP for these sensors to report values.
+- HA operator must copy `custom_components/mylocal_devices/` into the HA config
+  folder and restart HA for these changes to take effect.

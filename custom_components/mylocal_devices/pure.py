@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import ipaddress
 import math
 import re
@@ -85,6 +86,43 @@ def as_bool(value) -> bool | None:
     if text in {"false", "0", "off", "no"}:
         return False
     return None
+
+
+ATTR_CURRENT = "current"
+ATTR_VOLTAGE = "voltage"
+ATTR_POWER = "power"
+
+
+def is_base64_dp(value) -> bool:
+    """Recognise Tuya's packed three-phase/base64 DP payload."""
+    return (
+        isinstance(value, str)
+        and len(value) >= 12
+        and len(value) % 2 == 0
+        and value.endswith("=")
+    )
+
+
+def is_phase_code(point: dict) -> bool:
+    """Only the documented packed phase DPs get decoded into sub-sensors."""
+    code = str(point.get("code") or "").lower()
+    return bool(re.match(r"^phase_[abc]$", code))
+
+
+def decode_base64_dp(value: str) -> dict[str, float]:
+    """Decode Tuya's packed voltage/current/power report (localtuya format)."""
+    if not is_base64_dp(value):
+        return {}
+    try:
+        buf = base64.b64decode(value)
+    except Exception:
+        return {}
+    if len(buf) < 8:
+        return {}
+    voltage = ((buf[0] << 8) | buf[1]) / 10
+    current = ((buf[3] << 8) | buf[4]) / 1000
+    power = ((buf[6] << 8) | buf[7]) / 1000
+    return {ATTR_VOLTAGE: voltage, ATTR_CURRENT: current, ATTR_POWER: power}
 
 
 def live_values(device: dict) -> dict[str, object]:
