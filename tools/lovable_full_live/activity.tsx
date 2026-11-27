@@ -138,7 +138,7 @@ function mapStatus(text: string): ActivityStatus {
   const t = text.toLowerCase();
   if (/fail|error|block|refus|denied|reject/.test(t)) return "blocked";
   if (/warn|caution/.test(t)) return "warning";
-  if (/success|complete|confirm|done|ok/.test(t)) return "success";
+  if (/\b(success|complete|confirm|done|ok)\b/.test(t)) return "success";
   return "info";
 }
 

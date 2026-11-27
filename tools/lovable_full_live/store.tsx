@@ -251,7 +251,9 @@ function applyTheme(theme: ThemePref) {
   const dark =
     theme === "dark" ||
     (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const light = !dark;
   document.documentElement.classList.toggle("dark", dark);
+  document.documentElement.dataset.theme = light ? "light" : undefined;
   document.documentElement.style.colorScheme = dark ? "dark" : "light";
 }
 

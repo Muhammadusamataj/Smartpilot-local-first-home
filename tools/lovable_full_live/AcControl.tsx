@@ -883,7 +883,7 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
   };
 
   /** Any manual tweak while in Auto pauses Auto-Pilot for the configured window. */
-  const change = (patch: AcPatch, title: string) => {
+  const change = async (patch: AcPatch, title: string) => {
     const extra: Partial<AcPreviewState> = {};
     if (s.controlMode === "auto") {
       extra.overridePausedUntil = new Date(
@@ -911,7 +911,16 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
     }
     const previewPatch: Partial<AcPreviewState> = { ...patch };
     delete (previewPatch as { strong?: boolean }).strong;
-    void runCommands(commands, previewPatch, title, extra);
+    await runCommands(commands, previewPatch, title, extra);
+    // Re-read strong airflow state after commands complete, so UI reflects confirmed change.
+    if (slot) {
+      try {
+        const reply = (await readHaier(slot)) as ReadReply;
+        if (typeof reply?.status?.strong === "boolean") setStrongOn(reply.status.strong);
+      } catch {
+        // keep previous strongOn if read fails
+      }
+    }
   };
 
   const applyPower = (value: "on" | "off") => {
@@ -1137,7 +1146,7 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
             className="mt-3.5 w-full"
             size="touch"
             variant={on ? "hero" : "glass"}
-            disabled={busy || connection.state === "refreshing" || (!on && waitMs > 0)}
+            disabled={busy || connection.state === "refreshing" || device.connection !== "online" || (!on && waitMs > 0)}
             aria-busy={busy}
             onClick={() => requestPower(on ? "off" : "on")}
             aria-pressed={on}
@@ -1175,7 +1184,7 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
             options={["cool", "dry", "fan", "auto", "heat"] as AcMode[]}
             value={s.mode}
             caps={caps.modes}
-            disabled={busy}
+            disabled={busy || device.connection !== "online"}
             render={(m) => MODE_META[m]}
             onSelect={(m) => change({ mode: m }, `mode ${MODE_META[m].label}`)}
           />
@@ -1184,7 +1193,7 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
             options={["auto", "low", "medium", "high", "turbo"] as FanSpeed[]}
             value={s.fan}
             caps={caps.fanSpeeds}
-            disabled={busy}
+            disabled={busy || device.connection !== "online"}
             render={(f) => ({ label: FAN_LABEL[f], icon: Wind })}
             onSelect={(f) => change({ fan: f }, `fan ${FAN_LABEL[f]}`)}
           />
@@ -1196,7 +1205,7 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
               label={t("eco")}
               status={caps.eco}
               checked={s.eco}
-              disabled={busy}
+              disabled={busy || device.connection !== "online"}
               onChange={(v) => change({ eco: v }, `Eco ${v ? "on" : "off"}`)}
             />
             <FeatureRow
@@ -1204,7 +1213,7 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
               label={t("nightSleep")}
               status={caps.nightSleep}
               checked={s.nightSleep}
-              disabled={busy}
+              disabled={busy || device.connection !== "online"}
               onChange={(v) => change({ nightSleep: v }, `Night Sleep ${v ? "on" : "off"}`)}
             />
             <FeatureRow
@@ -1212,7 +1221,7 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
               label={t("quiet")}
               status={caps.quiet}
               checked={s.quiet}
-              disabled={busy}
+              disabled={busy || device.connection !== "online"}
               onChange={(v) => change({ quiet: v }, `Quiet ${v ? "on" : "off"}`)}
             />
           </div>

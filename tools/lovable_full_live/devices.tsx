@@ -302,13 +302,19 @@ function DevicesPage() {
     }
   }, []);
 
-  const allDevices = useMemo(
-    () => [
-      ...devices.filter((d) => !removed.includes(d.id)),
-      ...added.filter((d) => !removed.includes(d.id)),
-    ],
-    [devices, removed, added],
-  );
+  const allDevices = useMemo(() => {
+    const liveIds = new Set(
+      devices.filter((d) => !removed.includes(d.id)).map((d) => d.id),
+    );
+    const result: Device[] = [];
+    // First, add live devices (preserving their order from the store)
+    devices.filter((d) => !removed.includes(d.id)).forEach((d) => result.push(d));
+    // Then, add added devices that aren't already in the live set
+    added
+      .filter((d) => !removed.includes(d.id) && !liveIds.has(d.id))
+      .forEach((d) => result.push(d));
+    return result;
+  }, [devices, added, removed]),
 
   const selected = useMemo(
     () => (selectedId ? allDevices.find((d) => d.id === selectedId) ?? null : null),
@@ -520,11 +526,11 @@ function DevicesPage() {
     const payload: Partial<DeviceInput> & { id: string } = {
       id: editing.id,
       name,
-      ip: form.ip.trim(),
       version: form.version || "auto",
     };
     if (form.local_key.trim()) payload.local_key = form.local_key.trim();
     if (form.dp.trim()) payload.dp = Number(form.dp.trim());
+    if (form.ip.trim()) payload.ip = form.ip.trim();
     await withBusy("edit", async () => {
       try {
         await updateDevice(payload);

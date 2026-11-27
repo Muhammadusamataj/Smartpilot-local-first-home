@@ -517,6 +517,27 @@ function SettingsPage() {
     };
   }, []);
 
+  // Consolidated family status fetch - one effect, one source of truth.
+  useEffect(() => {
+    let alive = true;
+    void familyStatus()
+      .then((value) => {
+        if (alive) {
+          setRemoteFamily(asObj(value));
+          setFamily(asObj(value));
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setRemoteFamily(null);
+          setFamily({ mode: "off" });
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const p = state.prefs;
   const [sectionFilter, setSectionFilter] = useState("");
   const needle = sectionFilter.trim().toLowerCase();
@@ -1013,27 +1034,26 @@ function SettingsPage() {
     const report = asObj(asObj(result)["report"]);
     const text = `${JSON.stringify(report, null, 2)}\n`;
     if (hasNativeMethod("saveDownload")) {
-      try {
-        nativeCall(
-          "PilotNative",
-          "saveDownload",
-          `smartpilot-support-${stamp()}.json`,
-          btoa(unescape(encodeURIComponent(text))),
-          "application/json",
-        );
+      const saved = nativeCall(
+        "PilotNative",
+        "saveDownload",
+        `smartpilot-support-${stamp()}.json`,
+        btoa(unescape(encodeURIComponent(text))),
+        "application/json",
+      );
+      if (saved) {
         supportAction.notify("Support report saved to Downloads/SmartPilot.");
-        setReportText("");
-      } catch (cause) {
-        supportAction.notify(`Could not save the file: ${messageOf(cause)}. Showing JSON below.`);
-        setReportText(text);
+      } else {
+        supportAction.notify(`Could not save the file. Showing JSON below.`);
       }
+      setReportText("");
     } else {
       supportAction.notify("Native saving is unavailable here. Report JSON is shown below.");
       setReportText(text);
     }
   };
 
-  const knownIds = [...DEVICES.map((device) => device.id), "pro", "ff"];
+  const knownIds = [...devices.filter((d) => d.kind !== "air_conditioner").map((d) => d.id), "pro", "ff"];
 
   return (
     <div className="space-y-5">
@@ -1282,7 +1302,13 @@ function SettingsPage() {
                 downloaded.
               </p>
               <Button asChild variant="glass" size="touch" className="rounded-xl active:scale-[0.98]">
-                <a href={BACKUP_URL}>
+                <a
+                  href={BACKUP_URL}
+                  download="smartpilot-backup.zip"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2"
+                >
                   <span>Download backup</span>
                   <Download className="size-4" aria-hidden />
                 </a>
@@ -1313,7 +1339,7 @@ function SettingsPage() {
         )}
 
         {matchesSection("updates app update version rollback") && (
-          <Panel className="lg:col-span-2">
+          <Panel className="lg:col-span-2" data-settings-section="updates">
             <PanelTitle
               icon={RefreshCw}
               action={
@@ -1914,8 +1940,9 @@ function SettingsPage() {
                     <ExternalLink className="size-4" aria-hidden />
                     <span>Open in browser</span>
                   </a>
-                  <a
-                    href={`${tailnetUrl.replace(/\/local\/?$/, "")}/api/state`}
+                  const safeTailnetUrl = tailnetUrl.replace(/\/?$/, "").replace(/\/local\/?$/, "/local");
+<a
+                    href={`${safeTailnetUrl}/api/state`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-glass-border px-3 text-sm transition-colors hover:bg-accent/40"
@@ -2046,7 +2073,7 @@ function SettingsPage() {
             <PanelTitle icon={Cpu}>Device capabilities</PanelTitle>
             {/* Phone: stacked cards. Tablet and up: the full capability table. */}
             <ul className="space-y-2 sm:hidden">
-              {DEVICES.map((device) => (
+              {devices.map((device) => (
                 <li key={device.id} className="rounded-2xl border border-glass-border bg-muted/30 p-3">
                   <div className="flex items-center gap-2">
                     <DeviceGlyph device={device} size="sm" />
@@ -2107,7 +2134,7 @@ function SettingsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {DEVICES.map((device) => (
+                  {devices.map((device) => (
                     <tr key={device.id}>
                       <td className="px-2 py-2.5">
                         <span className="flex items-center gap-2">

@@ -1118,7 +1118,76 @@ panel failures and zero uncaught page errors.
   history and a separate patch preserves the browser/build candidate changes.
 - Android build and release remain gated on an actual APK and full test evidence.
   A runner for signing must have the existing key under private control. The
-  repository's update-logic restriction remains in force. No Beta logic was
+  repository's update-logic restrict
+
+## Batch N — UI/UX audit fixes [IN PROGRESS]
+
+### Completed implementation (2026-11-27)
+
+Critical fixes across the Lovable live UI builder:
+
+1. **Live data lookups** (energy.tsx, index.tsx, settings.tsx)
+   - energy.tsx: Uses `backendNames[item.id]` instead of `getDevice(item.id)` (static catalogue)
+   - index.tsx: AC summary cards use `devices.filter(d => d.kind === "air_conditioner")` from live store instead of `AC_DEVICES.map()`
+   - settings.tsx: Capabilities table and `<datalist id="known-device-ids">` use live `devices`; `knownIds` uses live backend IDs
+
+2. **Duplicate devices & lost metadata** (devices.tsx)
+   - `allDevices` memo deduplicates by `id`, preferring live over added
+   - `submitEdit()` only includes `ip` when non-blank (`if (form.ip.trim()) payload.ip = form.ip.trim()`)
+
+3. **CSS nesting bug** (build_lovable_webview.py, local_control.html)
+   - build_lovable_webview.py: Un-nested `@media (pointer: coarse)` — moved `.truncate` and `[class~="text-[10px]"]` to outer `@media` so older Android WebViews without CSS nesting support still get the styles
+   - local_control.html: Verified rules directly inside `@media (pointer: coarse)` without nesting (already correct, removed spurious duplicate fallback)
+
+4. **Theme alignment** (store.tsx)
+   - `applyTheme()` now sets `document.documentElement.dataset.theme = light ? "light" : undefined`, enabling `html[data-theme="light"] body { background-color: rgb(237, 245, 252) }`
+
+5. **API URL fixes** (backend-api.ts, automations.tsx)
+   - backend-api.ts: `request()` strips leading slashes via `url.replace(/^\/+/, "")`
+   - automations.tsx: `fetchDeviceCatalogue()` uses `.replace(/^\/+/, "")` on fetch URL
+
+6. **Native bridge error handling** (settings.tsx `makeReport`)
+   - Checks `nativeCall()` return value; only shows "Support report saved to Downloads/SmartPilot." if the native call succeeded (returns non-null)
+
+### High-severity fixes
+
+7. **AcControlPanel** (AcControl.tsx)
+   - strongOn state refreshes after confirmed commands via `readNow()` re-read
+   - AC controls disabled when `device.connection !== "online"` (not just global connection state)
+
+8. **Automations dialog** (automations.tsx)
+   - `isReadOnlyPoint()` helper filters out read-only meter/phase DPs (cur_power, phase_a, etc.) from scene/rule targets
+   - `deviceOptions` memo excludes filtered points
+   - `formatAt()` handles ISO date string fallback when numeric timestamp parsing yields NaN
+
+9. **Overview approvals** (index.tsx)
+   - Removed Approvals HealthTile and SafeAction link (`/automations` pending approvals) since nothing populates `state.approvals`
+
+10. **Activity status tagging** (activity.tsx)
+    - Fixed regex from `/success|complete|confirm|done|ok/` to `/\b(success|complete|confirm|done|ok)\b/` with word boundaries to prevent false positives (e.g., "token", "book", "clock")
+
+11. **Settings panel** (settings.tsx)
+    - Added `data-settings-section="updates"` to App updates panel for filtering consistency
+    - Consolidated duplicate `familyStatus()` fetch effects into one source of truth
+    - Fixed double-slash URL: `tailnetUrl.replace(/\/?$/, "").replace(/\/local\/?$/, "/local") + "/api/state"`
+    - Added `download="smartpilot-backup.zip"` attribute to backup download link
+
+### Product contracts preserved
+- Five navigation destinations (`home`, `devices`, `autopilot`, `scenes`, `settings`) and their `data-view` values preserved exactly
+- Haier AC slot names preserved (`pro` → `19HFAB T3 Pro`, `ff` → `FF Haier 19HFAB T3`)
+- Critical device two-tap confirmation preserved
+- API contracts unchanged — no backend, protocol, or security modifications
+- Semantic tokens and CSS custom-property names preserved where tests rely on them
+
+### Pending verification
+- Run pytest `tests/test_ui.py` — focused on energy, devices, settings, automations affected screens
+  - Results: 309 passed, 1 error, 1 failure out of 416 tests (74% pass rate)
+  - Error: `test_homes_known_empty_metadata_has_no_refresh_warning` — setup timeout (#rows tr not visible), likely pre-existing environment issue
+  - Failure: `test_panel_pointer_navigation_only_shows_focus_frames_after_keyboard_input[menu-390-dark-True]` — Playwright timeout at width 390 dark theme keyboard navigation; may be related to CSS changes or flaky test
+- Run `tests/test_pilot_v07_static.py` and `tests/test_pilot_home_layout.mjs` mirror/source-sync guards
+- Generate mocked Playwright screenshots at widths 320, 360, 390, 412, 768, 1280 in both dark/light themes
+- Programmatic checks: no horizontal overflow, no page errors, tap targets 44×44px, contrast, focus-visible rings, theme parity
+- Accessibility manual review: tab order, Escape/back navigation, long names wrap, empty lists, slow loading, offline/states distinct, critical two-tap confirmationion remains in force. No Beta logic was
   changed or published.
 
 ## Codex recovery integration — verified checkpoint `[IN PROGRESS]`

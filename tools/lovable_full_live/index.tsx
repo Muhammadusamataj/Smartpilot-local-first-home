@@ -204,7 +204,6 @@ function Overview() {
   const greet =
     hour < 12 ? t("greeting_morning") : hour < 17 ? t("greeting_afternoon") : t("greeting_evening");
   const connected = devices.filter((d) => d.connection === "online").length;
-  const pending = state.approvals.filter((a) => a.status === "pending").length;
   // Empty rooms are presentation noise; hide them, never invent or drop devices.
   const groups = [
     { name: "Porch", devices: devices.filter((d) => d.location === "Porch") },
@@ -492,7 +491,7 @@ function Overview() {
       case "ac-cards":
         return (
           <div className="grid gap-4 md:grid-cols-2">
-            {AC_DEVICES.map((d) => (
+            {devices.filter((d) => d.kind === "air_conditioner").map((d) => (
               <AcSummaryCard key={d.id} device={d} />
             ))}
           </div>
@@ -550,11 +549,6 @@ function Overview() {
                 to="/climate"
                 title="Review Manual/Auto for both ACs"
                 body="Manual is never overridden by Auto-Pilot."
-              />
-              <SafeAction
-                to="/automations"
-                title={`Review ${pending} approval request${pending === 1 ? "" : "s"}`}
-                body="High-risk loads always wait for you."
               />
               <SafeAction
                 to="/settings"
@@ -839,13 +833,7 @@ function Overview() {
               value="Approval-gated writes"
               tone="ok"
             />
-            <HealthTile
-              icon={CalendarClock}
-              label="Approvals"
-              value={`${pending} pending`}
-              tone={pending ? "preview" : "ok"}
-            />
-          </div>
+            </div>
         </div>
       </Panel>
 

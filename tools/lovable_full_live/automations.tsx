@@ -186,9 +186,31 @@ function formatValue(value: unknown): string {
   if (value === undefined || value === null || value === "") return "—";
   return String(value);
 }
+// Identify read-only telemetry DPs (energy, phase, temperature sensors)
+// that should not be selectable as Scene/Rule targets because the backend
+// rejects writes to them.
+function isReadOnlyPoint(point: DevicePoint): boolean {
+  const code = String(point.code || "").toLowerCase();
+  const type = String(point.type || "").toLowerCase();
+  // Power/energy current DPs are read-only telemetry
+  if (/^cur_(current|power|energy|amp)/i.test(code)) return true;
+  // Phase DPs are read-only
+  if (/^phase_/i.test(code)) return true;
+  // Explicit meter/phase point types
+  if (type.includes("meter") || type.includes("phase")) return true;
+  return false;
+}
+
 function formatAt(value: unknown): string {
   const seconds = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(seconds) || seconds <= 0) return "Unknown";
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    // Try ISO date string fallback
+    if (typeof value === "string" && value.trim()) {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleString();
+    }
+    return "Unknown";
+  }
   return new Date(seconds * 1000).toLocaleString();
 }
 
@@ -397,7 +419,7 @@ function parseDeviceOption(value: unknown): DeviceOption | null {
 
 /** Read-only catalogue: real backend device IDs and their cached DP metadata. */
 async function fetchDeviceCatalogue(): Promise<DeviceOption[]> {
-  const response = await fetch("/api/local/devices", {
+  const response = await fetch("/api/local/devices".replace(/^\/+/, ""), {
     cache: "no-store",
     credentials: "same-origin",
   });
@@ -523,7 +545,10 @@ function AutomationsPage() {
       const local = devices.find((item) => item.name === device.name);
       const live = local ? points[local.id] ?? [] : [];
       const liveByDp = new Map(live.map((point) => [String(point.dp), point]));
-      const merged = device.points.map((point) => {
+      // Filter out read-only telemetry DPs (energy, phase, etc.) that the
+      // backend rejects for writes in scenes/rules.
+      const filteredPoints = device.points.filter((point) => !isReadOnlyPoint(point));
+      const merged = filteredPoints.map((point) => {
         const verified = liveByDp.get(point.dp);
         if (!verified) return point;
         return {

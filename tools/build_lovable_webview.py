@@ -146,11 +146,9 @@ html, body { margin: 0; overflow-x: hidden; }
 
   /* Readability on touch layouts: never clip device names, never shrink body
      labels below 11px. Existing Tailwind classes are left untouched. */
-  @media (pointer: coarse) {
-    .truncate { white-space: normal !important; overflow: visible !important;
-                text-overflow: clip !important; overflow-wrap: anywhere; }
-    [class~="text-[10px]"] { font-size: 11px !important; }
-  }
+  .truncate { white-space: normal !important; overflow: visible !important;
+              text-overflow: clip !important; overflow-wrap: anywhere; }
+  [class~="text-[10px]"] { font-size: 11px !important; }
 }
 
 /* --- Restraint pass: calmer glass, readable type, calm motion ------------- */
