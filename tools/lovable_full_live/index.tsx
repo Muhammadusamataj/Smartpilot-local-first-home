@@ -50,7 +50,7 @@ import {
   runScene,
   type LocalPreferences,
 } from "@/lib/smartpilot/backend-api";
-import { AC_DEVICES, getDevice } from "@/lib/smartpilot/devices";
+import { getDevice } from "@/lib/smartpilot/devices";
 import { useSmartPilot } from "@/lib/smartpilot/store";
 import { useNow } from "@/hooks/use-now";
 import { cn } from "@/lib/utils";

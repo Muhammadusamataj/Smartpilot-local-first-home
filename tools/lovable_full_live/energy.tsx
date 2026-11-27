@@ -206,20 +206,23 @@ function EnergyPage() {
               </thead>
               <tbody className="divide-y divide-glass-border">
                 {readings.map((item) => {
-                  const device = backendNames[item.id] ?? { name: item.id };
+                  // Static catalogue supplies kind/category for the glyph; the live
+                  // backend name takes precedence for the visible label.
+                  const device = getDevice(item.id);
+                  const name = backendNames[item.id] ?? device?.name ?? item.id;
                   const pct = max > 0 ? Math.round((item.kwh / max) * 100) : 0;
                   return (
                     <tr key={item.id} className="align-middle">
                       <th scope="row" className="py-2.5 pr-3 text-left font-medium">
                         <span className="flex min-w-0 items-center gap-2">
-                          {device.name ? (
+                          {device ? (
                             <DeviceGlyph device={device} size="sm" />
                           ) : (
                             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
                               <PlugZap className="size-4" aria-hidden />
                             </span>
                           )}
-                          <span className="min-w-0 break-words">{device.name}</span>
+                          <span className="min-w-0 break-words">{name}</span>
                         </span>
                       </th>
                       <td className="py-2.5 pr-3 font-display tabular">{kwh(item.kwh)}</td>

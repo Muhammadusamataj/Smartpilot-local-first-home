@@ -492,6 +492,7 @@ function SettingsPage() {
 
   const [remoteConfig] = useState<RemoteConfig>(() => readRemoteConfig());
   const [remoteFamily, setRemoteFamily] = useState<Obj | null>(null);
+  const [family, setFamily] = useState<Obj | null>(null);
   const [remoteCopied, setRemoteCopied] = useState(false);
   const copyTimer = useRef<number | null>(null);
 
@@ -503,21 +504,7 @@ function SettingsPage() {
   );
 
   const { t, state, connection, refreshDevices, setPrefs, resetDemo } = useSmartPilot();
-  useEffect(() => {
-    let alive = true;
-    void familyStatus()
-      .then((value) => {
-        if (alive) setRemoteFamily(asObj(value));
-      })
-      .catch(() => {
-        if (alive) setRemoteFamily(null);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  // Consolidated family status fetch - one effect, one source of truth.
+  // Consolidated: single familyStatus() fetch populates both remote and Family Hub state.
   useEffect(() => {
     let alive = true;
     void familyStatus()
@@ -546,6 +533,7 @@ function SettingsPage() {
 
   const tailnetUrl =
     typeof remoteConfig["tailscaleUrl"] === "string" ? remoteConfig["tailscaleUrl"] : "";
+  const safeTailnetUrl = tailnetUrl.replace(/\/local\/?$/, "/local").replace(/\/$/, "");
   const directOn = remoteFamily?.["direct_mode"] === true;
   const haAvailable = remoteConfig["homeAssistant"] === true;
   const lanIp = typeof remoteFamily?.["lan_ip"] === "string" ? remoteFamily["lan_ip"] : "";
@@ -709,25 +697,10 @@ function SettingsPage() {
 
   // --- Family Hub ------------------------------------------------------------
   const familyAction = useAction(mountedRef);
-  const [family, setFamily] = useState<Obj | null>(null);
   const [pendingMode, setPendingMode] = useState<FamilyMode | null>(null);
   const [hubUrl, setHubUrl] = useState("");
   const [hubUser, setHubUser] = useState("");
   const [hubPass, setHubPass] = useState("");
-
-  useEffect(() => {
-    let alive = true;
-    void familyStatus()
-      .then((value) => {
-        if (alive) setFamily(asObj(value));
-      })
-      .catch(() => {
-        if (alive) setFamily({ mode: "off" });
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const familyMode = familyModeOf(family?.["mode"]);
   const familyDirect = family?.["direct_mode"] === true;
@@ -1940,8 +1913,7 @@ function SettingsPage() {
                     <ExternalLink className="size-4" aria-hidden />
                     <span>Open in browser</span>
                   </a>
-                  const safeTailnetUrl = tailnetUrl.replace(/\/?$/, "").replace(/\/local\/?$/, "/local");
-<a
+                  <a
                     href={`${safeTailnetUrl}/api/state`}
                     target="_blank"
                     rel="noopener noreferrer"

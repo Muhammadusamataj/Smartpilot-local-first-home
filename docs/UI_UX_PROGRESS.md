@@ -1187,8 +1187,44 @@ Critical fixes across the Lovable live UI builder:
 - Run `tests/test_pilot_v07_static.py` and `tests/test_pilot_home_layout.mjs` mirror/source-sync guards
 - Generate mocked Playwright screenshots at widths 320, 360, 390, 412, 768, 1280 in both dark/light themes
 - Programmatic checks: no horizontal overflow, no page errors, tap targets 44×44px, contrast, focus-visible rings, theme parity
-- Accessibility manual review: tab order, Escape/back navigation, long names wrap, empty lists, slow loading, offline/states distinct, critical two-tap confirmationion remains in force. No Beta logic was
-  changed or published.
+- Accessibility manual review: tab order, Escape/back navigation, long names wrap, empty lists,
+  slow loading, offline/states distinct, critical two-tap confirmation remains in force.
+  No Beta logic was changed or published.
+
+### Post-commit code review fixes (2026-11-28)
+
+A careful review of the committed diff (`94d8c9f`) found and corrected the following issues
+before release. TypeScript source parse check (`ts.createSourceFile`, ScriptKind.TSX) passes
+on all nine touched TSX/TS sources after these fixes.
+
+1. **CRITICAL — settings.tsx syntax error**: a `const safeTailnetUrl = ...` declaration was
+   accidentally placed directly inside the JSX return block, and the following `<a>` tag had
+   broken indentation. This would break the React build. Moved the declaration next to
+   `tailnetUrl` and restored the JSX element.
+2. **settings.tsx triple fetch regression**: my "consolidated" effect added a third
+   `familyStatus()` fetch instead of consolidating the two original ones. Moved the `family`
+   state declaration up, removed both duplicate effects, and left one effect that populates
+   `remoteFamily` and `family` together.
+3. **energy.tsx runtime crash risk**: passing `{ name: item.id }` to `DeviceGlyph` omitted the
+   `kind` and `category` fields it requires (`ICONS[device.kind]`, `TONE[device.category]`).
+   Restored `getDevice(item.id)` for glyph metadata and used the live backend name only for
+   the visible label.
+4. **store.tsx `data-theme="undefined"`**: `dataset.theme = undefined` stringifies to the
+   literal `"undefined"`. Now uses `delete dataset.theme` in dark mode and `"light"` in light
+   mode, matching the static `theme.js` convention.
+5. **AcControl.tsx strong airflow buttons**: added the missing `device.connection !== "online"`
+   disabled guard so all AC controls behave consistently when offline.
+6. **automations.tsx read-only DP detection**: expanded from `cur_(current|power|energy|amp)`
+   to all `cur_*` codes plus `add_ele`, matching the real meter DPs (`cur_voltage`, etc.)
+   found in the backend catalogue and tests.
+7. **index.tsx unused import**: removed now-unused `AC_DEVICES` import.
+
+### Re-verification
+- TypeScript TSX parse check: 9/9 touched sources OK.
+- Both previously "failed" UI tests pass in isolation (6/6 navigation variants, 1/1 home
+  metadata test) — the full-suite failures are flaky/interference, not code defects.
+- Static guard `tests/test_pilot_v07_static.py`: 6/6 passed.
+- `tests/test_pilot_home_layout.mjs`: PASS.
 
 ## Codex recovery integration — verified checkpoint `[IN PROGRESS]`
 

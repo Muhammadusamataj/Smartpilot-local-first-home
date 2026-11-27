@@ -1281,7 +1281,7 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
                   type="button"
                   size="sm"
                   variant={strongOn === true ? "hero" : "glass"}
-                  disabled={busy || diagnosticBusy !== null}
+                  disabled={busy || diagnosticBusy !== null || device.connection !== "online"}
                   aria-label={`Turn strong airflow on for ${device.name}`}
                   onClick={() => change({ strong: true }, "Strong airflow on")}
                 >
@@ -1291,7 +1291,7 @@ export function AcControlPanel({ device }: { device: AcDevice }) {
                   type="button"
                   size="sm"
                   variant={strongOn === false ? "hero" : "glass"}
-                  disabled={busy || diagnosticBusy !== null}
+                  disabled={busy || diagnosticBusy !== null || device.connection !== "online"}
                   aria-label={`Turn strong airflow off for ${device.name}`}
                   onClick={() => change({ strong: false }, "Strong airflow off")}
                 >

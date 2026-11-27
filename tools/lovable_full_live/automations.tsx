@@ -192,11 +192,13 @@ function formatValue(value: unknown): string {
 function isReadOnlyPoint(point: DevicePoint): boolean {
   const code = String(point.code || "").toLowerCase();
   const type = String(point.type || "").toLowerCase();
-  // Power/energy current DPs are read-only telemetry
-  if (/^cur_(current|power|energy|amp)/i.test(code)) return true;
-  // Phase DPs are read-only
-  if (/^phase_/i.test(code)) return true;
-  // Explicit meter/phase point types
+  // Power metering telemetry (cur_power, cur_current, cur_voltage, add_ele, ...)
+  // is read-only; the backend rejects writes to these DPs.
+  if (/^cur_/.test(code)) return true;
+  if (/^add_ele$/.test(code)) return true;
+  // Packed phase reports (phase_a/b/c) are read-only.
+  if (/^phase_/.test(code)) return true;
+  // Explicit meter/phase point types.
   if (type.includes("meter") || type.includes("phase")) return true;
   return false;
 }
@@ -419,7 +421,8 @@ function parseDeviceOption(value: unknown): DeviceOption | null {
 
 /** Read-only catalogue: real backend device IDs and their cached DP metadata. */
 async function fetchDeviceCatalogue(): Promise<DeviceOption[]> {
-  const response = await fetch("/api/local/devices".replace(/^\/+/, ""), {
+  // Relative path (no leading slash) for Home Assistant Ingress subpaths.
+  const response = await fetch("api/local/devices", {
     cache: "no-store",
     credentials: "same-origin",
   });
