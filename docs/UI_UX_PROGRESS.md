@@ -1225,6 +1225,9 @@ on all nine touched TSX/TS sources after these fixes.
   metadata test) — the full-suite failures are flaky/interference, not code defects.
 - Static guard `tests/test_pilot_v07_static.py`: 6/6 passed.
 - `tests/test_pilot_home_layout.mjs`: PASS.
+- **Full UI suite clean re-run: `python -m pytest tests/test_ui.py -q --tb=short` →
+  416 passed in 1847.31s (0:30:47), 0 failures, 0 errors.** Confirms zero code defects;
+  the earlier 2 failures were transient flakiness.
 
 ## Codex recovery integration — verified checkpoint `[IN PROGRESS]`
 
