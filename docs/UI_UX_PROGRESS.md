@@ -1963,3 +1963,30 @@ before any write (the original audit script would have aborted mid-way at the HA
 - Three read-only verification agents (Python, JS/HA/Java, mirror/test-impact) reported
   all patches PRESENT with no syntax errors.
 - No physical device command sent; all APIs mocked. No key/secret/personal data touched.
+
+### Release checkpoint — v1.33 (explicit user approval)
+
+- Version bump `versionCode 33 -> 34`, `versionName '1.32' -> '1.33'` in
+  `android_offline/app/build.gradle`; package identity and pinned signer unchanged.
+  Commit `77fd1b8` pushed normally to `feature/smartpilot-premium-ui`.
+- APK built with `python build_offline_apk.py` (debug variant; pinned debug signer is
+  the same certificate as all published releases). The `--release` variant was attempted
+  first but requires an unavailable private `RELEASE_STORE_FILE` — not used.
+- Signed APK: `dist/SmartPilot-Local.apk` / `dist/SmartPilot-Local-v1.33.apk`,
+  45,745,428 bytes, SHA-256
+  `20b220f0f058db3e25c681fb695c323d81852b428a453cf94792ac2a1ecc3d7e`,
+  signer `bbe14afd137fa6617ade862ea53d6ab0c34ddbf23e1f582bd602651dd7adf00f`.
+  `aapt2 dump badging`: package `com.example.tuyalocalkey.offline.v2.debug`,
+  `versionCode 34`, `versionName 1.33`. `app.imy` contains `index-Ccc5iqbn.js`
+  and `index-Rzdt56VB.css`, not the old `index-C203VIqW.js`.
+- Stable release published (tag `v1.33` pushed from `77fd1b8`):
+  https://github.com/Muhammadusamataj/Smartpilot-local-first-home/releases/tag/v1.33
+  `isDraft=false`, `isPrerelease=false`, four assets (APK, `.sha256`, changelog,
+  test results). `/releases/latest` returns `v1.33`; the uploaded APK digest matches
+  the local SHA-256. No EXE asset.
+- Boundaries: no device install performed; install remains an explicit user action.
+  No PR, merge, stable-branch change or deploy. The Android thin-client
+  `MainActivity.java` fix is in the separate `android/` project (versionCode 8),
+  not in this released offline APK.
+- Note: one pre-existing, unrelated test failure remains (see full-suite record above);
+  `pure.py` and that test are unchanged since `369cdff`.
