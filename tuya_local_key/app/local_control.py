@@ -2171,9 +2171,23 @@ def _extras_claim_scene():
     today = datetime.datetime.now().strftime("%Y-%m-%d")
     claimed = []
     for scene in _due_scenes(_load_scenes()):
-        if _set_scene_last_run(scene["id"], today):
+        sid = str(scene.get("id") or "")
+        if not sid or not _claim_scene_tick(sid, today):
+            continue
+        if _set_scene_last_run(sid, today):
             claimed.append(scene)
+        else:
+            _release_scene_tick(sid)
     return claimed
+
+
+def _extras_execute_scene(scene):
+    sid = str(scene.get("id") or "")
+    try:
+        return _execute_scene(scene, update_last_run=False)
+    finally:
+        if sid:
+            _release_scene_tick(sid)
 
 
 pilot_extras.configure(
@@ -2182,7 +2196,7 @@ pilot_extras.configure(
     list_devices=_extras_list_devices,
     read_scenes=_load_scenes,
     claim_scene=_extras_claim_scene,
-    execute_scene=lambda scene: _execute_scene(scene, update_last_run=False),
+    execute_scene=_extras_execute_scene,
     ac_status=_extras_ac_status,
 )
 

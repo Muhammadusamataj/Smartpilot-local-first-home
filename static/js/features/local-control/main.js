@@ -264,7 +264,7 @@ async function refresh(deviceId, card, silent = false) {
   if (!card || state.inFlight.has(deviceId) || commandsInFlight.has(String(deviceId))) return;
   const cardsForDevice = () => [...document.querySelectorAll(".tile")]
     .filter(item => sameId(item.dataset.id, deviceId));
-  if (!cardsForDevice().length) return;
+  if (!state.devices.some(item => sameId(item.id, deviceId))) return;
   state.inFlight.add(deviceId);
   const generation = state.renderGeneration;
   const token = (state.tokens.get(deviceId) || 0) + 1;
@@ -753,6 +753,7 @@ async function load(skipEnsure = false) {
       optionalApi("/api/local/scenes", null),
     ]);
     state.devices = safeArray(data.devices);
+    if (state.view !== "scenes") state.editorMounted = false;
     if (prefs) state.prefs = prefs;
     if (scenes) state.scenesState = scenes;
     const targetInput = $("scanTargets");

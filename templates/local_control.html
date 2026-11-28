@@ -1,4 +1,4 @@
-{% if request.args.get('classic') == '1' %}
+{% if request.args.get('classic') == '1' or not titanium_preview_ready %}
 {% include 'local_control_classic.html' %}
 {% else %}
 <!doctype html>

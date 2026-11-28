@@ -102,6 +102,8 @@ export function renderSwitch(deviceId, point, value, card, refresh, label = poin
         text.textContent = next ? "On" : "Off";
         text.classList.toggle("on", next);
       }
+      const inlineState = wrap.parentElement?.querySelector(".pilot-inline-state");
+      if (inlineState) inlineState.textContent = next ? "ON" : "OFF";
       toggle.disabled = false;
     } else {
       // Unknown != OFF. Freeze it until a successful, fresh status read.
@@ -146,7 +148,8 @@ export function renderControl(deviceId, point, value, card, refresh) {
     const range = document.createElement("input");
     range.type = "range";
     range.min = low; range.max = high; range.step = step;
-    range.value = Number(value) || low;
+    const parsed = (value === null || value === undefined || value === "") ? NaN : Number(value);
+    range.value = Number.isFinite(parsed) ? parsed : low;
     range.setAttribute("aria-label", label);
     const number = document.createElement("input");
     number.type = "number";
@@ -158,7 +161,13 @@ export function renderControl(deviceId, point, value, card, refresh) {
     const button = document.createElement("button");
     button.className = "btn small";
     button.textContent = "Set";
-    button.onclick = () => send(Number(number.value), button);
+    button.onclick = () => {
+      if (number.value === "" || !Number.isFinite(Number(number.value))) {
+        toast(`${label}: Enter a number`, "warn");
+        return;
+      }
+      send(Number(number.value), button);
+    };
     wrap.append(range, number, button);
   } else if (type === "enum" && (point.options || []).length) {
     const options = point.options || [];

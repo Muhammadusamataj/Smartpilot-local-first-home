@@ -210,7 +210,8 @@ function init() {
     body.append("file", file);
     try {
       const data = await api("api/local/restore", { method: "POST", body });
-      toast(`Restored ${(data.restored || []).length} file(s)`, "ok");
+      toast(`Restored ${(data.restored || []).length} file(s) — reloading…`, "ok");
+      setTimeout(() => location.reload(), 600);
     } catch (error) { toast(`Restore failed: ${error.message}`, "error"); }
     event.target.value = "";
   });

@@ -590,13 +590,15 @@ def _auto_tick(slot: str, entry: dict):
                 action = ("sleep", False)
             elif not night and data.get("eco_level") == 0:
                 action = ("eco", True)
-            if action is not None:
-                result = _write(slot, *action, automatic=True)
-                if result.get("confirmed"):
-                    s = result["status"]
-                    _auto_observed[slot] = (s.get("target_c"), s.get("hvac_mode"), s.get("eco_level"),
-                                            s.get("fan"), s.get("quiet"), s.get("sleep"),
-                                            s.get("strong"))
+            if action is None:
+                return
+    result = _write(slot, *action, automatic=True)
+    if result.get("confirmed"):
+        s = result["status"]
+        with LOCK:
+            _auto_observed[slot] = (s.get("target_c"), s.get("hvac_mode"), s.get("eco_level"),
+                                    s.get("fan"), s.get("quiet"), s.get("sleep"),
+                                    s.get("strong"))
 
 
 def _run_auto_loop():

@@ -3,7 +3,7 @@
 **Last updated:** 2026-11-28  
 **Branch:** `feature/smartpilot-premium-ui`  
 **Base HEAD:** `3fc711f Reliability hardening for v1.19`  
-**Overall status:** Batches 0–5 verified and pushed; Batch N UI/UX audit fixes verified (422/422 post-build tests, 96-shot visual matrix, mirror-consistent rebuilt WebView bundle) and pushed to `origin/feature/smartpilot-premium-ui` at `33e93f2` + bundle rebuild commit. Release/tag/deploy still require explicit user approval.
+**Overall status:** Batches 0–5 and Batch N UI/UX audit fixes verified and pushed. Deep-audit security/correctness fixes applied under explicit user authorization (overriding the presentation-only boundary): CSRF Origin check, dynamic backup base dir, bounded ZIP restore + cache invalidation, scheduler weekday fix, Haier LOCK scope, scene claim race, classic-UI fallback, JS scene editor/switch/slider/restore fixes, HA 401/403 handling, Android thin-client navigation/Back/Auth/download. Mirrors synced; full suite 1172 passed / 14 skipped / 1 pre-existing unrelated failure. Version bump + release pending.
 
 This file is updated after every implementation or testing milestone. Do not mark a milestone complete without evidence.
 
@@ -1904,3 +1904,62 @@ JS `0383358AC22A65AE`, CSS `0B99DB2D36AB1015`, template `9A0BA097B06F2A19`.
 - Boundaries: no Python backend, API, protocol, key, auth, safety or device
   command changed or sent. No device install performed; install remains an
   explicit user action. No PR, merge, stable-branch change or deploy.
+
+## Deep audit security/correctness fixes — 2026-11-28 `[APPLIED, VERIFIED]`
+
+Applied under **explicit user authorization**, overriding the presentation-only
+boundary ("ijazat hai krdo fixes"). Atomic patch application: all anchors validated
+before any write (the original audit script would have aborted mid-way at the HA
+`api.py` anchor and left a half-patched repo). All 11 target files patched:
+
+1. **app.py** — Origin validation now also runs in the unauthenticated state for
+   state-changing `/api/*` requests (POST/PUT/PATCH/DELETE), exempting Supervisor
+   ingress. `urlparse` already imported. Closes cross-site form POST CSRF.
+2. **pilot_extras.py** — dynamic `_base_dir()` reads `SESSION_FILE` at call time;
+   `backup_bytes()`/`restore_bytes()` use it; bounded ZIP member read
+   (`archive.open(info).read(MAX_MEMBER_BYTES+1)` + length check) prevents a spoofed
+   header from exhausting memory; post-restore invalidation of `app._devices_cache`,
+   `_lan_cache` and `haier_control._cache`/`_auto_observed`; `scheduler_info()` picks
+   the next run only from configured weekdays.
+3. **haier_control.py** — `_auto_tick()` releases global `LOCK` before the LAN
+   `_write()` so a slow AC no longer blocks `/api/haier/*`.
+4. **local_control.py** — `_extras_claim_scene()` honors `_SCENE_INFLIGHT` via
+   `_claim_scene_tick`/`_release_scene_tick`; new `_extras_execute_scene()` wrapper
+   releases the tick in `finally` (manual `/tick` and the background loop can no
+   longer run the same scene twice).
+5. **templates/local_control.html** — falls back to `local_control_classic.html`
+   when the pilot-next bundle is missing (`titanium_preview_ready` is passed in
+   all three `local_control.py` mirrors).
+6. **static/js/.../main.js** — Home switch refresh uses `state.devices` instead of
+   DOM tiles (works when `#devices` is filtered); scene editor dropdown re-mounts
+   after device list changes.
+7. **static/js/.../controls.js** — Home `.pilot-inline-state` ON/OFF updates;
+   integer slider handles 0/empty via `Number.isFinite`; number input validates.
+8. **static/js/.../scenes.js** — `renderActions()` re-renders action pills on delete
+   so `data-remove` indices stay correct.
+9. **static/js/.../extras.js** — Settings reloads after backup restore.
+10. **custom_components/mylocal_devices/api.py** — 401/403 plain-text replies read
+    via `response.text()` and handled before JSON parsing; `auth_required` now
+    reaches the config flow.
+11. **android/.../MainActivity.java** (thin client, NOT the released offline APK) —
+    trusted navigation returns `false` so WebView handles it; Android Back first
+    calls `window.smartPilotDismissOverlay()`; Basic Auth dialog via
+    `onReceivedHttpAuthRequest`; blob:/data: downloads show clear feedback.
+
+**Verification evidence:**
+- `python -m py_compile` on all changed Python files: OK.
+- `python -c "import local_control"`: OK — caught and fixed a missing
+  `_extras_execute_scene` definition (NameError at import) before tests.
+- `node --check` on all four changed JS files: OK.
+- `python tools/sync_addon.py` synced `tuya_local_key/app/`; `android_offline/app/src/main/python/`
+  mirrors updated for all 9 shared files.
+- `python -m pytest tests/test_pilot_v07_static.py tests/test_ui_power_capabilities.py -q`:
+  9/9 passed (byte-identical mirrors + exact-string guards intact).
+- Full suite `python -m pytest tests/ -q -k 'not socket_handshake_with_synthetic_device'`:
+  **1172 passed, 14 skipped, 1 deselected, 1 failed**. The single failure
+  (`test_custom_integration.py::test_live_power_dp_becomes_a_sensor_point_even_without_cached_spec`)
+  is **pre-existing and unrelated**: `pure.py` and that test are unchanged since
+  `369cdff` (verified via `git diff`). 
+- Three read-only verification agents (Python, JS/HA/Java, mirror/test-impact) reported
+  all patches PRESENT with no syntax errors.
+- No physical device command sent; all APIs mocked. No key/secret/personal data touched.

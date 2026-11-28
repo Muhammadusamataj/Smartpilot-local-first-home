@@ -402,6 +402,14 @@ def _require_auth():
             return
         return ("Home Assistant ingress only.", 403)
 
+    # State-changing API calls must come from our own origin even when
+    # app-level Basic Auth is off (desktop loopback / unauthenticated LAN).
+    # Ingress requests are exempt and curl/mobile clients send no Origin.
+    if not _is_supervisor_ingress() and request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.path.startswith("/api/"):
+        origin = request.headers.get("Origin")
+        if origin and urlparse(origin).netloc.lower() != request.host.lower():
+            return ("Cross-origin request blocked.", 403)
+
 
 @app.after_request
 def no_store_api_responses(response):

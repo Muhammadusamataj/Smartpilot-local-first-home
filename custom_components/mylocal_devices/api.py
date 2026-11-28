@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from typing import Any
@@ -110,16 +111,22 @@ async def api_request(
         kwargs["json"] = payload
     try:
         async with session.request(method, url, **kwargs) as response:
-            body = await response.json(content_type=None)
-    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as error:
+            raw = await response.text()
+    except (aiohttp.ClientError, asyncio.TimeoutError) as error:
         raise ApiError(f"Cannot reach MY Local Devices add-on: {error}") from error
+    try:
+        body = json.loads(raw) if raw else {}
+    except ValueError:
+        body = {}
     if response.status >= 400:
+        if response.status == 401:
+            raise ApiError("Authentication required. Check Username and Password.")
         if response.status == 403:
             raise ApiError(
                 "Add-on is in ingress-only mode. Set AUTH_USERNAME and AUTH_PASSWORD in "
                 "the add-on options, then enter the same credentials in this integration."
             )
-        message = body.get("error") if isinstance(body, dict) else response.reason
+        message = body.get("error") if isinstance(body, dict) and body.get("error") else response.reason
         raise ApiError(str(message or f"HTTP {response.status}"))
     if isinstance(body, dict) and body.get("error"):
         raise ApiError(str(body["error"]))

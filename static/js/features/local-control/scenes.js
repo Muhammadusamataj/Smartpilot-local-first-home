@@ -204,6 +204,20 @@ export function mountSceneEditor(root, state, handlers) {
   pointSelect.onchange = fillValue;
   fillPoints();
 
+  function renderActions() {
+    actionList.innerHTML = actions.map((action, index) => {
+      const device = eligible.find(item => String(item.id) === action.device_id);
+      return `<span class="action-pill">${esc(device?.name || action.device_id)} · DP ${esc(action.dp)} → ${esc(String(action.value))}` +
+        `<button type="button" data-remove="${index}" aria-label="Remove action">✕</button></span>`;
+    }).join("");
+    for (const button of actionList.querySelectorAll("[data-remove]")) {
+      button.onclick = () => {
+        actions.splice(Number(button.dataset.remove), 1);
+        renderActions();
+      };
+    }
+  }
+
   form.querySelector("[data-add-action]").onclick = () => {
     const deviceId = deviceSelect.value;
     const dp = pointSelect.value;
@@ -214,17 +228,7 @@ export function mountSceneEditor(root, state, handlers) {
     if (value === "true") value = true;
     if (value === "false") value = false;
     actions.push({ device_id: deviceId, dp, value });
-    actionList.innerHTML = actions.map((action, index) => {
-      const device = eligible.find(item => String(item.id) === action.device_id);
-      return `<span class="action-pill">${esc(device?.name || action.device_id)} · DP ${esc(action.dp)} → ${esc(String(action.value))}` +
-        `<button type="button" data-remove="${index}" aria-label="Remove action">✕</button></span>`;
-    }).join("");
-    for (const button of actionList.querySelectorAll("[data-remove]")) {
-      button.onclick = () => {
-        actions.splice(Number(button.dataset.remove), 1);
-        button.closest(".action-pill").remove();
-      };
-    }
+    renderActions();
   };
 
   form.onsubmit = async event => {

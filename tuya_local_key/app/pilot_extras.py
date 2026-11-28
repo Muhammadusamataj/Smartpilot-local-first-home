@@ -13,6 +13,7 @@ import io
 import json
 import os
 import re
+import sys
 import tempfile
 import threading
 import time
@@ -21,6 +22,13 @@ from pathlib import Path
 
 _SESSION = os.environ.get("SESSION_FILE", "")
 _BASE = Path(os.path.dirname(_SESSION) or "." if _SESSION else ".")
+
+
+def _base_dir() -> Path:
+    session = os.environ.get("SESSION_FILE", "")
+    if session:
+        return Path(os.path.dirname(session) or ".")
+    return RULES_FILE.parent
 
 RULES_FILE = Path(os.environ.get("LOCAL_RULES_FILE", str(_BASE / "local-rules.json")))
 RULE_STATE_FILE = Path(os.environ.get("LOCAL_RULE_STATE_FILE", str(_BASE / "local-rule-state.json")))
@@ -314,12 +322,17 @@ def scheduler_info() -> dict:
         except (ValueError, TypeError):
             continue
         days = [int(day) for day in schedule.get("days", []) if str(day).isdigit()]
-        day = _next_weekday(now, days)
-        if day is None:
+        allowed_days = set(days) if days else set(range(7))
+        when = None
+        for offset in range(8):
+            candidate = (now + _dt.timedelta(days=offset)).replace(
+                hour=hour, minute=minute, second=0, microsecond=0
+            )
+            if candidate.weekday() in allowed_days and candidate > now:
+                when = candidate
+                break
+        if when is None:
             continue
-        when = day.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        if when <= now:
-            when += _dt.timedelta(days=1)
         if soonest is None or when < soonest[0]:
             soonest = (when, str(scene.get("name") or scene.get("id")))
     return {
@@ -418,8 +431,9 @@ def ac_last_verified() -> list[dict]:
 def backup_bytes() -> bytes:
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
+        base = _base_dir()
         for name in BACKUP_NAMES:
-            path = _BASE / name
+            path = base / name
             try:
                 if path.is_file() and path.stat().st_size <= MAX_MEMBER_BYTES:
                     archive.write(path, name)
@@ -435,12 +449,16 @@ def restore_bytes(payload: bytes) -> list[str]:
     if not isinstance(payload, (bytes, bytearray)) or len(payload) > MAX_BACKUP_BYTES:
         raise ValueError("invalid_backup")
     restored = []
+    base = _base_dir()
     with zipfile.ZipFile(io.BytesIO(payload)) as archive:
         for info in archive.infolist():
             if info.filename not in BACKUP_NAMES or info.file_size > MAX_MEMBER_BYTES:
                 raise ValueError("invalid_member")
-            data = archive.read(info.filename)
-            target = _BASE / info.filename
+            with archive.open(info, "r") as handle:
+                data = handle.read(MAX_MEMBER_BYTES + 1)
+            if len(data) > MAX_MEMBER_BYTES:
+                raise ValueError("invalid_member")
+            target = base / info.filename
             temporary = None
             try:
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -458,5 +476,24 @@ def restore_bytes(payload: bytes) -> list[str]:
                     except OSError:
                         pass
     configure()  # reload in-memory state from the restored files
+    app_mod = sys.modules.get("app")
+    if app_mod is not None:
+        try:
+            with app_mod._devices_cache_lock:
+                app_mod._devices_cache = None
+                app_mod._devices_cache_loaded = False
+            with app_mod._lan_lock:
+                app_mod._lan_cache = None
+                app_mod._lan_cache_loaded = False
+        except Exception:
+            pass
+    haier_mod = sys.modules.get("haier_control")
+    if haier_mod is not None:
+        try:
+            with haier_mod.LOCK:
+                haier_mod._cache.clear()
+                haier_mod._auto_observed.clear()
+        except Exception:
+            pass
     emit("backup", "Backup restored", "%s file(s) restored" % len(restored))
     return restored

@@ -1,18 +1,22 @@
 package com.example.tuyalocalkey;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.KeyEvent;
+import android.text.InputType;
 import android.webkit.DownloadListener;
+import android.webkit.HttpAuthHandler;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 /** Thin client for a Tuya Local Key server running on a PC / HA box / cloud host. */
@@ -64,12 +68,39 @@ public class MainActivity extends Activity {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return handleNavigation(request.getUrl().toString());
             }
+
+            @Override
+            public void onReceivedHttpAuthRequest(WebView view, HttpAuthHandler handler, String host, String realm) {
+                LinearLayout layout = new LinearLayout(MainActivity.this);
+                layout.setOrientation(LinearLayout.VERTICAL);
+                layout.setPadding(48, 24, 48, 8);
+                EditText user = new EditText(MainActivity.this);
+                user.setHint("Username");
+                user.setSingleLine(true);
+                EditText pass = new EditText(MainActivity.this);
+                pass.setHint("Password");
+                pass.setSingleLine(true);
+                pass.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+                layout.addView(user);
+                layout.addView(pass);
+                new AlertDialog.Builder(MainActivity.this)
+                    .setTitle("Server login")
+                    .setView(layout)
+                    .setPositiveButton("Sign in", (d, w) -> handler.proceed(user.getText().toString(), pass.getText().toString()))
+                    .setNegativeButton("Cancel", (d, w) -> handler.cancel())
+                    .setOnCancelListener(d -> handler.cancel())
+                    .show();
+            }
         });
 
         web.setDownloadListener(new DownloadListener() {
             @Override
             public void onDownloadStart(String url, String userAgent, String disposition,
                                         String mimeType, long contentLength) {
+                if (url != null && (url.startsWith("blob:") || url.startsWith("data:"))) {
+                    Toast.makeText(MainActivity.this, "Use a browser or the offline APK to export files.", Toast.LENGTH_LONG).show();
+                    return;
+                }
                 try {
                     startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
                 } catch (Exception e) {
@@ -105,8 +136,7 @@ public class MainActivity extends Activity {
     private boolean handleNavigation(String url) {
         Uri uri = Uri.parse(url);
         if (uri != null && isTrusted(uri)) {
-            web.loadUrl(url);
-            return true;
+            return false;
         }
         // External links open in the user's browser, never in the app WebView.
         try {
@@ -139,10 +169,16 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (web.canGoBack()) {
-            web.goBack();
-        } else {
-            super.onBackPressed();
-        }
+        web.evaluateJavascript(
+            "(function(){return !!(window.smartPilotDismissOverlay && window.smartPilotDismissOverlay());})()",
+            value -> {
+                if ("true".equals(value)) return;
+                if (web.canGoBack()) {
+                    web.goBack();
+                } else {
+                    MainActivity.super.onBackPressed();
+                }
+            }
+        );
     }
 }
