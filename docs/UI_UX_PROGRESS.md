@@ -1,9 +1,9 @@
 # Smart Pilot UI/UX Progress
 
-**Last updated:** 2026-11-24  
+**Last updated:** 2026-11-28  
 **Branch:** `feature/smartpilot-premium-ui`  
 **Base HEAD:** `3fc711f Reliability hardening for v1.19`  
-**Overall status:** CP0 verified and pushed; Android release-channel code changes paused pending approval; Batches 1–5 verified locally; final acceptance evidence recorded; push awaiting explicit approval
+**Overall status:** Batches 0–5 verified and pushed; Batch N UI/UX audit fixes verified (422/422 post-build tests, 96-shot visual matrix, mirror-consistent rebuilt WebView bundle) and pushed to `origin/feature/smartpilot-premium-ui` at `33e93f2` + bundle rebuild commit. Release/tag/deploy still require explicit user approval.
 
 This file is updated after every implementation or testing milestone. Do not mark a milestone complete without evidence.
 
@@ -1118,9 +1118,9 @@ panel failures and zero uncaught page errors.
   history and a separate patch preserves the browser/build candidate changes.
 - Android build and release remain gated on an actual APK and full test evidence.
   A runner for signing must have the existing key under private control. The
-  repository's update-logic restrict
+  repository's update-logic restricts prereleases, so stable releases only.
 
-## Batch N — UI/UX audit fixes [IN PROGRESS]
+## Batch N — UI/UX audit fixes [VERIFIED + PUSHED]
 
 ### Completed implementation (2026-11-27)
 
@@ -1140,11 +1140,15 @@ Critical fixes across the Lovable live UI builder:
    - local_control.html: Verified rules directly inside `@media (pointer: coarse)` without nesting (already correct, removed spurious duplicate fallback)
 
 4. **Theme alignment** (store.tsx)
-   - `applyTheme()` now sets `document.documentElement.dataset.theme = light ? "light" : undefined`, enabling `html[data-theme="light"] body { background-color: rgb(237, 245, 252) }`
+   - `applyTheme()` sets `document.documentElement.dataset.theme = "light"` in light mode and
+     uses `delete document.documentElement.dataset.theme` in dark mode (final behaviour after the
+     code-review fix; `undefined` would stringify to `"undefined"`). This enables
+     `html[data-theme="light"] body { background-color: rgb(237, 245, 252) }`.
 
 5. **API URL fixes** (backend-api.ts, automations.tsx)
    - backend-api.ts: `request()` strips leading slashes via `url.replace(/^\/+/, "")`
-   - automations.tsx: `fetchDeviceCatalogue()` uses `.replace(/^\/+/, "")` on fetch URL
+   - automations.tsx: `fetchDeviceCatalogue()` uses a relative `api/local/devices` path for
+     Home Assistant Ingress subpaths
 
 6. **Native bridge error handling** (settings.tsx `makeReport`)
    - Checks `nativeCall()` return value; only shows "Support report saved to Downloads/SmartPilot." if the native call succeeded (returns non-null)
@@ -1152,11 +1156,13 @@ Critical fixes across the Lovable live UI builder:
 ### High-severity fixes
 
 7. **AcControlPanel** (AcControl.tsx)
-   - strongOn state refreshes after confirmed commands via `readNow()` re-read
-   - AC controls disabled when `device.connection !== "online"` (not just global connection state)
+   - strongOn state refreshes after confirmed commands via `readHaier(slot)` re-read
+   - All AC controls, including the strong-airflow On/Off buttons, disabled when
+     `device.connection !== "online"` (not just global connection state)
 
 8. **Automations dialog** (automations.tsx)
-   - `isReadOnlyPoint()` helper filters out read-only meter/phase DPs (cur_power, phase_a, etc.) from scene/rule targets
+   - `isReadOnlyPoint()` helper filters read-only meter/phase DPs (`cur_*` including `cur_voltage`,
+     `add_ele`, `phase_*`, meter/phase types) from scene/rule targets
    - `deviceOptions` memo excludes filtered points
    - `formatAt()` handles ISO date string fallback when numeric timestamp parsing yields NaN
 
@@ -1179,17 +1185,26 @@ Critical fixes across the Lovable live UI builder:
 - API contracts unchanged — no backend, protocol, or security modifications
 - Semantic tokens and CSS custom-property names preserved where tests rely on them
 
-### Pending verification
-- Run pytest `tests/test_ui.py` — focused on energy, devices, settings, automations affected screens
-  - Results: 309 passed, 1 error, 1 failure out of 416 tests (74% pass rate)
-  - Error: `test_homes_known_empty_metadata_has_no_refresh_warning` — setup timeout (#rows tr not visible), likely pre-existing environment issue
-  - Failure: `test_panel_pointer_navigation_only_shows_focus_frames_after_keyboard_input[menu-390-dark-True]` — Playwright timeout at width 390 dark theme keyboard navigation; may be related to CSS changes or flaky test
-- Run `tests/test_pilot_v07_static.py` and `tests/test_pilot_home_layout.mjs` mirror/source-sync guards
-- Generate mocked Playwright screenshots at widths 320, 360, 390, 412, 768, 1280 in both dark/light themes
-- Programmatic checks: no horizontal overflow, no page errors, tap targets 44×44px, contrast, focus-visible rings, theme parity
-- Accessibility manual review: tab order, Escape/back navigation, long names wrap, empty lists,
-  slow loading, offline/states distinct, critical two-tap confirmation remains in force.
-  No Beta logic was changed or published.
+### Verification results (all gates passed)
+- `python -m pytest tests/test_ui.py -q --tb=short` → 416/416 passed (0 failures, 0 errors).
+  Two earlier transient failures were confirmed flaky: they pass in isolation
+  (6/6 navigation variants, 1/1 home metadata test).
+- `python -m pytest tests/test_pilot_v07_static.py` → 6/6 passed.
+- `node tests/test_pilot_home_layout.mjs` → PASS.
+- Mocked Playwright screenshot matrix `python UI_REVIEW_TEMP/audit_capture.py`, run both before
+  and after the WebView bundle rebuild: 96 shots each (2 themes × 6 widths × 8 routes).
+  Overflow 0, page errors 0, small fonts 0, small tap targets 0, device command POSTs 0.
+  "Clipped" rows (236 pre-build, 200 post-build) are intentional `overflow-x-auto` chip/tab
+  scrollers and `sr-only` skip links, not visual defects.
+- WebView bundle rebuilt with `python tools/build_lovable_webview.py` from pinned commit
+  `ef0f9f88`; new asset `index-Ccc5iqbn.js` verified to contain all seven source fixes.
+  All three mirrors (web, Android offline, HA add-on) byte-identical (SHA-256) for
+  `index.html`, new JS, CSS and `local_control.html`; new hash referenced in all six files,
+  old hash `index-C203VIqW.js` gone.
+- Accessibility reasoning (mocked, no device actions): tab order, Escape/back, bottom sheet
+  keyboard path, long names wrap, empty lists, slow loading, offline/stale/unverified/busy/
+  pending/confirmed/failed states distinct, and critical two-tap confirmation remain in force.
+  No device behaviour, backend or API contract was changed.
 
 ### Post-commit code review fixes (2026-11-28)
 
@@ -1228,6 +1243,24 @@ on all nine touched TSX/TS sources after these fixes.
 - **Full UI suite clean re-run: `python -m pytest tests/test_ui.py -q --tb=short` →
   416 passed in 1847.31s (0:30:47), 0 failures, 0 errors.** Confirms zero code defects;
   the earlier 2 failures were transient flakiness.
+
+### WebView bundle rebuild (2026-11-28)
+
+The React source fixes were overlay files applied only at build time, so the shipped
+`static/pilot-next` bundle was still the pre-fix `index-C203VIqW.js`. Rebuilt with
+`python tools/build_lovable_webview.py` from pinned Lovable commit `ef0f9f88`:
+
+- First build attempt **failed** and exposed a real bug missed by both the 416-test suite and
+  the TS parse check: `devices.tsx` ended the `allDevices` `useMemo` with `,` instead of `;`
+  (Vite/rolldown: "Identifier expected. 'const' is a reserved word"). Fixed to `;`.
+- Successful rebuild produced `index-Ccc5iqbn.js`; Vite reported ✓ built in 1.06s.
+- New bundle verified (minified grep) to contain all seven fixes: `dataset.theme` light/delete,
+  backend-names map in energy, `iD()` read-only DP filter, `\b(success|complete|confirm|done|ok)\b`
+  regex, leading-slash strip in `fetch`, live `air_conditioner` filter, strong-airflow offline guard.
+- Three-way mirror verification (SHA-256) PASS for `index.html`, new JS, CSS and template;
+  new hash referenced 1× each, old hash 0× each in all six files.
+- **Post-build tests: `python -m pytest tests/test_pilot_v07_static.py tests/test_ui.py -q` →
+  422 passed in 1918.31s (0:31:58).**
 
 ## Codex recovery integration — verified checkpoint `[IN PROGRESS]`
 

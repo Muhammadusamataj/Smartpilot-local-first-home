@@ -314,7 +314,7 @@ function DevicesPage() {
       .filter((d) => !removed.includes(d.id) && !liveIds.has(d.id))
       .forEach((d) => result.push(d));
     return result;
-  }, [devices, added, removed]),
+  }, [devices, added, removed]);
 
   const selected = useMemo(
     () => (selectedId ? allDevices.find((d) => d.id === selectedId) ?? null : null),

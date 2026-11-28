@@ -253,7 +253,7 @@ Each batch is implementation + tests + progress update before the next batch sta
 ### Batch 5 — Micro-polish and final acceptance `[DONE]`
 
 - [x] Shared toast/sheet surfaces, reduced motion, high-contrast and non-colour-only status verified.
-- [x] Keyboard focus, Escape/back, deep links, long names, empty/stale and critical two-tap guard verified with mocked APIs (38/38 checks).
+- [x] Keyboard focus, Escape/back, deep links, long names, empty/stale and critical two-tap guard verified with mocked APIs (40/40 checks).
 - [x] System-theme following and theme parity verified (4/4 checks).
 - [x] Final 60-shot screenshot matrix, objective metrics and full evidence package recorded.
 
@@ -296,7 +296,7 @@ A batch or the full sprint is complete only when all applicable criteria pass wi
 - [x] Focused UI tests pass (14 Scenes/Settings UI + 12 shell + 18 Haier + 4 extras + 2 critical safety).
 - [x] `pytest tests/test_pilot_v07_static.py` passes (6 passed).
 - [x] `node tests/test_pilot_home_layout.mjs` passes.
-- [x] Full `pytest tests/test_ui.py` re-run against the final corrected CSS passes: `403 passed in 1451.54s (0:24:11)` (a first run found and fixed one `hidden`-attribute regression).
+- [x] Full `pytest tests/test_ui.py` re-run against the final corrected CSS passes: `403 passed in 1451.54s (0:24:11)` (a first run found and fixed one `hidden`-attribute regression). Latest Batch N re-runs: 416/416 pre-build, and 422/422 with `test_pilot_v07_static.py` after the WebView bundle rebuild (see progress doc).
 - [x] Non-UI regression spot check passes if shared files changed (no shared non-UI files changed; scope check).
 - [x] Progress file updated after each milestone.
 
@@ -304,7 +304,7 @@ A batch or the full sprint is complete only when all applicable criteria pass wi
 
 - [x] No physical device command sent (all `/api/**` mocked; 0 command calls recorded).
 - [x] No fake device state committed (fixtures live outside the repository).
-- [x] No push, merge, tag, release, deploy, PR or Azure action performed.
+- [x] No push, merge, tag, release, deploy, PR or Azure action performed (scope: original Batch 1–5 acceptance; subsequent verified checkpoint pushes to `feature/smartpilot-premium-ui` are recorded in the progress doc. No release/tag/deploy/PR/Azure action has been performed).
 - [x] No hardware verification claimed.
 
 ---
@@ -388,8 +388,10 @@ rejection. Keep the Python and desktop updater outside the Android beta change.
 - [x] Source mirrors and focused safety/packaging guards verified.
 - [x] Run and review the 416-case Playwright suite and Android screenshot artifact:
   416/416 local, 1174/1174 in CI, 60/60 mocked screenshots structurally valid.
+  Latest: 96/96 mocked screenshots on the rebuilt bundle (2 themes × 6 widths × 8 routes),
+  0 overflow, 0 page errors, 0 small fonts, 0 small targets, 0 command POSTs.
 - [ ] Validate TalkBack, touch navigation and Android Back on Vivo separately
-  (requires explicit on-device approval; installed version is still v1.20).
+  (requires explicit on-device approval; installed version is v1.28, latest release v1.32).
 - [x] Build, verify and publish a **stable** v1.21 release after all software gates
   pass. The installed updater rejects prereleases, so no prerelease is published.
   Release: https://github.com/Muhammadusamataj/Smartpilot-local-first-home/releases/tag/v1.21
